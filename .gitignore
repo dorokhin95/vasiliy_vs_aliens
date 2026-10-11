@@ -1,0 +1,25 @@
+# Dependencies & system files
+node_modules/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary and test captures in root
+*.log
+dump_dom.txt
+test_*.html
+crop_*.png
+verify_*.png
+test_*.png
+screenshot*.png
+gameplay_*.png
+enemies_*.png
+enemy_*.png
+gen_showcase.py
+
+# Embedded external tool repos & large tool binaries
+tools/agent-sprite-forge/
+tools/comfyui-pipeline/
+tools/falsprite/
+tools/spriter/
+tools/spritesage/
