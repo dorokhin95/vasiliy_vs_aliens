@@ -411,21 +411,23 @@ class EnvironmentRenderer {
         // Чередуем Жигули и УАЗик на основе координат
         const isUaz = ((Math.floor(c.x) + Math.floor(c.y)) % 2 === 0);
         img = isUaz ? this.props['car_uaz'] : this.props['car_zhiguli'];
-        // Реалистичные пропорции: легковой седан 100x62, УАЗ-буханка 106x70
-        drawW = isUaz ? 106 : 100;
-        drawH = isUaz ? 70 : 62;
+        // Настоящие физические пропорции автомобиля:
+        // Жигули: длина 192px (в 3 раза длиннее Василия), ширина 120px
+        // УАЗ-буханка: длина 204px, ширина 136px
+        drawW = isUaz ? 204 : 192;
+        drawH = isUaz ? 136 : 120;
         rot = ((c.x * 37) % 60 - 30) * (Math.PI / 180); // Легкий случайный наклон парковки
       } else if (c.type === 'trash') {
         img = this.props['trash_dumpster'];
-        // Мусорный бак ТБО: 48x48
-        drawW = 48;
-        drawH = 48;
+        // Мусорный бак ТБО: 58x58
+        drawW = 58;
+        drawH = 58;
         rot = ((c.y * 23) % 40 - 20) * (Math.PI / 180);
       } else {
-        // Военный ящик боеприпасов: 44x44
+        // Военный ящик боеприпасов: 48x48
         img = this.props['military_crate'];
-        drawW = 44;
-        drawH = 44;
+        drawW = 48;
+        drawH = 48;
       }
 
       ctx.save();

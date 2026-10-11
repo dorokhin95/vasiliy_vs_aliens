@@ -1058,19 +1058,28 @@ function generateWorld() {
     const cy = Math.random() * (WORLD_HEIGHT - 400) + 200;
     if (Math.hypot(cx - safeZone.x, cy - safeZone.y) < 340) continue;
 
-    // Проверяем, чтобы контейнер не спавнился внутри здания
+    // Проверяем, чтобы контейнер не спавнился внутри здания (с запасом на габариты машины)
     const insideBuilding = buildings.some(b => 
-      cx >= b.x - 30 && cx <= b.x + b.w + 30 &&
-      cy >= b.y - 30 && cy <= b.y + b.h + 30
+      cx >= b.x - 70 && cx <= b.x + b.w + 70 &&
+      cy >= b.y - 70 && cy <= b.y + b.h + 70
     );
     if (insideBuilding) continue;
 
     const types = ['trash', 'car', 'box'];
+    const chosenType = types[Math.floor(Math.random() * types.length)];
+    const cRadius = chosenType === 'car' ? 48 : (chosenType === 'trash' ? 26 : 22);
+
+    // Не спавнить контейнеры поверх друг друга (дистанция не менее 130px)
+    const tooCloseToOther = containers.some(existing => 
+      Math.hypot(cx - existing.x, cy - existing.y) < (cRadius + existing.radius + 50)
+    );
+    if (tooCloseToOther) continue;
+
     containers.push({
       x: cx,
       y: cy,
-      radius: 22,
-      type: types[Math.floor(Math.random() * types.length)],
+      radius: cRadius,
+      type: chosenType,
       searched: false
     });
   }
