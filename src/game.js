@@ -1942,10 +1942,14 @@ function render() {
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   }
 
-  // 6. Выпавший лут
+  // 6. Выпавший 3D лут (шестеренки, бутылки, консервы)
   lootItems.forEach(l => {
-    ctx.font = '18px Arial';
-    ctx.fillText(l.icon, l.x, l.y);
+    if (window.environmentRenderer && window.environmentRenderer.drawLootItem) {
+      window.environmentRenderer.drawLootItem(ctx, l);
+    } else {
+      ctx.font = '18px Arial';
+      ctx.fillText(l.icon, l.x, l.y);
+    }
   });
 
   // 7. Враги через ThreeEnemyManager (3D WebGL) / SpriteRenderer

@@ -48,7 +48,14 @@ class EnvironmentRenderer {
       { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png', type: 'building' },
       { key: 'building_panel_220x260', path: 'assets/sprites/buildings/building_panel_220x260.png', type: 'building' },
       { key: 'garage_block_140x100', path: 'assets/sprites/buildings/garage_block_140x100.png', type: 'building' },
-      { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png', type: 'building' }
+      { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png', type: 'building' },
+
+      // Выпадающий 3D лут
+      { key: 'loot_scrap', path: 'assets/sprites/loot/loot_scrap.png', type: 'loot' },
+      { key: 'loot_bottle', path: 'assets/sprites/loot/loot_bottle.png', type: 'loot' },
+      { key: 'loot_stew', path: 'assets/sprites/loot/loot_stew.png', type: 'loot' },
+      { key: 'loot_vodka', path: 'assets/sprites/loot/loot_vodka.png', type: 'loot' },
+      { key: 'loot_bandage', path: 'assets/sprites/loot/loot_bandage.png', type: 'loot' }
     ];
 
     let remaining = assetsToLoad.length;
@@ -69,6 +76,9 @@ class EnvironmentRenderer {
           this.props[item.key] = img;
         } else if (item.type === 'building') {
           this.buildings[item.key] = img;
+        } else if (item.type === 'loot') {
+          if (!this.loot) this.loot = {};
+          this.loot[item.key] = img;
         }
         onAssetLoaded();
       };
@@ -391,29 +401,31 @@ class EnvironmentRenderer {
 
   drawContainers(ctx, camera, screenW, screenH, containers) {
     containers.forEach(c => {
-      if (!this.isVisible(c.x - 50, c.y - 50, 100, 100, camera, screenW, screenH)) return;
+      if (!this.isVisible(c.x - 70, c.y - 70, 140, 140, camera, screenW, screenH)) return;
 
       let img = null;
-      let drawW = 48, drawH = 36;
+      let drawW = 54, drawH = 40;
       let rot = 0;
 
       if (c.type === 'car') {
         // Чередуем Жигули и УАЗик на основе координат
         const isUaz = ((Math.floor(c.x) + Math.floor(c.y)) % 2 === 0);
         img = isUaz ? this.props['car_uaz'] : this.props['car_zhiguli'];
-        drawW = isUaz ? 68 : 64;
-        drawH = isUaz ? 46 : 42;
+        // Реалистичные пропорции: легковой седан 100x62, УАЗ-буханка 106x70
+        drawW = isUaz ? 106 : 100;
+        drawH = isUaz ? 70 : 62;
         rot = ((c.x * 37) % 60 - 30) * (Math.PI / 180); // Легкий случайный наклон парковки
       } else if (c.type === 'trash') {
         img = this.props['trash_dumpster'];
-        drawW = 44;
-        drawH = 44;
+        // Мусорный бак ТБО: 48x48
+        drawW = 48;
+        drawH = 48;
         rot = ((c.y * 23) % 40 - 20) * (Math.PI / 180);
       } else {
-        // box / ammo crate
+        // Военный ящик боеприпасов: 44x44
         img = this.props['military_crate'];
-        drawW = 42;
-        drawH = 42;
+        drawW = 44;
+        drawH = 44;
       }
 
       ctx.save();
@@ -431,9 +443,9 @@ class EnvironmentRenderer {
         }
         ctx.globalAlpha = 1.0;
 
-        // Маленький значок открытой коробки сверху
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
-        ctx.font = '14px Arial';
+        // Отметка обыска
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+        ctx.font = '13px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('✓', 0, -drawH / 2 - 8);
@@ -446,21 +458,55 @@ class EnvironmentRenderer {
           ctx.fillRect(-16, -16, 32, 32);
         }
 
-        // Золотистая подсветка интерактивности вокруг ящика
+        // Тонкая золотистая обводка интерактивности вокруг тайника
         ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1.5;
         ctx.strokeRect(-drawW / 2 - 2, -drawH / 2 - 2, drawW + 4, drawH + 4);
 
         // Индикатор неоткрытого лута
         ctx.fillStyle = '#f59e0b';
-        ctx.font = 'bold 12px Arial';
+        ctx.font = 'bold 11px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('▼', 0, -drawH / 2 - 10);
+        ctx.fillText('▼', 0, -drawH / 2 - 9);
       }
 
       ctx.restore();
     });
+  }
+
+  // Отрисовка высокодетализированного 3D выпавшего лута
+  drawLootItem(ctx, l) {
+    let img = null;
+    const typeKey = `loot_${l.type}`;
+    if (this.loot && this.loot[typeKey]) {
+      img = this.loot[typeKey];
+    }
+
+    ctx.save();
+    ctx.translate(l.x, l.y);
+
+    // Легкое покачивание и парение выпавшего лута
+    const time = Date.now() * 0.005;
+    const hoverY = Math.sin(time + l.x) * 3;
+
+    // Свечение редкости вокруг лута
+    ctx.fillStyle = l.type === 'vodka' ? 'rgba(245, 158, 11, 0.22)' : (l.type === 'bottle' ? 'rgba(34, 197, 94, 0.22)' : 'rgba(56, 189, 248, 0.22)');
+    ctx.beginPath();
+    ctx.arc(0, hoverY, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (img) {
+      const size = 26;
+      ctx.drawImage(img, -size / 2, -size / 2 + hoverY, size, size);
+    } else {
+      ctx.font = '18px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(l.icon, 0, hoverY);
+    }
+
+    ctx.restore();
   }
 }
 

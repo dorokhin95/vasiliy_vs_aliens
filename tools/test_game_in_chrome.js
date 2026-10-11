@@ -70,14 +70,20 @@ async function run() {
       `
     });
 
-    // Run into the city towards panel buildings and garages
+    // Run into the city towards panel buildings and garages and spawn test loot items
     await send('Runtime.evaluate', {
       expression: `
-        // Move towards bottom-right quadrant (x: 2300, y: 2200)
         player.x = 2250;
         player.y = 2200;
         camera.x = 2250 - canvas.width / 2;
         camera.y = 2200 - canvas.height / 2;
+        
+        // Spawn each type of 3D loot drop around Vasily to verify rendering
+        lootItems.push({ x: 2280, y: 2180, type: 'scrap', icon: '⚙️', val: 2 });
+        lootItems.push({ x: 2210, y: 2180, type: 'bottle', icon: '🍾', val: 1 });
+        lootItems.push({ x: 2250, y: 2260, type: 'stew', icon: '🥫', val: 1 });
+        lootItems.push({ x: 2310, y: 2230, type: 'vodka', icon: '🍾', val: 1 });
+        lootItems.push({ x: 2190, y: 2230, type: 'bandage', icon: '🩹', val: 1 });
       `
     });
     await new Promise(r => setTimeout(r, 600));
