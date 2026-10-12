@@ -129,6 +129,12 @@ def build_weapon_bat_glb():
     bpy.ops.object.join()
     bat = bpy.context.active_object
     bat.name = "Vasiliy_Bat"
+    bat.rotation_mode = 'XYZ'
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # Shift vertices by Y = +0.11 so origin (0, 0, 0) is the EXACT center of the blue-taped handle grip!
+    for v in bat.data.vertices:
+        v.co.y += 0.11
+    bat.data.update()
     bpy.ops.object.shade_smooth()
 
     out_path = os.path.join(MODELS_DIR, "weapon_bat.glb")
@@ -183,6 +189,12 @@ def build_weapon_makarov_glb():
     bpy.ops.object.join()
     pm = bpy.context.active_object
     pm.name = "Vasiliy_Makarov"
+    pm.rotation_mode = 'XYZ'
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    for v in pm.data.vertices:
+        v.co.y += 0.02
+        v.co.z += 0.01
+    pm.data.update()
 
     out_path = os.path.join(MODELS_DIR, "weapon_makarov.glb")
     bpy.ops.export_scene.gltf(filepath=out_path, export_format='GLB', use_selection=True)

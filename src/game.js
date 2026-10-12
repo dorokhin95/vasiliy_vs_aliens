@@ -2552,13 +2552,13 @@ function shootPlayerWeapon() {
     let hitAny = false;
 
     muzzleFlashes.push({
-      x: player.x + Math.cos(player.angle) * 26,
-      y: player.y - 18 + Math.sin(player.angle) * 26,
+      x: player.x,
+      y: player.y - 18,
       angle: player.angle,
       type: 'bat_slash',
-      life: 6,
-      maxLife: 6,
-      scale: isExhausted ? 0.78 : 1.08
+      life: 9,
+      maxLife: 9,
+      scale: isExhausted ? 0.78 : 1.05
     });
 
     enemies.forEach(e => {
@@ -3667,17 +3667,25 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
     ctx.rotate(mf.angle);
 
     if (mf.type === 'bat_slash') {
-      // Широкий росчерк удара битой с гвоздями
-      ctx.strokeStyle = `rgba(248, 250, 252, ${0.78 * t})`;
-      ctx.lineWidth = 4.5 * s;
-      ctx.beginPath();
-      ctx.arc(0, 0, 38 * s, -0.95, 0.95);
-      ctx.stroke();
+      // Динамический серповидный росчерк удара битой справа налево (от +0.95 до -0.95)
+      const prog = 1.0 - t; // 0 -> 1
+      const leadAngle = 0.95 - prog * 1.90;
+      const trailAngle = Math.min(0.95, leadAngle + 0.95 * Math.sin(prog * Math.PI + 0.25));
+      const rOuter = 54 * (mf.scale || 1.0);
+      const rInner = 40 * (mf.scale || 1.0);
 
-      ctx.strokeStyle = `rgba(239, 68, 68, ${0.65 * t})`;
-      ctx.lineWidth = 2.2 * s;
+      ctx.fillStyle = `rgba(241, 245, 249, ${0.42 * Math.sin(prog * Math.PI)})`;
       ctx.beginPath();
-      ctx.arc(4, 0, 44 * s, -0.82, 0.82);
+      ctx.arc(0, 0, rOuter, leadAngle, trailAngle, false);
+      ctx.arc(0, 0, rInner, trailAngle, leadAngle, true);
+      ctx.closePath();
+      ctx.fill();
+
+      // Острая кромка гвоздей на внешнем радиусе замаха
+      ctx.strokeStyle = `rgba(248, 113, 113, ${0.75 * Math.sin(prog * Math.PI)})`;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, rOuter + 2, leadAngle, trailAngle, false);
       ctx.stroke();
 
     } else if (mf.type === 'makarov') {

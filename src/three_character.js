@@ -87,12 +87,16 @@ class ThreeCharacterManager {
     this.lastTime = performance.now();
     this.lastRenderState = '';
 
-    // Weapon Objects loaded from glTF
+    // Weapon & Modular Arm Objects loaded from glTF
     this.batObj = null;
     this.makarovObj = null;
     this.shotgunObj = null;
     this.drillObj = null;
     this.plasmaObj = null;
+    this.armLDown = null;
+    this.armRPistol = null;
+    this.armRBat = null;
+    this.armsTwoHanded = null;
 
     // Load Model
     this.loadModel();
@@ -105,7 +109,7 @@ class ThreeCharacterManager {
     }
 
     const loader = new THREE.GLTFLoader();
-    const modelUrl = 'assets/models/vasiliy.glb?v=1026';
+    const modelUrl = 'assets/models/vasiliy.glb?v=1028';
     loader.load(
       modelUrl,
       (gltf) => {
@@ -114,23 +118,37 @@ class ThreeCharacterManager {
         // Offset model down by pivotHeight inside rollPivot so feet remain at world Y=0 when upright
         this.model.position.set(0, -this.pivotHeight, 0);
 
-        // Find the 3 high-detail dieselpunk weapon objects from Blender
+        // Find the 3 high-detail dieselpunk weapon objects & modular arm postures from Blender
         this.shotgunObj = this.model.getObjectByName('Vasiliy_Shotgun');
         this.drillObj = this.model.getObjectByName('Vasiliy_Drill');
         this.plasmaObj = this.model.getObjectByName('Vasiliy_Plasma');
+        this.armLDown = this.model.getObjectByName('Vasiliy_Arm_L_Down');
+        this.armRPistol = this.model.getObjectByName('Vasiliy_Arm_R_Pistol');
+        this.armRBat = this.model.getObjectByName('Vasiliy_Arm_R_Bat');
+        this.armsTwoHanded = this.model.getObjectByName('Vasiliy_Arms_TwoHanded');
 
-        // Load Spiked Bat (weapon_bat.glb) and Makarov PM (weapon_makarov.glb) into Vasily's hands
-        loader.load('assets/models/weapon_bat.glb?v=1026', (batGltf) => {
+        // Load Spiked Bat (weapon_bat.glb) into Vasily's ONE-HANDED Right Arm (armRBat)
+        loader.load('assets/models/weapon_bat.glb?v=1028', (batGltf) => {
           this.batObj = batGltf.scene;
-          this.batObj.position.set(-0.068, 1.24, 0.36);
-          this.batObj.rotation.set(-0.28, 0.15, 0);
-          this.model.add(this.batObj);
+          if (this.armRBat) {
+            // Right Glove center relative to Right Shoulder (-0.26, 1.36, 0.02) is (-0.02, -0.18, 0.32).
+            // Because weapon_bat.glb has its origin (0,0,0) at the blue-taped grip, parenting it to armRBat
+            // at (-0.02, -0.18, 0.32) locks the handle inside Vasily's right fist at all swing angles!
+            this.batObj.position.set(-0.02, -0.18, 0.32);
+            this.batObj.rotation.set(-0.80, -0.35, 0);
+            this.armRBat.add(this.batObj);
+          } else {
+            this.batObj.position.set(-0.28, 1.18, 0.34);
+            this.batObj.rotation.set(-0.80, -0.35, 0);
+            this.model.add(this.batObj);
+          }
           this.setWeapon(this.currentWeaponId || 'bat');
         });
 
-        loader.load('assets/models/weapon_makarov.glb?v=1026', (pmGltf) => {
+        // Load Makarov PM (weapon_makarov.glb) into Vasily's outstretched Right Pistol Hand
+        loader.load('assets/models/weapon_makarov.glb?v=1028', (pmGltf) => {
           this.makarovObj = pmGltf.scene;
-          this.makarovObj.position.set(-0.068, 1.25, 0.54);
+          this.makarovObj.position.set(-0.14, 1.25, 0.44);
           this.makarovObj.rotation.set(0, 0, 0);
           this.model.add(this.makarovObj);
           this.setWeapon(this.currentWeaponId || 'bat');
@@ -178,7 +196,7 @@ class ThreeCharacterManager {
         this.setWeapon('bat');
 
         this.isLoaded = true;
-        console.log('[ThreeCharacter] Vasily Master Path A loaded with Bat, Makarov, Drill, Shotgun & Plasma!');
+        console.log('[ThreeCharacter] Vasily Master loaded with one-handed Bat/Makarov & two-handed Rifle postures!');
       },
       undefined,
       (err) => console.error('[ThreeCharacter] Failed to load vasiliy.glb:', err)
@@ -208,11 +226,21 @@ class ThreeCharacterManager {
   }
 
   setWeapon(weaponId) {
-    if (this.batObj) this.batObj.visible = (weaponId === 'bat');
-    if (this.makarovObj) this.makarovObj.visible = (weaponId === 'makarov');
+    const isBat = (weaponId === 'bat');
+    const isMakarov = (weaponId === 'makarov');
+    const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma');
+
+    if (this.batObj) this.batObj.visible = isBat;
+    if (this.makarovObj) this.makarovObj.visible = isMakarov;
     if (this.shotgunObj) this.shotgunObj.visible = (weaponId === 'shotgun');
     if (this.drillObj) this.drillObj.visible = (weaponId === 'drill');
     if (this.plasmaObj) this.plasmaObj.visible = (weaponId === 'plasma');
+
+    // Switch arm postures: one-handed (bat / pistol) vs two-handed (shotgun / drill / plasma)
+    if (this.armLDown) this.armLDown.visible = (isBat || isMakarov);
+    if (this.armRBat) this.armRBat.visible = isBat;
+    if (this.armRPistol) this.armRPistol.visible = isMakarov;
+    if (this.armsTwoHanded) this.armsTwoHanded.visible = isTwoHanded;
   }
 
   update(player) {
@@ -313,23 +341,65 @@ class ThreeCharacterManager {
       this.rollPivot.position.z = 0;
     }
 
-    // 4. Drill Vibration / Spin & Bat Melee Swing Animation
+    // 4. Drill Vibration & Connected Right-Handed Bat Melee Swing Animation
     if (currentWeapon === 'drill' && this.drillObj && !player.isRolling) {
       this.drillObj.rotation.z = Math.sin(Date.now() * 0.08) * 0.04;
     }
-    if (this.batObj) {
+    if (this.batObj && this.armRBat) {
       if (this.swingTimer > 0 && !player.isRolling) {
-        this.swingTimer = Math.max(0, this.swingTimer - dt * 4.5);
+        this.swingTimer = Math.max(0, this.swingTimer - dt * 3.85);
         const p = 1.0 - this.swingTimer; // 0 -> 1
-        // Wide horizontal cleave arc + torso twist
-        const swingArc = Math.sin(p * Math.PI) * 1.35 * this.swingDir;
-        this.batObj.rotation.set(-0.12, 0.15 + swingArc, 0.35 * Math.sin(p * Math.PI));
-        this.rollPivot.rotation.y = swingArc * 0.38;
+
+        let armPitch = 0;
+        let armYaw = 0;
+        let batPitch = -0.80;
+        let batYaw = -0.35;
+        let torsoYaw = 0;
+        let lungeZ = 0;
+
+        if (p < 0.20) {
+          // Phase 1: Wind-up (cock right arm and bat back on the right side)
+          const t = p / 0.20;
+          armPitch = -0.12 * t;
+          armYaw = -0.32 * t;
+          batPitch = -0.80 + 0.35 * t;
+          batYaw = -0.35 - 0.22 * t;
+          torsoYaw = -0.22 * t;
+          lungeZ = -0.03 * t;
+        } else if (p < 0.65) {
+          // Phase 2: Horizontal Power Cleave (whip right arm + bat from Right to Left across the front!)
+          const t = (p - 0.20) / 0.45;
+          const s = 1.0 - Math.pow(1.0 - t, 2.2); // explosive ease-out
+          armPitch = -0.12 + 0.30 * s;
+          armYaw = -0.32 + 1.02 * s; // -18° -> +40° shoulder sweep
+          batPitch = -0.45 + 0.28 * Math.sin(t * Math.PI * 0.85); // levels bat horizontally
+          batYaw = -0.57 + 1.05 * s; // -33° -> +27° wrist whip (total ~67° forward-left)
+          torsoYaw = -0.22 + 0.58 * s; // torso twists into the strike
+          lungeZ = 0.09 * Math.sin(t * Math.PI);
+        } else {
+          // Phase 3: Smooth Recovery back to one-handed ready stance on right side
+          const t = (p - 0.65) / 0.35;
+          const s = t * t * (3.0 - 2.0 * t);
+          armPitch = 0.18 * (1.0 - s);
+          armYaw = 0.70 * (1.0 - s);
+          batPitch = -0.22 * (1.0 - s) + (-0.80) * s;
+          batYaw = 0.48 * (1.0 - s) + (-0.35) * s;
+          torsoYaw = 0.36 * (1.0 - s);
+          lungeZ = 0;
+        }
+
+        this.armRBat.rotation.set(armPitch, armYaw, 0);
+        this.batObj.rotation.set(batPitch, batYaw, 0);
+        this.rollPivot.rotation.y = torsoYaw;
+        this.rollPivot.position.z += lungeZ;
       } else {
-        this.batObj.rotation.set(-0.28, 0.15, 0);
+        // One-handed ready stance: bat held in right hand on right side, cocked upward at 46°
+        this.armRBat.rotation.set(0, 0, 0);
+        this.batObj.rotation.set(-0.80, -0.35, 0);
         this.rollPivot.rotation.y = 0;
       }
     } else {
+      if (this.armRBat) this.armRBat.rotation.set(0, 0, 0);
       this.rollPivot.rotation.y = 0;
     }
 
@@ -343,8 +413,6 @@ class ThreeCharacterManager {
 
   triggerSwing() {
     this.swingTimer = 1.0;
-    this.swingDir = -this.swingDir;
-    this.recoil = 0.55;
   }
 
   /**
@@ -355,8 +423,8 @@ class ThreeCharacterManager {
     const weaponId = player.currentWeapon || 'bat';
     
     // Model tip coordinates in glTF local space (Blender coords converted to glTF):
-    // bat:     x = -0.068, y = 1.240 (height), z = 1.050 (forward)
-    // makarov: x = -0.068, y = 1.295 (height), z = 0.880 (forward)
+    // bat:     x = -0.220, y = 1.240 (height), z = 0.960 (forward)
+    // makarov: x = -0.140, y = 1.310 (height), z = 0.770 (forward)
     // shotgun: x = -0.068, y = 1.264 (height), z = 1.090 (forward)
     // drill:   x = -0.090, y = 1.215 (height), z = 1.137 (forward)
     // plasma:  x = -0.065, y = 1.215 (height), z = 1.140 (forward)
@@ -365,13 +433,13 @@ class ThreeCharacterManager {
     let tipZ = 1.090;
 
     if (weaponId === 'bat') {
-      tipX = -0.068;
+      tipX = -0.220;
       tipY = 1.240;
-      tipZ = 1.050;
+      tipZ = 0.960;
     } else if (weaponId === 'makarov') {
-      tipX = -0.068;
-      tipY = 1.295;
-      tipZ = 0.880;
+      tipX = -0.140;
+      tipY = 1.310;
+      tipZ = 0.770;
     } else if (weaponId === 'drill') {
       tipX = -0.090;
       tipY = 1.215;
