@@ -48,8 +48,10 @@ class EnvironmentRenderer {
       { key: 'heating_pipes', path: 'assets/sprites/props/heating_pipes.png?v=1016', type: 'prop' },
 
       // Здания
-      { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png', type: 'building' },
-      { key: 'building_panel_220x260', path: 'assets/sprites/buildings/building_panel_220x260.png', type: 'building' },
+      { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png?v=1024', type: 'building' },
+      { key: 'building_panel_220x260', path: 'assets/sprites/buildings/building_panel_220x260.png?v=1024', type: 'building' },
+      { key: 'building_boiler_house', path: 'assets/sprites/buildings/building_boiler_house.png?v=1024', type: 'building' },
+      { key: 'building_military_hq', path: 'assets/sprites/buildings/building_military_hq.png?v=1024', type: 'building' },
       { key: 'garage_block_140x100', path: 'assets/sprites/buildings/garage_block_140x100.png?v=1016', type: 'building' },
       { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png?v=1016', type: 'building' },
 
@@ -519,13 +521,26 @@ class EnvironmentRenderer {
       }
     });
 
-    // 2. Затем отрисовываем основные здания (панельки и 3D-гаражи), чтобы стык труб/заборов аккуратно входил в стену
+    // 2. Затем отрисовываем основные здания (3D Хрущевки, Брежневки, Котельные ТЭЦ, Военные штабы и 3D-гаражи)
     buildings.forEach(b => {
       if (b.type === 'fence_wall' || b.type === 'heating_line') return;
       if (!this.isVisible(b.x - 40, b.y - 40, b.w + 80, b.h + 80, camera, screenW, screenH)) return;
 
-      if (b.type === 'panel') {
-        if (b.w >= 300 && this.buildings['building_panel_320x160']) {
+      if (b.type === 'panel' || b.type === 'boiler_house' || b.type === 'military_hq') {
+        // Путь А: Рендеринг честной 360° 3D-модели здания (.glb) через Three.js WebGL
+        if (window.threeProps && window.threeProps.drawMajorBuilding(ctx, b)) {
+          return;
+        }
+        // Мгновенный 2D-фоллбэк из концепт-арта, пока загружается .glb
+        if (b.type === 'boiler_house' && this.buildings['building_boiler_house']) {
+          const img = this.buildings['building_boiler_house'];
+          ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
+          return;
+        } else if (b.type === 'military_hq' && this.buildings['building_military_hq']) {
+          const img = this.buildings['building_military_hq'];
+          ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
+          return;
+        } else if (b.w >= 300 && this.buildings['building_panel_320x160']) {
           const img = this.buildings['building_panel_320x160'];
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;

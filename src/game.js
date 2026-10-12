@@ -1227,10 +1227,10 @@ function generateWorld() {
       const blockBuildings = [];
 
       if (dist.id === 'courtyards') {
-        // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из панельных домов, мусорные баки у стен, Жигули у обочин
-        const b1 = tryAddBuilding(x1 + 60, y1 + 70, 320, 160, 'panel');
-        const b2 = tryAddBuilding(x2 - 290, y2 - 320, 220, 260, 'panel');
-        const b3 = tryAddBuilding(x1 + 90, y2 - 240, 320, 160, 'panel');
+        // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из 5-этажных Хрущёвок и 9-этажных Брежневок
+        const b1 = tryAddBuilding(x1 + 60, y1 + 70, 320, 160, 'panel', { subType: 'khrushchevka' });
+        const b2 = tryAddBuilding(x2 - 290, y2 - 320, 220, 260, 'panel', { subType: 'brezhnevka' });
+        const b3 = tryAddBuilding(x1 + 90, y2 - 240, 320, 160, 'panel', { subType: 'khrushchevka' });
         [b1, b2, b3].forEach(b => { if (b) blockBuildings.push(b); });
 
         // Примыкающий забор ПО-2 или короткий ввод теплотрассы к одному из домов
@@ -1281,12 +1281,12 @@ function generateWorld() {
         }
 
       } else if (dist.id === 'heating') {
-        // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — длинные линии труб теплотрассы, тепловые камеры, тайники шаманов
-        const p1 = tryAddBuilding(x1 + 45, y1 + 90, 220, 260, 'panel');
+        // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — Кирпичные Котельные ТЭЦ, Брежневки и длинные линии труб теплотрассы
+        const p1 = tryAddBuilding(x1 + 45, y1 + 90, 220, 260, 'panel', { subType: 'brezhnevka' });
         const g1 = tryAddBuilding(x1 + 55, y1 + 440, 140, 100, 'garage');
-        const p2 = tryAddBuilding(x1 + 45, y2 - 230, 320, 160, 'panel');
+        const p2 = tryAddBuilding(x1 + 45, y2 - 230, 320, 160, 'boiler_house');
 
-        // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен зданий
+        // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен Котельной и домов
         if (p1) {
           tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.55 - 20), 252, 40, 'heating_line', { segments: 2 });
         }
@@ -1311,8 +1311,8 @@ function generateWorld() {
         }
 
       } else if (dist.id === 'cordon') {
-        // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — блокпосты из плит ПО-2, санитарные УАЗы, склады армейских ящиков
-        const b1 = tryAddBuilding(x1 + 70, y1 + 90, 320, 160, 'panel');
+        // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — Командный Бункер/Казарма с РЛС, блокпосты из плит ПО-2, санитарные УАЗы, склады
+        const b1 = tryAddBuilding(x1 + 70, y1 + 90, 320, 160, 'military_hq');
         const g1 = tryAddBuilding(x1 + 120, y2 - 220, 140, 100, 'garage');
         const g2 = tryAddBuilding(x2 - 360, y1 + 120, 140, 100, 'garage');
 
@@ -1335,9 +1335,10 @@ function generateWorld() {
         }
 
       } else if (dist.id === 'nest') {
-        // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — укрепленные гнездовья, элитные склады спецхрана (лут ×2.5)
+        // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — захваченные командные бункеры и котельные, элитные склады спецхрана (лут ×2.5)
         const g1 = tryAddBuilding(x1 + 50, y1 + 70, 140, 100, 'garage');
-        const p1 = tryAddBuilding(x1 + 50, y2 - 230, 320, 160, 'panel');
+        const pType = ((cIdx + rIdx) % 2 === 0) ? 'military_hq' : 'boiler_house';
+        const p1 = tryAddBuilding(x1 + 50, y2 - 230, 320, 160, pType);
 
         if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
         if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });

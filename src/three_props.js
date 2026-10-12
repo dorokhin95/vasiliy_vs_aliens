@@ -27,7 +27,11 @@ class ThreePropsManager {
       mikhalyh_shop: null,
       garage_block: null,
       fence_po2: null,
-      heating_pipes: null
+      heating_pipes: null,
+      building_khrushchevka: null,
+      building_brezhnevka: null,
+      building_boiler_house: null,
+      building_military_hq: null
     };
 
     this.isLoaded = {
@@ -43,7 +47,11 @@ class ThreePropsManager {
       mikhalyh_shop: false,
       garage_block: false,
       fence_po2: false,
-      heating_pipes: false
+      heating_pipes: false,
+      building_khrushchevka: false,
+      building_brezhnevka: false,
+      building_boiler_house: false,
+      building_military_hq: false
     };
 
     this.modelHeights = {};
@@ -111,7 +119,11 @@ class ThreePropsManager {
       mikhalyh_shop: new THREE.Group(),
       garage_block: new THREE.Group(),
       fence_po2: new THREE.Group(),
-      heating_pipes: new THREE.Group()
+      heating_pipes: new THREE.Group(),
+      building_khrushchevka: new THREE.Group(),
+      building_brezhnevka: new THREE.Group(),
+      building_boiler_house: new THREE.Group(),
+      building_military_hq: new THREE.Group()
     };
 
     for (const key in this.roots) {
@@ -131,6 +143,10 @@ class ThreePropsManager {
 
     const loader = new THREE.GLTFLoader();
     const configs = [
+      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88 },
+      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.88 },
+      { key: 'building_boiler_house', file: 'assets/models/building_boiler_house.glb', targetSpan: 2.15, colorScale: 0.88 },
+      { key: 'building_military_hq',  file: 'assets/models/building_military_hq.glb',  targetSpan: 2.15, colorScale: 0.88 },
       { key: 'mikhalyh_shop',  file: 'assets/models/mikhalyh_shop.glb',  targetSpan: 1.95, colorScale: 0.84 },
       { key: 'car_zhiguli',    file: 'assets/models/car_zhiguli.glb',    targetSpan: 1.95, colorScale: 0.92 },
       { key: 'car_uaz',        file: 'assets/models/car_uaz.glb',        targetSpan: 1.95, colorScale: 0.92 },
@@ -148,7 +164,7 @@ class ThreePropsManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=1022',
+        cfg.file + '?v=1024',
         (gltf) => {
           const model = gltf.scene;
           const cScale = cfg.colorScale || 0.90;
@@ -294,6 +310,66 @@ class ThreePropsManager {
     ctx.roundRect(-72, -18, 144, 68, 8);
     ctx.fill();
 
+    ctx.drawImage(frameCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
+    ctx.restore();
+    return true;
+  }
+
+  /**
+   * Renders a major 3D Soviet district building (.glb) onto the main 2D game canvas:
+   * - building_khrushchevka (320x160 5-story residential panel Khrushchevka)
+   * - building_brezhnevka (220x260 multi-story compact panel Brezhnevka tower)
+   * - building_boiler_house (320x160 red-brick district heating boiler plant / ТЭЦ)
+   * - building_military_hq (320x160 fortified military command bunker & barracks)
+   */
+  drawMajorBuilding(ctx, b) {
+    let propKey = null;
+    let renderW = 376;
+    let renderH = 315;
+    let offsetY = -12;
+
+    if (b.type === 'boiler_house') {
+      propKey = 'building_boiler_house';
+    } else if (b.type === 'military_hq') {
+      propKey = 'building_military_hq';
+    } else if (b.type === 'panel') {
+      if (b.w >= 300) {
+        propKey = 'building_khrushchevka';
+      } else if (b.h >= 240) {
+        propKey = 'building_brezhnevka';
+        renderW = 300;
+        renderH = 325;
+        offsetY = -10;
+      }
+    }
+
+    if (!propKey || !this.isLoaded[propKey]) {
+      return false;
+    }
+
+    const frameCanvas = this.getFrameCanvas(propKey, 0);
+    if (!frameCanvas) return false;
+
+    const cx = b.x + b.w / 2;
+    const cy = b.y + b.h / 2;
+
+    ctx.save();
+
+    // Concrete foundation apron (отмостка) & ground contact shadow around the building base
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+    ctx.beginPath();
+    ctx.roundRect(b.x - 10, b.y + 4, b.w + 20, b.h + 14, 10);
+    ctx.fill();
+
+    ctx.fillStyle = '#222832';
+    ctx.strokeStyle = '#141820';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(b.x - 6, b.y - 2, b.w + 12, b.h + 8, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.translate(cx, cy + offsetY);
     ctx.drawImage(frameCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
     ctx.restore();
     return true;
