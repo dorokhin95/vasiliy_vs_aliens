@@ -760,33 +760,33 @@
         <span class="slot-name" id="lbl-w-bat">Бита</span>
       </div>
 
-      <div class="hotbar-slot locked-weapon" id="slot-w-makarov" onclick="switchWeapon('makarov')" title="Пистолет Макарова ПМ [5]: магазин 8 патр. 9х18, R — перезарядка">
+      <div class="hotbar-slot" id="slot-w-makarov" style="display:none;" onclick="switchWeapon('makarov')" title="Пистолет Макарова ПМ [5]: магазин 8 патр. 9х18, R — перезарядка">
         <span class="slot-key">[5]</span>
-        <span class="slot-ammo" id="ammo-w-makarov">🔒</span>
-        <img class="slot-img" src="assets/sprites/weapons/weapon_makarov.png?v=1026" alt="ПМ">
+        <span class="slot-ammo" id="ammo-w-makarov">8/16</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_makarov.png?v=1029" alt="ПМ">
         <div class="slot-bar-wrap" id="wrap-w-makarov"><div class="slot-bar-fill" id="bar-w-makarov"></div></div>
         <span class="slot-name" id="lbl-w-makarov">ПМ 9×18</span>
       </div>
 
-      <div class="hotbar-slot locked-weapon" id="slot-w-drill" onclick="switchWeapon('drill')" title="Ударная дрель ИЭ-1035 [6]: бурит броню, тратит выносливость">
+      <div class="hotbar-slot" id="slot-w-drill" style="display:none;" onclick="switchWeapon('drill')" title="Ударная дрель ИЭ-1035 [6]: бурит броню, тратит выносливость">
         <span class="slot-key">[6]</span>
-        <span class="slot-sub" id="sub-w-drill">🔒</span>
-        <img class="slot-img" src="assets/sprites/weapons/weapon_drill.png?v=1026" alt="Дрель">
+        <span class="slot-sub" id="sub-w-drill">-4.5 ВЫН</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_drill.png?v=1029" alt="Дрель">
         <span class="slot-name" id="lbl-w-drill">Дрель</span>
       </div>
 
-      <div class="hotbar-slot locked-weapon" id="slot-w-shotgun" onclick="switchWeapon('shotgun')" title="Дедовский Обрез 12к [7]: 2 ствола картечи, R — перезарядка">
+      <div class="hotbar-slot" id="slot-w-shotgun" style="display:none;" onclick="switchWeapon('shotgun')" title="Дедовский Обрез 12к [7]: 2 ствола картечи, R — перезарядка">
         <span class="slot-key">[7]</span>
-        <span class="slot-ammo" id="ammo-w-shotgun">🔒</span>
-        <img class="slot-img" src="assets/sprites/weapons/weapon_shotgun.png?v=1026" alt="Обрез">
+        <span class="slot-ammo" id="ammo-w-shotgun">2/8</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_shotgun.png?v=1029" alt="Обрез">
         <div class="slot-bar-wrap" id="wrap-w-shotgun"><div class="slot-bar-fill" id="bar-w-shotgun"></div></div>
         <span class="slot-name" id="lbl-w-shotgun">Обрез</span>
       </div>
 
-      <div class="hotbar-slot locked-weapon" id="slot-w-plasma" onclick="switchWeapon('plasma')" title="Трофейный Плазмаган [8]: бесконечный боезапас, перегревается при 100%">
+      <div class="hotbar-slot" id="slot-w-plasma" style="display:none;" onclick="switchWeapon('plasma')" title="Трофейный Плазмаган [8]: бесконечный боезапас, перегревается при 100%">
         <span class="slot-key">[8]</span>
-        <span class="slot-ammo" id="ammo-w-plasma">🔒</span>
-        <img class="slot-img" src="assets/sprites/weapons/weapon_plasma.png?v=1026" alt="Плазма">
+        <span class="slot-ammo" id="ammo-w-plasma">0%</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_plasma.png?v=1029" alt="Плазма">
         <div class="slot-bar-wrap" id="wrap-w-plasma"><div class="slot-bar-fill heat-fill" id="bar-w-plasma"></div></div>
         <span class="slot-name" id="lbl-w-plasma">Плазма</span>
       </div>
@@ -860,17 +860,17 @@
         <span id="menu-ctrl-aim">ЛКМ — Удар битой / Стрельба | R — Перезарядка</span><br>
         <span id="menu-ctrl-roll">ПРОБЕЛ — Перекат (тратит выносливость)</span> | 
         <span id="menu-ctrl-interact">E — Обыскать тайник / Лавка Михалыча</span><br>
-        <span id="menu-ctrl-items">1, 2, 3 — Расходники | Q / 4, 5, 6, 7, 8 — Оружие (Бита / ПМ / Дрель / Обрез / Плазма)</span>
+        <span id="menu-ctrl-items">1, 2, 3 — Расходники | Q / 4..8 — Смена открытого оружия</span>
       </div>
     </div>
   </div>
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1028"></script>
-  <script src="src/three_character.js?v=1028"></script>
-  <script src="src/three_enemies.js?v=1028"></script>
-  <script src="src/three_props.js?v=1028"></script>
-  <script src="src/game.js?v=1028"></script>
+  <script src="src/environment.js?v=1029"></script>
+  <script src="src/three_character.js?v=1029"></script>
+  <script src="src/three_enemies.js?v=1029"></script>
+  <script src="src/three_props.js?v=1029"></script>
+  <script src="src/game.js?v=1029"></script>
 </body>
 </html>

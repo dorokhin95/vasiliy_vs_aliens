@@ -1888,7 +1888,16 @@ function renderArsenalAndSupplies() {
   const arsenalBox = document.getElementById('arsenal-container');
   if (arsenalBox) {
     arsenalBox.innerHTML = '';
+    const hasTier2Weapon = !!(player.unlockedWeapons.makarov || player.unlockedWeapons.drill);
+    const canSeeShotgun = hasTier2Weapon || player.resources.mil_parts > 0 || !!player.unlockedWeapons.shotgun;
+    const canSeePlasma = !!player.unlockedWeapons.shotgun || player.resources.alien_core > 0 || !!player.unlockedWeapons.plasma;
+
     SHOP_ARSENAL_ITEMS.forEach(item => {
+      // Не показываем патроны к ещё не купленному оружию и не спойлерим весь топ-арсенал сразу
+      if (item.type === 'ammo' && !player.unlockedWeapons[item.ammoKey]) return;
+      if (item.weaponKey === 'shotgun' && !canSeeShotgun) return;
+      if (item.weaponKey === 'plasma' && !canSeePlasma) return;
+
       const isOwnedWeapon = item.type === 'weapon' && player.unlockedWeapons[item.weaponKey];
       const card = document.createElement('div');
       card.className = `shop-card ${isOwnedWeapon ? 'owned' : ''}`;
@@ -3011,27 +3020,27 @@ function updateHUD(forceWeaponRefresh = false) {
     addFloatingText(player.x, player.y - 52, `📍 ${label}`, dist.color);
   }
 
-  // Обновление всех 5 оружейных слотов в хотбаре (активность, замки, патроны, перезарядка, нагрев плазмы)
+  // Отображаем в хотбаре ТОЛЬКО купленное/открытое оружие (без спойлера всего арсенала на старте!)
   const allW = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
   allW.forEach(w => {
     const slotEl = document.getElementById(`slot-w-${w}`);
     if (!slotEl) return;
 
     const unlocked = !!player.unlockedWeapons[w];
-    slotEl.classList.toggle('locked-weapon', !unlocked);
+    slotEl.style.display = unlocked ? 'flex' : 'none';
+    if (!unlocked) return;
+
     slotEl.classList.toggle('active', player.currentWeapon === w);
 
     if (w === 'drill') {
       const subEl = document.getElementById('sub-w-drill');
-      if (subEl) subEl.innerText = unlocked ? '-4.5 ВЫН' : '🔒';
+      if (subEl) subEl.innerText = '-4.5 ВЫН';
     } else if (w === 'makarov' || w === 'shotgun') {
       const ammoEl = document.getElementById(`ammo-w-${w}`);
       const wrapEl = document.getElementById(`wrap-w-${w}`);
       const barEl = document.getElementById(`bar-w-${w}`);
       if (ammoEl) {
-        if (!unlocked) {
-          ammoEl.innerText = '🔒';
-        } else if (player.reloadingWeapon === w) {
+        if (player.reloadingWeapon === w) {
           ammoEl.innerText = 'R...';
         } else {
           ammoEl.innerText = `${player.ammo[w].clip}/${player.ammo[w].reserve}`;
@@ -3052,9 +3061,7 @@ function updateHUD(forceWeaponRefresh = false) {
       const barEl = document.getElementById('bar-w-plasma');
       slotEl.classList.toggle('overheated', !!player.plasmaOverheated);
       if (ammoEl) {
-        if (!unlocked) {
-          ammoEl.innerText = '🔒';
-        } else if (player.plasmaOverheated) {
+        if (player.plasmaOverheated) {
           ammoEl.innerText = 'КЛИН!';
           ammoEl.style.color = '#ef4444';
         } else {
@@ -3063,7 +3070,7 @@ function updateHUD(forceWeaponRefresh = false) {
         }
       }
       if (wrapEl && barEl) {
-        if (unlocked && (player.plasmaHeat > 0 || player.plasmaOverheated)) {
+        if (player.plasmaHeat > 0 || player.plasmaOverheated) {
           wrapEl.style.display = 'block';
           barEl.style.width = `${Math.round(player.plasmaHeat)}%`;
         } else {
