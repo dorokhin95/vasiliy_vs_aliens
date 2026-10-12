@@ -23,7 +23,7 @@ class ThreeCharacterManager {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
-      antialias: false,
+      antialias: true,
       preserveDrawingBuffer: true
     });
     this.renderer.setSize(this.width, this.height, false);
@@ -62,15 +62,26 @@ class ThreeCharacterManager {
     this.fillLight.position.set(-3, 4, 3);
     this.scene.add(this.fillLight);
 
-    // Root Container for Vasily
+    // Root Container for Vasily (Y-rotation = horizontal facing direction)
     this.characterRoot = new THREE.Group();
     this.scene.add(this.characterRoot);
+
+    // Center-of-Mass Pivot at waist height (Y = 0.90) so combat roll rotates around torso, NOT feet!
+    this.pivotHeight = 0.90;
+    this.rollPivot = new THREE.Group();
+    this.rollPivot.position.set(0, this.pivotHeight, 0);
+    this.characterRoot.add(this.rollPivot);
 
     // Animation & Mixers
     this.mixer = null;
     this.walkAction = null;
+    this.idleAction = null;
+    this.rollAction = null;
+    this.activeActionName = '';
     this.recoil = 0;
     this.rollAngle = 0;
+    this.lastX = null;
+    this.lastY = null;
     this.lastTime = performance.now();
 
     // Weapon Objects loaded from glTF
@@ -95,6 +106,9 @@ class ThreeCharacterManager {
       (gltf) => {
         this.model = gltf.scene;
 
+        // Offset model down by pivotHeight inside rollPivot so feet remain at world Y=0 when upright
+        this.model.position.set(0, -this.pivotHeight, 0);
+
         // Find the 3 high-detail dieselpunk weapon objects from Blender
         this.shotgunObj = this.model.getObjectByName('Vasiliy_Shotgun');
         this.drillObj = this.model.getObjectByName('Vasiliy_Drill');
@@ -108,37 +122,71 @@ class ThreeCharacterManager {
             if (child.material) {
               const mat = child.material;
               if (mat.map) {
-                mat.map.minFilter = THREE.NearestFilter;
-                mat.map.magFilter = THREE.NearestFilter;
+                mat.map.minFilter = THREE.LinearFilter;
+                mat.map.magFilter = THREE.LinearFilter;
                 mat.map.needsUpdate = true;
               }
             }
           }
         });
 
-        // Set up AnimationMixer for true leg walking
+        // Set up AnimationMixer for Walk, Idle, and Roll actions
         if (gltf.animations && gltf.animations.length > 0) {
           this.mixer = new THREE.AnimationMixer(this.model);
-          this.walkAction = this.mixer.clipAction(gltf.animations[0]);
+
+          const findClip = (keyword) =>
+            gltf.animations.find(c => c.name.toLowerCase().includes(keyword));
+
+          const walkClip = findClip('walk') || gltf.animations[0];
+          const idleClip = findClip('idle') || walkClip;
+          const rollClip = findClip('roll') || walkClip;
+
+          this.walkAction = this.mixer.clipAction(walkClip);
           this.walkAction.setLoop(THREE.LoopRepeat);
-          this.walkAction.play();
-          // Frame 1 = grounded combat stance (feet planted)
-          this.walkAction.time = 0;
-          this.walkAction.paused = true;
+
+          this.idleAction = this.mixer.clipAction(idleClip);
+          this.idleAction.setLoop(THREE.LoopRepeat);
+
+          this.rollAction = this.mixer.clipAction(rollClip);
+          this.rollAction.setLoop(THREE.LoopRepeat);
+
+          this.switchAction('idle');
           this.mixer.update(0);
         }
 
-        this.characterRoot.add(this.model);
+        this.rollPivot.add(this.model);
 
         // Initial weapon setup (default shotgun)
         this.setWeapon('shotgun');
 
         this.isLoaded = true;
-        console.log('[ThreeCharacter] Vasily Master Path A loaded with all 3 detailed dieselpunk weapons!');
+        console.log('[ThreeCharacter] Vasily Master Path A loaded with Walk, Idle & Roll animations!');
       },
       undefined,
       (err) => console.error('[ThreeCharacter] Failed to load vasiliy.glb:', err)
     );
+  }
+
+  switchAction(name) {
+    if (this.activeActionName === name) return;
+    this.activeActionName = name;
+
+    const map = {
+      walk: this.walkAction,
+      idle: this.idleAction,
+      roll: this.rollAction
+    };
+
+    for (const k in map) {
+      if (map[k]) {
+        if (k === name) {
+          map[k].reset();
+          map[k].play();
+        } else {
+          map[k].stop();
+        }
+      }
+    }
   }
 
   setWeapon(weaponId) {
@@ -154,67 +202,94 @@ class ThreeCharacterManager {
     const dt = Math.min((now - this.lastTime) / 1000, 0.1);
     this.lastTime = now;
 
-    // 1. Weapon Selection
+    const moveDx = this.lastX !== null ? (player.x - this.lastX) : 0;
+    const moveDy = this.lastY !== null ? (player.y - this.lastY) : 0;
+    this.lastX = player.x;
+    this.lastY = player.y;
+
+    // 1. Weapon Selection (hide weapon briefly during tight somersault roll so barrel doesn't poke ground)
     const currentWeapon = player.currentWeapon || 'shotgun';
-    if (this.currentWeaponId !== currentWeapon) {
+    if (player.isRolling) {
+      if (this.shotgunObj) this.shotgunObj.visible = false;
+      if (this.drillObj) this.drillObj.visible = false;
+      if (this.plasmaObj) this.plasmaObj.visible = false;
+      this.currentWeaponId = null;
+    } else if (this.currentWeaponId !== currentWeapon) {
       this.currentWeaponId = currentWeapon;
       this.setWeapon(currentWeapon);
     }
 
-    // 2. Smooth 360° Mouse Aiming
-    // In Canvas: angle=0 is Right, PI/2 is Down, -PI/2 is Up, PI is Left.
-    // Three.js model forward is +Z. Screen Right is +X.
-    // To face +X (Right, angle=0): rotate +Z to +X -> rotation.y = +Math.PI / 2.
-    const targetRotation = -player.angle + Math.PI / 2;
-    this.characterRoot.rotation.y = targetRotation;
+    // 2. Combat Roll vs Normal Aiming & Walking
+    if (player.isRolling) {
+      // Face the roll movement direction so somersault pitches forward along roll trajectory
+      const rollDirAngle = (player.rollDx || player.rollDy)
+        ? Math.atan2(player.rollDy, player.rollDx)
+        : player.angle;
+      this.characterRoot.rotation.y = -rollDirAngle + Math.PI / 2;
 
-    // 3. Leg Walking Animation (True Stride vs Grounded Stance)
-    if (this.mixer) {
-      if (player.isMoving && !player.isRolling) {
-        if (this.walkAction) {
-          this.walkAction.paused = false;
-          // Step animation speed in sync with movement
-          this.mixer.update(dt * 1.8);
-        }
-      } else {
-        if (this.walkAction) {
-          this.walkAction.paused = true;
-          // Return to Frame 1 (grounded combat stance, feet firmly planted)
-          this.walkAction.time = 0;
-          this.mixer.update(0);
+      // Exact progress [0..1] over the 18-frame roll duration
+      const totalRollFrames = 18;
+      const rem = Math.max(0, Math.min(totalRollFrames, player.rollDuration || 0));
+      const progress = 1.0 - (rem / totalRollFrames);
+
+      // Full 360-degree forward somersault around center-of-mass pivot
+      this.rollAngle = progress * Math.PI * 2;
+      this.rollPivot.rotation.x = this.rollAngle;
+      // Slight diagonal shoulder-roll tilt
+      const arc = Math.sin(progress * Math.PI);
+      this.rollPivot.rotation.z = arc * 0.22;
+
+      // Drop center-of-mass toward the ground so the tucked ball rolls ON the asphalt
+      this.rollPivot.position.y = this.pivotHeight - arc * 0.22;
+      const tuckScale = 1.0 - arc * 0.12;
+      this.rollPivot.scale.set(1.0, tuckScale, tuckScale);
+
+      if (this.mixer && this.rollAction) {
+        this.switchAction('roll');
+        const clipDur = this.rollAction.getClip().duration || 1.0;
+        this.rollAction.time = progress * clipDur;
+        this.mixer.update(0);
+      }
+    } else {
+      // Reset roll pivot transforms
+      this.rollAngle = 0;
+      this.rollPivot.rotation.x = 0;
+      this.rollPivot.rotation.z = 0;
+      this.rollPivot.position.y = this.pivotHeight;
+      this.rollPivot.scale.set(1, 1, 1);
+
+      // Smooth 360° Mouse Aiming
+      const targetRotation = -player.angle + Math.PI / 2;
+      this.characterRoot.rotation.y = targetRotation;
+
+      if (this.mixer) {
+        if (player.isMoving) {
+          this.switchAction('walk');
+          // Check if player is walking forward or backing up relative to aim angle
+          const aimX = Math.cos(player.angle);
+          const aimY = Math.sin(player.angle);
+          const dot = moveDx * aimX + moveDy * aimY;
+          const dirSign = dot < -0.15 ? -1.0 : 1.0;
+          this.walkAction.timeScale = dirSign * 1.95;
+          this.mixer.update(dt);
+        } else {
+          this.switchAction('idle');
+          this.idleAction.timeScale = 0.8;
+          this.mixer.update(dt);
         }
       }
     }
 
-    // 4. Idle Breathing in Neutral Stance
-    if (!player.isMoving && !player.isRolling) {
-      const breath = Math.sin(Date.now() * 0.003) * 0.012;
-      this.characterRoot.position.y = breath;
-    } else if (!player.isRolling) {
-      this.characterRoot.position.y = 0;
-    }
-
-    // 5. Combat Roll
-    if (player.isRolling) {
-      this.rollAngle += 0.35;
-      this.characterRoot.rotation.x = this.rollAngle;
-      this.characterRoot.position.y = Math.sin(this.rollAngle) * 0.15;
-    } else {
-      this.rollAngle = 0;
-      this.characterRoot.rotation.x = 0;
-    }
-
-    // 6. Weapon Recoil
+    // 3. Weapon Recoil (applied along local Z of rollPivot)
     if (this.recoil > 0) {
-      this.recoil -= 0.14;
-      this.characterRoot.position.z = this.recoil * 0.06;
+      this.recoil = Math.max(0, this.recoil - 0.14);
+      this.rollPivot.position.z = -this.recoil * 0.06;
     } else {
-      this.recoil = 0;
-      this.characterRoot.position.z = 0;
+      this.rollPivot.position.z = 0;
     }
 
-    // 7. Drill Vibration / Spin
-    if (currentWeapon === 'drill' && this.drillObj) {
+    // 4. Drill Vibration / Spin
+    if (currentWeapon === 'drill' && this.drillObj && !player.isRolling) {
       this.drillObj.rotation.z = Math.sin(Date.now() * 0.08) * 0.04;
     }
 

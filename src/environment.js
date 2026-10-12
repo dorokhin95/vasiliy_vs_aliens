@@ -21,9 +21,10 @@ class EnvironmentRenderer {
     this.props = {};
     this.buildings = {};
 
-    // Предварительно сгенерированные фиксированные позиции луж и люков для детерминированности
+    // Предварительно сгенерированные фиксированные позиции луж, люков и дворовых объектов
     this.staticPuddles = [];
     this.staticManholes = [];
+    this.staticCourtyardProps = [];
 
     this.initAssets();
     this.generateDecorations();
@@ -37,25 +38,27 @@ class EnvironmentRenderer {
       { key: 'sidewalk', path: 'assets/textures/sidewalk_tiles.png', type: 'pattern' },
 
       // Пропсы
-      { key: 'manhole', path: 'assets/sprites/props/manhole_cover.png', type: 'prop' },
-      { key: 'puddle', path: 'assets/sprites/props/puddle.png', type: 'prop' },
-      { key: 'car_zhiguli', path: 'assets/sprites/props/car_zhiguli.png', type: 'prop' },
-      { key: 'car_uaz', path: 'assets/sprites/props/car_uaz.png', type: 'prop' },
-      { key: 'trash_dumpster', path: 'assets/sprites/props/trash_dumpster.png', type: 'prop' },
-      { key: 'military_crate', path: 'assets/sprites/props/military_crate.png', type: 'prop' },
+      { key: 'manhole', path: 'assets/sprites/props/manhole_cover.png?v=1011', type: 'prop' },
+      { key: 'puddle', path: 'assets/sprites/props/puddle.png?v=1011', type: 'prop' },
+      { key: 'car_zhiguli', path: 'assets/sprites/props/car_zhiguli.png?v=1011', type: 'prop' },
+      { key: 'car_uaz', path: 'assets/sprites/props/car_uaz.png?v=1011', type: 'prop' },
+      { key: 'trash_dumpster', path: 'assets/sprites/props/trash_dumpster.png?v=1011', type: 'prop' },
+      { key: 'military_crate', path: 'assets/sprites/props/military_crate.png?v=1011', type: 'prop' },
+      { key: 'fence_po2', path: 'assets/sprites/props/fence_po2.png?v=1016', type: 'prop' },
+      { key: 'heating_pipes', path: 'assets/sprites/props/heating_pipes.png?v=1016', type: 'prop' },
 
       // Здания
       { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png', type: 'building' },
       { key: 'building_panel_220x260', path: 'assets/sprites/buildings/building_panel_220x260.png', type: 'building' },
-      { key: 'garage_block_140x100', path: 'assets/sprites/buildings/garage_block_140x100.png', type: 'building' },
-      { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png', type: 'building' },
+      { key: 'garage_block_140x100', path: 'assets/sprites/buildings/garage_block_140x100.png?v=1016', type: 'building' },
+      { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png?v=1016', type: 'building' },
 
       // Выпадающий 3D лут
-      { key: 'loot_scrap', path: 'assets/sprites/loot/loot_scrap.png', type: 'loot' },
-      { key: 'loot_bottle', path: 'assets/sprites/loot/loot_bottle.png', type: 'loot' },
-      { key: 'loot_stew', path: 'assets/sprites/loot/loot_stew.png', type: 'loot' },
-      { key: 'loot_vodka', path: 'assets/sprites/loot/loot_vodka.png', type: 'loot' },
-      { key: 'loot_bandage', path: 'assets/sprites/loot/loot_bandage.png', type: 'loot' }
+      { key: 'loot_scrap', path: 'assets/sprites/loot/loot_scrap.png?v=1012', type: 'loot' },
+      { key: 'loot_bottle', path: 'assets/sprites/loot/loot_bottle.png?v=1012', type: 'loot' },
+      { key: 'loot_stew', path: 'assets/sprites/loot/loot_stew.png?v=1012', type: 'loot' },
+      { key: 'loot_vodka', path: 'assets/sprites/loot/loot_vodka.png?v=1012', type: 'loot' },
+      { key: 'loot_bandage', path: 'assets/sprites/loot/loot_bandage.png?v=1012', type: 'loot' }
     ];
 
     let remaining = assetsToLoad.length;
@@ -159,20 +162,97 @@ class EnvironmentRenderer {
       ctx.fillRect(viewX, viewY, viewW, viewH);
     }
 
+    // 1.5. АТМОСФЕРНОЕ ЗОНИРОВАНИЕ РАЙОНОВ (оттенки почвы, масляные пятна у гаражей, воронки на кордоне, био-слизь в гнездах)
+    this.drawDistrictAtmosphere(ctx, camera, screenW, screenH);
+
     // 2. ДОРОЖНАЯ СЕТЬ (Тротуары, бордюры, асфальт, разметка)
     this.drawRoadNetwork(ctx, camera, screenW, screenH, roads);
 
-    // 3. ДОРОЖНЫЕ ДЕТАЛИ (Люки и лужи)
+    // 3. ДОРОЖНЫЕ ДЕТАЛИ (Люки, лужи и трафаретные указатели районов)
     this.drawRoadProps(ctx, camera, screenW, screenH);
 
-    // 4. БЕЗОПАСНАЯ ЗОНА (Магазин Михалыча, мешки, защитный купол)
+    // 4. БЕЗОПАСНАЯ ЗОНА (Магазин Михалыча на бетонной площади, защитный купол)
     this.drawSafeZone(ctx, safeZone);
 
-    // 5. ЗДАНИЯ (Панельки 320x160, 220x260, Гаражи)
+    // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (Панельки, 3D Гаражи, Секционные заборы ПО-2, Теплотрассы с камерами и паром)
     this.drawBuildings(ctx, camera, screenW, screenH, buildings);
 
     // 6. КОНТЕЙНЕРЫ (Жигули, УАЗики, мусорные баки, армейские ящики)
     this.drawContainers(ctx, camera, screenW, screenH, containers);
+  }
+
+  drawDistrictAtmosphere(ctx, camera, screenW, screenH) {
+    const time = Date.now() * 0.0025;
+
+    // A. Текстурное и цветовое тонирование кварталов по специализации
+    const zones = [
+      // Tier 2A: Гаражный кооператив «Восток» (Западные кварталы — темный гравий и мазут)
+      { x: 0, y: 940, w: 800, h: 960, color: 'rgba(15, 23, 42, 0.34)', border: 'rgba(249, 115, 22, 0.22)', type: 'garages' },
+      { x: 0, y: 2100, w: 800, h: 1000, color: 'rgba(15, 23, 42, 0.34)', border: 'rgba(249, 115, 22, 0.22)', type: 'garages' },
+      // Tier 2B: Магистраль Теплотрассы (Восточные кварталы — оттаявший грунт и конденсат)
+      { x: 3240, y: 940, w: 760, h: 960, color: 'rgba(14, 36, 52, 0.26)', border: 'rgba(56, 189, 248, 0.22)', type: 'heating' },
+      { x: 3240, y: 2100, w: 760, h: 1000, color: 'rgba(14, 36, 52, 0.26)', border: 'rgba(56, 189, 248, 0.22)', type: 'heating' },
+      // Tier 3: Военный Кордон (Север и Юг — выжженная земля и следы боев)
+      { x: 940, y: 0, w: 960, h: 800, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
+      { x: 2100, y: 0, w: 1000, h: 800, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
+      { x: 940, y: 3240, w: 960, h: 760, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
+      { x: 2100, y: 3240, w: 1000, h: 760, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
+      // Tier 4: Квако-Гнездо (4 дальних угла — био-заражение пришельцев)
+      { x: 0, y: 0, w: 800, h: 800, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' },
+      { x: 3240, y: 0, w: 760, h: 800, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' },
+      { x: 0, y: 3240, w: 800, h: 760, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' },
+      { x: 3240, y: 3240, w: 760, h: 760, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' }
+    ];
+
+    zones.forEach(z => {
+      if (!this.isVisible(z.x, z.y, z.w, z.h, camera, screenW, screenH)) return;
+      ctx.save();
+      ctx.fillStyle = z.color;
+      ctx.fillRect(z.x, z.y, z.w, z.h);
+
+      // Детали поверхности по типу района
+      if (z.type === 'garages') {
+        // Масляные лужи и следы протекторов перед гаражами
+        ctx.fillStyle = 'rgba(8, 10, 14, 0.55)';
+        for (let i = 0; i < 5; i++) {
+          const ox = z.x + 160 + ((i * 137) % (z.w - 280));
+          const oy = z.y + 180 + ((i * 193) % (z.h - 320));
+          ctx.beginPath();
+          ctx.ellipse(ox, oy, 36 + (i % 3) * 10, 18 + (i % 2) * 8, 0.3 * i, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (z.type === 'cordon') {
+        // Воронки от взрывов и следы обстрела на Военном кордоне
+        for (let i = 0; i < 4; i++) {
+          const cx = z.x + 200 + ((i * 211) % (z.w - 360));
+          const cy = z.y + 180 + ((i * 163) % (z.h - 320));
+          const grad = ctx.createRadialGradient(cx, cy, 6, cx, cy, 42);
+          grad.addColorStop(0, 'rgba(10, 10, 12, 0.75)');
+          grad.addColorStop(0.6, 'rgba(30, 24, 22, 0.45)');
+          grad.addColorStop(1, 'rgba(30, 24, 22, 0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 42, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (z.type === 'nest') {
+        // Токсичные био-лужи и пульсирующие споры амфибий в Квако-Гнездах
+        for (let i = 0; i < 5; i++) {
+          const bx = z.x + 160 + ((i * 149) % (z.w - 300));
+          const by = z.y + 160 + ((i * 179) % (z.h - 300));
+          const pulseR = 38 + Math.sin(time + i * 1.4) * 5;
+          const bioGrad = ctx.createRadialGradient(bx, by, 5, bx, by, pulseR);
+          bioGrad.addColorStop(0, 'rgba(74, 222, 128, 0.48)');
+          bioGrad.addColorStop(0.55, 'rgba(34, 197, 94, 0.24)');
+          bioGrad.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+          ctx.fillStyle = bioGrad;
+          ctx.beginPath();
+          ctx.arc(bx, by, pulseR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    });
   }
 
   drawRoadNetwork(ctx, camera, screenW, screenH, roads) {
@@ -303,14 +383,54 @@ class EnvironmentRenderer {
         ctx.drawImage(mImg, m.x - 24, m.y - 24, 48, 48);
       });
     }
+
+    // 3. Дорожные трафаретные указатели секторов Новохмуринска на асфальте
+    const stencils = [
+      { x: 960,  y: 2000, text: '◄ ГСК «ВОСТОК» [ЧЕРМЕТ]', color: 'rgba(251, 146, 60, 0.72)' },
+      { x: 3040, y: 2000, text: 'ТЕПЛОСЕТЬ [ВОДКА / ТУШЁНКА] ►', color: 'rgba(56, 189, 248, 0.72)' },
+      { x: 2000, y: 1020, text: '▲ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },
+      { x: 2000, y: 2980, text: '▼ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },
+      { x: 640,  y: 870,  text: '⚠ КВАКО-ГНЕЗДО СЗ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: 3360, y: 870,  text: '⚠ КВАКО-ГНЕЗДО СВ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: 640,  y: 3170, text: '⚠ КВАКО-ГНЕЗДО ЮЗ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: 3360, y: 3170, text: '⚠ КВАКО-ГНЕЗДО ЮВ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' }
+    ];
+
+    ctx.save();
+    ctx.font = 'bold 13px "Segoe UI", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    stencils.forEach(s => {
+      if (!this.isVisible(s.x - 160, s.y - 40, 320, 80, camera, screenW, screenH)) return;
+      ctx.fillStyle = 'rgba(10, 14, 20, 0.55)';
+      ctx.fillRect(s.x - 125, s.y - 13, 250, 26);
+      ctx.fillStyle = s.color;
+      ctx.fillText(s.text, s.x, s.y);
+    });
+    ctx.restore();
   }
 
   drawSafeZone(ctx, safeZone) {
-    // Мягкое свечение периметра базы
     ctx.save();
     const time = Date.now() * 0.002;
     const pulse = Math.sin(time) * 6;
 
+    // 1. Бетонный островок безопасности / площадка под Ларьком Михалыча
+    const sidewalkPattern = this.patterns['sidewalk'] || '#3b4252';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.roundRect(safeZone.shopX - 124, safeZone.shopY - 58, 248, 128, 16);
+    ctx.fill();
+
+    ctx.fillStyle = sidewalkPattern;
+    ctx.strokeStyle = '#1e2530';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.roundRect(safeZone.shopX - 120, safeZone.shopY - 62, 240, 124, 14);
+    ctx.fill();
+    ctx.stroke();
+
+    // 2. Мягкое свечение периметра базы
     const grad = ctx.createRadialGradient(safeZone.x, safeZone.y, safeZone.radius - 60, safeZone.x, safeZone.y, safeZone.radius + pulse);
     grad.addColorStop(0, 'rgba(16, 185, 129, 0.0)');
     grad.addColorStop(0.7, 'rgba(16, 185, 129, 0.06)');
@@ -320,7 +440,7 @@ class EnvironmentRenderer {
     ctx.arc(safeZone.x, safeZone.y, safeZone.radius + pulse, 0, Math.PI * 2);
     ctx.fill();
 
-    // Защитный энергетический барьер (пунктирный купол)
+    // 3. Защитный энергетический барьер (пунктирный купол)
     ctx.strokeStyle = 'rgba(52, 211, 153, 0.55)';
     ctx.lineWidth = 3;
     ctx.setLineDash([16, 12]);
@@ -329,54 +449,81 @@ class EnvironmentRenderer {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Оборонительные мешки с песком вокруг лавки
-    ctx.fillStyle = '#78716c';
-    ctx.strokeStyle = '#44403c';
-    ctx.lineWidth = 2;
-    const sandbags = [
-      { x: safeZone.shopX - 110, y: safeZone.shopY + 50, w: 70, h: 22 },
-      { x: safeZone.shopX + 40, y: safeZone.shopY + 50, w: 70, h: 22 },
-      { x: safeZone.shopX - 120, y: safeZone.shopY - 40, w: 22, h: 70 },
-      { x: safeZone.shopX + 100, y: safeZone.shopY - 40, w: 22, h: 70 }
-    ];
-    sandbags.forEach(sb => {
-      ctx.beginPath();
-      ctx.roundRect(sb.x, sb.y, sb.w, sb.h, 6);
-      ctx.fill();
-      ctx.stroke();
-    });
+    // 4. Путь А: 360° 3D-модель Ларька Михалыча (выровнена по сетке дорог dirIdx = 0)
+    const rendered3DShop = window.threeProps && window.threeProps.drawShop(ctx, safeZone);
 
-    // 2.5D Киоск Михалыча
-    if (this.buildings['mikhalyh_shop']) {
-      const shopImg = this.buildings['mikhalyh_shop'];
-      // Размеры спрайта 256x192, центрируем по магазину
-      ctx.drawImage(shopImg, safeZone.shopX - shopImg.width / 2, safeZone.shopY - shopImg.height / 2 - 10);
-    } else {
-      // Fallback
-      ctx.fillStyle = '#0f766e';
-      ctx.fillRect(safeZone.shopX - 45, safeZone.shopY - 35, 90, 70);
+    if (!rendered3DShop) {
+      if (this.buildings['mikhalyh_shop']) {
+        const shopImg = this.buildings['mikhalyh_shop'];
+        ctx.drawImage(shopImg, safeZone.shopX - shopImg.width / 2, safeZone.shopY - shopImg.height / 2 - 10);
+      } else {
+        ctx.fillStyle = '#0f766e';
+        ctx.fillRect(safeZone.shopX - 45, safeZone.shopY - 35, 90, 70);
+      }
     }
 
-    // Неоновая вывеска "У МИХАЛЫЧА" над киоском
+    // 5. Неоновая вывеска "У МИХАЛЫЧА" над киоском
     ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#34d399';
     ctx.shadowBlur = 12;
     ctx.fillStyle = '#6ee7b7';
-    ctx.fillText('КИОСК "У МИХАЛЫЧА" 24/7', safeZone.shopX, safeZone.shopY - 110);
+    ctx.fillText('КИОСК "У МИХАЛЫЧА" 24/7', safeZone.shopX, safeZone.shopY - 118);
     ctx.shadowBlur = 0;
 
     ctx.restore();
   }
 
   drawBuildings(ctx, camera, screenW, screenH, buildings) {
+    const time = Date.now() * 0.003;
+
+    // 1. Сначала отрисовываем примыкающие секционные заборы ПО-2 и магистрали теплотрассы
     buildings.forEach(b => {
-      if (!this.isVisible(b.x - 30, b.y - 30, b.w + 60, b.h + 60, camera, screenW, screenH)) return;
+      if (b.type !== 'fence_wall' && b.type !== 'heating_line') return;
+      if (!this.isVisible(b.x - 60, b.y - 60, b.w + 120, b.h + 120, camera, screenW, screenH)) return;
+
+      if (b.type === 'fence_wall') {
+        if (window.threeProps && window.threeProps.drawFenceWall(ctx, b)) return;
+        const img = this.props['fence_po2'];
+        if (img) {
+          const segments = b.segments || 2;
+          for (let i = 0; i < segments; i++) {
+            ctx.drawImage(img, b.x + i * 104 - 10, b.y - 38, 128, 88);
+          }
+          return;
+        }
+      } else if (b.type === 'heating_line') {
+        const rendered = window.threeProps && window.threeProps.drawHeatingLine(ctx, b, this.props['manhole']);
+        if (!rendered) {
+          const img = this.props['heating_pipes'];
+          if (img) {
+            const segments = b.segments || 2;
+            for (let i = 0; i < segments; i++) {
+              ctx.drawImage(img, b.x + i * 94 - 10, b.y - 26, 120, 84);
+            }
+          }
+        }
+        // Клубы теплого белого пара над вентилями и камерами теплотрассы
+        ctx.save();
+        const steamX = b.x + b.w - 22 + Math.sin(time + b.x) * 5;
+        const steamY = b.y + 8 - ((time * 8 + b.y) % 18);
+        ctx.fillStyle = 'rgba(226, 232, 240, 0.16)';
+        ctx.beginPath();
+        ctx.arc(steamX, steamY, 16 + Math.sin(time * 1.5) * 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+      }
+    });
+
+    // 2. Затем отрисовываем основные здания (панельки и 3D-гаражи), чтобы стык труб/заборов аккуратно входил в стену
+    buildings.forEach(b => {
+      if (b.type === 'fence_wall' || b.type === 'heating_line') return;
+      if (!this.isVisible(b.x - 40, b.y - 40, b.w + 80, b.h + 80, camera, screenW, screenH)) return;
 
       if (b.type === 'panel') {
         if (b.w >= 300 && this.buildings['building_panel_320x160']) {
           const img = this.buildings['building_panel_320x160'];
-          // Отрисовываем спрайт (368x208 с запеченной тенью): смещение тени (-24, -24)
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;
         } else if (b.h >= 240 && this.buildings['building_panel_220x260']) {
@@ -384,10 +531,16 @@ class EnvironmentRenderer {
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;
         }
-      } else if (b.type === 'garage' && this.buildings['garage_block_140x100']) {
-        const img = this.buildings['garage_block_140x100'];
-        ctx.drawImage(img, b.x - 16, b.y - 16, img.width, img.height);
-        return;
+      } else if (b.type === 'garage') {
+        // Путь А: Рендеринг честной 360° 3D-модели гаража (.glb) через Three.js WebGL (воротами вперед)
+        if (window.threeProps && window.threeProps.drawGarage(ctx, b)) {
+          return;
+        }
+        if (this.buildings['garage_block_140x100']) {
+          const img = this.buildings['garage_block_140x100'];
+          ctx.drawImage(img, b.x - 16, b.y - 16, img.width, img.height);
+          return;
+        }
       }
 
       // Fallback
@@ -401,44 +554,46 @@ class EnvironmentRenderer {
 
   drawContainers(ctx, camera, screenW, screenH, containers) {
     containers.forEach(c => {
-      if (!this.isVisible(c.x - 70, c.y - 70, 140, 140, camera, screenW, screenH)) return;
+      if (!this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) return;
+
+      // Путь А: Рендеринг честной 360° 3D-модели (.glb) через Three.js WebGL
+      if (window.threeProps && window.threeProps.drawContainer(ctx, c)) {
+        return;
+      }
 
       let img = null;
-      let drawW = 54, drawH = 40;
-      let rot = 0;
+      let drawW = 58, drawH = 42;
+      let flipX = 1;
 
       if (c.type === 'car') {
-        // Чередуем Жигули и УАЗик на основе координат
-        const isUaz = ((Math.floor(c.x) + Math.floor(c.y)) % 2 === 0);
+        const isUaz = c.subType
+          ? (c.subType === 'uaz')
+          : (((Math.floor(c.x) + Math.floor(c.y)) % 2) === 0);
         img = isUaz ? this.props['car_uaz'] : this.props['car_zhiguli'];
-        // Настоящие физические пропорции автомобиля:
-        // Жигули: длина 192px (в 3 раза длиннее Василия), ширина 120px
-        // УАЗ-буханка: длина 204px, ширина 136px
-        drawW = isUaz ? 204 : 192;
-        drawH = isUaz ? 136 : 120;
-        rot = ((c.x * 37) % 60 - 30) * (Math.PI / 180); // Легкий случайный наклон парковки
+        drawW = isUaz ? 208 : 200;
+        drawH = isUaz ? 143 : 125;
+        flipX = ((Math.floor(c.x * 13 + c.y * 7) % 2) === 0) ? 1 : -1;
       } else if (c.type === 'trash') {
         img = this.props['trash_dumpster'];
-        // Мусорный бак ТБО: 58x58
-        drawW = 58;
-        drawH = 58;
-        rot = ((c.y * 23) % 40 - 20) * (Math.PI / 180);
+        drawW = 68;
+        drawH = 68;
       } else {
-        // Военный ящик боеприпасов: 48x48
         img = this.props['military_crate'];
-        drawW = 48;
-        drawH = 48;
+        drawW = 58;
+        drawH = 42;
       }
 
       ctx.save();
       ctx.translate(c.x, c.y);
-      ctx.rotate(rot);
 
       if (c.searched) {
         // Обысканный контейнер: полупрозрачный / затемненный
         ctx.globalAlpha = 0.55;
         if (img) {
+          ctx.save();
+          ctx.scale(flipX, 1);
           ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+          ctx.restore();
         } else {
           ctx.fillStyle = '#64748b';
           ctx.fillRect(-16, -16, 32, 32);
@@ -450,27 +605,28 @@ class EnvironmentRenderer {
         ctx.font = '13px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('✓', 0, -drawH / 2 - 8);
+        ctx.fillText('✓', 0, -drawH / 2 - 6);
       } else {
         // Необысканный контейнер
         if (img) {
+          ctx.save();
+          ctx.scale(flipX, 1);
           ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+          ctx.restore();
         } else {
           ctx.fillStyle = '#f59e0b';
           ctx.fillRect(-16, -16, 32, 32);
         }
 
-        // Тонкая золотистая обводка интерактивности вокруг тайника
-        ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(-drawW / 2 - 2, -drawH / 2 - 2, drawW + 4, drawH + 4);
-
-        // Индикатор неоткрытого лута
-        ctx.fillStyle = '#f59e0b';
-        ctx.font = 'bold 11px Arial';
+        // Индикатор неоткрытого тайника над объектом
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 12px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('▼', 0, -drawH / 2 - 9);
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+        ctx.fillText('▼', 0, -drawH / 2 - 6);
+        ctx.shadowBlur = 0;
       }
 
       ctx.restore();
@@ -479,6 +635,11 @@ class EnvironmentRenderer {
 
   // Отрисовка высокодетализированного 3D выпавшего лута
   drawLootItem(ctx, l) {
+    // Путь А: Рендеринг честной 360° 3D-модели (.glb) через Three.js WebGL
+    if (window.threeProps && window.threeProps.drawLootItem(ctx, l)) {
+      return;
+    }
+
     let img = null;
     const typeKey = `loot_${l.type}`;
     if (this.loot && this.loot[typeKey]) {
@@ -499,7 +660,7 @@ class EnvironmentRenderer {
     ctx.fill();
 
     if (img) {
-      const size = 26;
+      const size = 28;
       ctx.drawImage(img, -size / 2, -size / 2 + hoverY, size, size);
     } else {
       ctx.font = '18px Arial';

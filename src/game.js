@@ -1013,6 +1013,100 @@ let particles = [];
 let floatingTexts = [];
 let lootItems = [];
 
+// --- СИСТЕМА РАЙОНОВ НОВОХМУРИНСКА И МАТРИЦА ЗАВИСИМОСТЕЙ (TIER 0 -> TIER 4) ---
+const DISTRICTS = {
+  hub: {
+    id: 'hub',
+    tier: 0,
+    name_ru: '🟢 ПЯТАЧОК У МИХАЛЫЧА',
+    name_en: '🟢 MIKHALYCH SAFE HUB',
+    meta_ru: 'Угроза: Безопасно | Лавка и Верстак',
+    meta_en: 'Threat: Safe | Shop & Workbench',
+    color: '#10b981',
+    lootMult: 1.0
+  },
+  courtyards: {
+    id: 'courtyards',
+    tier: 1,
+    name_ru: '🟡 СПАЛЬНЫЕ ХРУЩЁВКИ',
+    name_en: '🟡 RESIDENTIAL COURTYARDS',
+    meta_ru: 'Угроза: ★☆☆☆ (Слабые пехотинцы) | Лут: 🍾 Стеклотара, 🩹 Бинты',
+    meta_en: 'Threat: ★☆☆☆ (Weak Grunts) | Loot: 🍾 Bottles, 🩹 Bandages',
+    color: '#eab308',
+    lootMult: 1.0
+  },
+  garages: {
+    id: 'garages',
+    tier: 2,
+    name_ru: '🟠 ГАРАЖНЫЙ КООПЕРАТИВ «ВОСТОК»',
+    name_en: '🟠 GARAGE COOPERATIVE',
+    meta_ru: 'Угроза: ★★☆☆ (Пехотинцы и Снайперы) | Лут: ⚙️ Чермет ×1.5',
+    meta_en: 'Threat: ★★☆☆ (Grunts & Snipers) | Loot: ⚙️ Scrap ×1.5',
+    color: '#f97316',
+    lootMult: 1.5
+  },
+  heating: {
+    id: 'heating',
+    tier: 2,
+    name_ru: '🔵 МАГИСТРАЛЬ ТЕПЛОТРАССЫ',
+    name_en: '🔵 HEATING PIPELINE SECTOR',
+    meta_ru: 'Угроза: ★★☆☆ (Засады у труб) | Лут: 🍾 Водка, 🥫 Тушёнка ×1.5',
+    meta_en: 'Threat: ★★☆☆ (Pipe Ambushes) | Loot: 🍾 Vodka, 🥫 Stew ×1.5',
+    color: '#38bdf8',
+    lootMult: 1.5
+  },
+  cordon: {
+    id: 'cordon',
+    tier: 3,
+    name_ru: '🔴 ВОЕННЫЙ КОРДОН',
+    name_en: '🔴 MILITARY CORDON',
+    meta_ru: 'Угроза: ★★★☆ (Громилы и Снайперы) | Лут: 📦 Военторг ×1.9',
+    meta_en: 'Threat: ★★★☆ (Brutes & Snipers) | Loot: 📦 Military Supply ×1.9',
+    color: '#ef4444',
+    lootMult: 1.9
+  },
+  nest: {
+    id: 'nest',
+    tier: 4,
+    name_ru: '🟣 КВАКО-ГНЕЗДО (ЗОНА ВЫСАДКИ)',
+    name_en: '🟣 TOAD NEST (DROP ZONE)',
+    meta_ru: 'Угроза: ★★★★ (Элитные Громилы) | Лут: 💎 Элитный ×2.5',
+    meta_en: 'Threat: ★★★★ (Elite Brutes) | Loot: 💎 Elite Loot ×2.5',
+    color: '#a855f7',
+    lootMult: 2.5
+  }
+};
+
+function getDistrictAt(x, y) {
+  if (Math.hypot(x - safeZone.x, y - safeZone.y) < 420) {
+    return DISTRICTS.hub;
+  }
+  const isOuterX = (x < 870 || x > 3170);
+  const isOuterY = (y < 870 || y > 3170);
+
+  // 4 дальних угла карты — Квако-Гнезда (Tier 4)
+  if (isOuterX && isOuterY) {
+    return DISTRICTS.nest;
+  }
+  // Западный сектор — Гаражный кооператив «Восток» (Tier 2A)
+  if (x < 870) {
+    return DISTRICTS.garages;
+  }
+  // Восточный сектор — Магистраль Теплотрассы (Tier 2B)
+  if (x > 3170) {
+    return DISTRICTS.heating;
+  }
+  // Северный и Южный сектора — Военный Кордон (Tier 3)
+  if (isOuterY) {
+    return DISTRICTS.cordon;
+  }
+  // Центральные 4 квартала вокруг базы — Спальные Хрущёвки (Tier 1)
+  return DISTRICTS.courtyards;
+}
+window.getDistrictAt = getDistrictAt;
+
+let lastPlayerDistrictId = 'hub';
+
 function generateWorld() {
   buildings = [];
   roads = [];
@@ -1031,111 +1125,337 @@ function generateWorld() {
   roads.push({ x: 800, y: 0, w: 140, h: WORLD_HEIGHT });
   roads.push({ x: 3100, y: 0, w: 140, h: WORLD_HEIGHT });
 
-  const blockTypes = [
-    { w: 320, h: 160, type: 'panel' },
-    { w: 220, h: 260, type: 'panel' },
-    { w: 140, h: 100, type: 'garage' }
-  ];
-
-  for (let bx = 300; bx < WORLD_WIDTH - 400; bx += 480) {
-    for (let by = 300; by < WORLD_HEIGHT - 400; by += 450) {
-      if (Math.hypot(bx - safeZone.x, by - safeZone.y) < 450) continue;
-      const block = blockTypes[Math.floor(Math.random() * blockTypes.length)];
-      buildings.push({
-        x: bx + (Math.random() - 0.5) * 80,
-        y: by + (Math.random() - 0.5) * 80,
-        w: block.w,
-        h: block.h,
-        type: block.type
-      });
-    }
-  }
-
-  let containerAttempts = 0;
-  while (containers.length < 85 && containerAttempts < 400) {
-    containerAttempts++;
-    const cx = Math.random() * (WORLD_WIDTH - 400) + 200;
-    const cy = Math.random() * (WORLD_HEIGHT - 400) + 200;
-    if (Math.hypot(cx - safeZone.x, cy - safeZone.y) < 340) continue;
-
-    // Проверяем, чтобы контейнер не спавнился внутри здания (с запасом на габариты машины)
-    const insideBuilding = buildings.some(b => 
-      cx >= b.x - 70 && cx <= b.x + b.w + 70 &&
-      cy >= b.y - 70 && cy <= b.y + b.h + 70
+  const isNearRoad = (rx, ry, rw, rh, pad = 32) => {
+    return roads.some(r =>
+      rx + rw + pad > r.x && rx - pad < r.x + r.w &&
+      ry + rh + pad > r.y && ry - pad < r.y + r.h
     );
-    if (insideBuilding) continue;
+  };
 
-    const types = ['trash', 'car', 'box'];
-    const chosenType = types[Math.floor(Math.random() * types.length)];
-    const cRadius = chosenType === 'car' ? 48 : (chosenType === 'trash' ? 26 : 22);
+  const overlapsAnyBuilding = (rx, ry, rw, rh, ignoreB = null, padX = 26, padY = 32) => {
+    return buildings.some(other => {
+      if (other === ignoreB) return false;
+      return (
+        rx + rw + padX > other.x &&
+        rx - padX < other.x + other.w &&
+        ry + rh + padY > other.y &&
+        ry - padY < other.y + other.h
+      );
+    });
+  };
 
-    // Не спавнить контейнеры поверх друг друга (дистанция не менее 130px)
-    const tooCloseToOther = containers.some(existing => 
-      Math.hypot(cx - existing.x, cy - existing.y) < (cRadius + existing.radius + 50)
+  const tryAddBuilding = (x, y, w, h, type, extra = {}) => {
+    const rx = Math.round(x);
+    const ry = Math.round(y);
+    if (rx < 70 || ry < 70 || rx + w > WORLD_WIDTH - 70 || ry + h > WORLD_HEIGHT - 70) return null;
+    if (Math.hypot(rx + w / 2 - safeZone.x, ry + h / 2 - safeZone.y) < 390) return null;
+    if (isNearRoad(rx, ry, w, h, 30)) return null;
+    if (overlapsAnyBuilding(rx, ry, w, h, null, 24, 28)) return null;
+    const obj = Object.assign({ x: rx, y: ry, w, h, type }, extra);
+    buildings.push(obj);
+    return obj;
+  };
+
+  const tryAddContainer = (x, y, type, subType = null, dirIdx = undefined) => {
+    const cx = Math.round(x);
+    const cy = Math.round(y);
+    if (cx < 85 || cy < 85 || cx > WORLD_WIDTH - 85 || cy > WORLD_HEIGHT - 85) return false;
+    if (Math.hypot(cx - safeZone.x, cy - safeZone.y) < 305) return false;
+
+    const cRadius = type === 'car' ? 48 : (type === 'trash' ? 26 : 22);
+    const pad = type === 'car' ? 56 : 38;
+
+    const insideBuilding = buildings.some(b =>
+      cx >= b.x - pad && cx <= b.x + b.w + pad &&
+      cy >= b.y - pad && cy <= b.y + b.h + pad
     );
-    if (tooCloseToOther) continue;
+    if (insideBuilding) return false;
 
+    const tooClose = containers.some(existing =>
+      Math.hypot(cx - existing.x, cy - existing.y) < (cRadius + existing.radius + 36)
+    );
+    if (tooClose) return false;
+
+    const dist = getDistrictAt(cx, cy);
     containers.push({
       x: cx,
       y: cy,
       radius: cRadius,
-      type: chosenType,
+      type: type,
+      subType: subType,
+      dirIdx: dirIdx,
+      districtId: dist.id,
+      tier: dist.tier,
       searched: false
     });
-  }
+    return true;
+  };
 
-  for (let i = 0; i < 75; i++) {
-    spawnPatrolEnemy();
-  }
+  // Сетка 16 городских кварталов, образованных дорогами (800, 1900, 3100)
+  const colRanges = [
+    [110, 740],
+    [990, 1840],
+    [2150, 3040],
+    [3290, 3890]
+  ];
+  const rowRanges = [
+    [110, 740],
+    [990, 1840],
+    [2150, 3040],
+    [3290, 3890]
+  ];
+
+  // 0. Стартовые мусорные баки вокруг площади Михалыча (Tier 0 -> Tier 1 переход)
+  tryAddContainer(1660, 1845, 'trash', null, 0);
+  tryAddContainer(2340, 1845, 'trash', null, 0);
+  tryAddContainer(1660, 2155, 'trash', null, 0);
+
+  // 1. Генерация архитектуры, контейнеров и патрулей по каждому из 16 кварталов согласно правилам района
+  colRanges.forEach(([x1, x2], cIdx) => {
+    rowRanges.forEach(([y1, y2], rIdx) => {
+      const bcx = (x1 + x2) * 0.5;
+      const bcy = (y1 + y2) * 0.5;
+      const dist = getDistrictAt(bcx, bcy);
+      const blockBuildings = [];
+
+      if (dist.id === 'courtyards') {
+        // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из панельных домов, мусорные баки у стен, Жигули у обочин
+        const b1 = tryAddBuilding(x1 + 60, y1 + 70, 320, 160, 'panel');
+        const b2 = tryAddBuilding(x2 - 290, y2 - 320, 220, 260, 'panel');
+        const b3 = tryAddBuilding(x1 + 90, y2 - 240, 320, 160, 'panel');
+        [b1, b2, b3].forEach(b => { if (b) blockBuildings.push(b); });
+
+        // Примыкающий забор ПО-2 или короткий ввод теплотрассы к одному из домов
+        if (b1) {
+          tryAddBuilding(b1.x + b1.w + 4, Math.round(b1.y + b1.h - 32), 220, 30, 'fence_wall', { segments: 2 });
+        }
+        if (b3) {
+          tryAddBuilding(b3.x + b3.w + 4, Math.round(b3.y + b3.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
+        }
+
+        // Контейнеры: мусорные баки ЖЭК-4 рядом со стенами панелек + редкие Жигули у дороги
+        blockBuildings.forEach(b => {
+          tryAddContainer(b.x - 48, b.y + b.h - 24, 'trash', null, 0);
+          tryAddContainer(b.x + 80, b.y + b.h + 48, 'trash', null, 1);
+        });
+        tryAddContainer(bcx, y1 + 25, 'car', 'zhiguli', 0);
+
+        // Враги: ТОЛЬКО слабые Жабы-Пехотинцы (65 HP), никаких Громил и Снайперов у базы!
+        for (let i = 0; i < 3; i++) {
+          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+        }
+
+      } else if (dist.id === 'garages') {
+        // 🟠 TIER 2A: ГАРАЖНЫЙ КООПЕРАТИВ «ВОСТОК» — ряды 3D гаражных боксов №74, заборы ПО-2, много машин и чермета
+        const g1 = tryAddBuilding(x1 + 40, y1 + 80, 140, 100, 'garage');
+        const g2 = tryAddBuilding(x1 + 220, y1 + 80, 140, 100, 'garage');
+        const g3 = tryAddBuilding(x1 + 40, y1 + 360, 140, 100, 'garage');
+        const g4 = tryAddBuilding(x1 + 220, y1 + 360, 140, 100, 'garage');
+        const g5 = tryAddBuilding(x1 + 80, y2 - 190, 140, 100, 'garage');
+        [g1, g2, g3, g4, g5].forEach(g => { if (g) blockBuildings.push(g); });
+
+        // Бетонные заборы ПО-2 продолжают линии гаражного кооператива
+        if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+        if (g4) tryAddBuilding(g4.x + g4.w + 4, g4.y + g4.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+        if (g5) tryAddBuilding(g5.x + g5.w + 4, g5.y + g5.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+
+        // Контейнеры: Жигули и УАЗы перед гаражами + мусорные баки + армейский ящик с инструментами в глубине
+        if (g1) tryAddContainer(g1.x + 70, g1.y + g1.h + 72, 'car', 'zhiguli', 0);
+        if (g3) tryAddContainer(g3.x + 70, g3.y + g3.h + 72, 'car', 'uaz', 8);
+        tryAddContainer(x2 - 90, bcy - 120, 'car', 'zhiguli', 1);
+        tryAddContainer(x1 + 420, y1 + 230, 'box', null, 0);
+        tryAddContainer(x1 + 60, y2 - 50, 'trash', null, 0);
+        tryAddContainer(x2 - 110, y2 - 110, 'box', null, 1);
+
+        // Враги: Пехотинцы + Снайперы в засадах между гаражами
+        for (let i = 0; i < 5; i++) {
+          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+        }
+
+      } else if (dist.id === 'heating') {
+        // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — длинные линии труб теплотрассы, тепловые камеры, тайники шаманов
+        const p1 = tryAddBuilding(x1 + 45, y1 + 90, 220, 260, 'panel');
+        const g1 = tryAddBuilding(x1 + 55, y1 + 440, 140, 100, 'garage');
+        const p2 = tryAddBuilding(x1 + 45, y2 - 230, 320, 160, 'panel');
+
+        // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен зданий
+        if (p1) {
+          tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.55 - 20), 252, 40, 'heating_line', { segments: 2 });
+        }
+        if (g1) {
+          tryAddBuilding(g1.x + g1.w + 4, Math.round(g1.y + g1.h * 0.55 - 20), 356, 40, 'heating_line', { segments: 3 });
+        }
+        if (p2) {
+          tryAddBuilding(p2.x + p2.w + 4, Math.round(p2.y + p2.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
+        }
+
+        // Контейнеры: тайники с водкой и тушенкой у тепловых камер + машины
+        tryAddContainer(x1 + 330, y1 + 290, 'trash', null, 0);
+        tryAddContainer(x1 + 420, y1 + 380, 'box', null, 0);
+        tryAddContainer(x1 + 260, y1 + 575, 'trash', null, 1);
+        tryAddContainer(x1 + 480, y2 - 280, 'box', null, 0);
+        tryAddContainer(x1 + 160, y1 + 38, 'car', 'uaz', 0);
+        tryAddContainer(x2 - 110, bcy + 40, 'car', 'zhiguli', 8);
+
+        // Враги: Снайперы и Штурмовики вдоль труб
+        for (let i = 0; i < 5; i++) {
+          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+        }
+
+      } else if (dist.id === 'cordon') {
+        // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — блокпосты из плит ПО-2, санитарные УАЗы, склады армейских ящиков
+        const b1 = tryAddBuilding(x1 + 70, y1 + 90, 320, 160, 'panel');
+        const g1 = tryAddBuilding(x1 + 120, y2 - 220, 140, 100, 'garage');
+        const g2 = tryAddBuilding(x2 - 360, y1 + 120, 140, 100, 'garage');
+
+        // Длинные защитные рубежи из бетонных заборов ПО-2
+        if (b1) tryAddBuilding(b1.x + b1.w + 4, b1.y + b1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+        if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 330, 30, 'fence_wall', { segments: 3 });
+        if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+
+        // Контейнеры: преобладают Армейские ящики (55%) и УАЗ-Буханки (35%)
+        tryAddContainer(bcx - 90, bcy - 20, 'box', null, 0);
+        tryAddContainer(bcx + 40, bcy + 30, 'box', null, 1);
+        tryAddContainer(x2 - 180, y2 - 140, 'box', null, 0);
+        tryAddContainer(x1 + 220, bcy + 60, 'car', 'uaz', 0);
+        tryAddContainer(x2 - 210, y1 + 60, 'car', 'uaz', 8);
+        tryAddContainer(x1 + 60, y2 - 70, 'trash', null, 0);
+
+        // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
+        for (let i = 0; i < 6; i++) {
+          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+        }
+
+      } else if (dist.id === 'nest') {
+        // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — укрепленные гнездовья, элитные склады спецхрана (лут ×2.5)
+        const g1 = tryAddBuilding(x1 + 50, y1 + 70, 140, 100, 'garage');
+        const p1 = tryAddBuilding(x1 + 50, y2 - 230, 320, 160, 'panel');
+
+        if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+        if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
+
+        // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
+        tryAddContainer(bcx - 65, bcy - 45, 'box', null, 0);
+        tryAddContainer(bcx + 55, bcy - 40, 'box', null, 1);
+        tryAddContainer(bcx - 50, bcy + 55, 'box', null, 2);
+        tryAddContainer(bcx + 65, bcy + 60, 'box', null, 0);
+        tryAddContainer(x2 - 140, y1 + 140, 'car', 'uaz', 8);
+        tryAddContainer(x1 + 150, bcy + 10, 'car', 'uaz', 0);
+
+        // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы)
+        for (let i = 0; i < 8; i++) {
+          spawnEnemyInRect(x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist);
+        }
+      }
+    });
+  });
 }
 
-function spawnPatrolEnemy() {
-  let ex = Math.random() * (WORLD_WIDTH - 400) + 200;
-  let ey = Math.random() * (WORLD_HEIGHT - 400) + 200;
-  if (Math.hypot(ex - safeZone.x, ey - safeZone.y) < 480) return;
+function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const ex = x1 + Math.random() * (x2 - x1);
+    const ey = y1 + Math.random() * (y2 - y1);
 
-  const rand = Math.random();
-  let type = 'grunt';
-  let radius = 22;
-  let hp = 85;
-  let speed = 2.6;
-  let aggroRadius = 300;
-  let color = '#22c55e';
+    // Строгий буфер безопасности вокруг базы Михалыча (не ближе 520px!)
+    if (Math.hypot(ex - safeZone.x, ey - safeZone.y) < 520) continue;
 
-  if (rand < 0.15) {
-    type = 'brute';
-    radius = 34;
-    hp = 260;
-    speed = 1.7;
-    aggroRadius = 320;
-    color = '#a855f7';
-  } else if (rand < 0.45) {
-    type = 'sniper';
-    radius = 16;
-    hp = 45;
-    speed = 2.0;
-    aggroRadius = 380;
-    color = '#84cc16';
+    // Не спавнить внутри зданий/заборов/труб
+    if (checkBuildingCollision(ex, ey, 36)) continue;
+
+    const dist = distOverride || getDistrictAt(ex, ey);
+    if (dist.id === 'hub') continue;
+
+    const rand = Math.random();
+    let type = 'grunt';
+    let radius = 22;
+    let hp = 85;
+    let speed = 2.55;
+    let aggroRadius = 290;
+    let color = '#22c55e';
+
+    if (dist.id === 'courtyards') {
+      // 🟡 TIER 1 (Рядом с базой): ТОЛЬКО ослабленные пехотинцы-разведчики (65 HP, меньший радиус агра)
+      type = 'grunt';
+      radius = 21;
+      hp = 65;
+      speed = 2.35;
+      aggroRadius = 235;
+      color = '#22c55e';
+    } else if (dist.id === 'garages') {
+      // 🟠 TIER 2A (Гаражи): 55% Пехотинец, 40% Снайпер, 5% Громила
+      if (rand < 0.05) {
+        type = 'brute'; radius = 34; hp = 240; speed = 1.65; aggroRadius = 300; color = '#a855f7';
+      } else if (rand < 0.45) {
+        type = 'sniper'; radius = 16; hp = 45; speed = 2.0; aggroRadius = 360; color = '#84cc16';
+      } else {
+        type = 'grunt'; radius = 22; hp = 85; speed = 2.6; aggroRadius = 290; color = '#22c55e';
+      }
+    } else if (dist.id === 'heating') {
+      // 🔵 TIER 2B (Теплотрасса): 50% Пехотинец, 40% Снайпер, 10% Громила
+      if (rand < 0.10) {
+        type = 'brute'; radius = 34; hp = 250; speed = 1.7; aggroRadius = 310; color = '#a855f7';
+      } else if (rand < 0.50) {
+        type = 'sniper'; radius = 16; hp = 50; speed = 2.05; aggroRadius = 370; color = '#84cc16';
+      } else {
+        type = 'grunt'; radius = 22; hp = 85; speed = 2.6; aggroRadius = 295; color = '#22c55e';
+      }
+    } else if (dist.id === 'cordon') {
+      // 🔴 TIER 3 (Военный кордон): 35% Громила, 35% Снайпер, 30% Ветеран-пехотинец
+      if (rand < 0.35) {
+        type = 'brute'; radius = 34; hp = 265; speed = 1.75; aggroRadius = 330; color = '#a855f7';
+      } else if (rand < 0.70) {
+        type = 'sniper'; radius = 16; hp = 55; speed = 2.1; aggroRadius = 390; color = '#84cc16';
+      } else {
+        type = 'grunt'; radius = 23; hp = 105; speed = 2.7; aggroRadius = 315; color = '#22c55e';
+      }
+    } else if (dist.id === 'nest') {
+      // 🟣 TIER 4 (Квако-Гнездо): 50% Элитный Громила (320 HP), 35% Снайпер, 15% Мутант-пехотинец
+      if (rand < 0.50) {
+        type = 'brute'; radius = 36; hp = 320; speed = 1.85; aggroRadius = 350; color = '#a855f7';
+      } else if (rand < 0.85) {
+        type = 'sniper'; radius = 17; hp = 65; speed = 2.15; aggroRadius = 400; color = '#84cc16';
+      } else {
+        type = 'grunt'; radius = 24; hp = 120; speed = 2.8; aggroRadius = 330; color = '#22c55e';
+      }
+    }
+
+    enemies.push({
+      x: ex,
+      y: ey,
+      startX: ex,
+      startY: ey,
+      bounds: { x1, y1, x2, y2 },
+      districtId: dist.id,
+      tier: dist.tier,
+      radius: radius,
+      hp: hp,
+      maxHp: hp,
+      speed: speed,
+      type: type,
+      color: color,
+      aggroRadius: aggroRadius,
+      isAggroed: false,
+      hitFlash: 0,
+      patrolAngle: Math.random() * Math.PI * 2,
+      patrolTimer: Math.random() * 120 + 60,
+      shootCooldown: Math.random() * 80 + 60
+    });
+    return true;
   }
+  return false;
+}
 
-  enemies.push({
-    x: ex,
-    y: ey,
-    startX: ex,
-    startY: ey,
-    radius: radius,
-    hp: hp,
-    maxHp: hp,
-    speed: speed,
-    type: type,
-    color: color,
-    aggroRadius: aggroRadius,
-    isAggroed: false,
-    hitFlash: 0,
-    patrolAngle: Math.random() * Math.PI * 2,
-    patrolTimer: Math.random() * 120 + 60,
-    shootCooldown: Math.random() * 80 + 60
-  });
+function spawnPatrolEnemy(deadEnemy = null) {
+  if (deadEnemy && deadEnemy.bounds) {
+    const b = deadEnemy.bounds;
+    const dist = DISTRICTS[deadEnemy.districtId] || getDistrictAt((b.x1 + b.x2) * 0.5, (b.y1 + b.y2) * 0.5);
+    // Не спавнить прямо на голову игроку
+    if (Math.hypot(player.x - (b.x1 + b.x2) * 0.5, player.y - (b.y1 + b.y2) * 0.5) > 550) {
+      spawnEnemyInRect(b.x1, b.y1, b.x2, b.y2, dist);
+    }
+    return;
+  }
+  spawnEnemyInRect(200, 200, WORLD_WIDTH - 200, WORLD_HEIGHT - 200, null);
 }
 
 // --- УПРАВЛЕНИЕ ---
@@ -1191,6 +1511,7 @@ function startGame() {
   player.baseDamage = 25;
   player.unlockedPerks.clear();
   player.blockedPerks.clear();
+  lastPlayerDistrictId = 'hub';
 
   generateWorld();
   updateHUD();
@@ -1209,30 +1530,91 @@ function handleInteract() {
   else if (nearbyInteractable.type === 'container') scavengeContainer(nearbyInteractable.target);
 }
 
+function spawn3DLootItem(x, y, type, val = 1) {
+  const icons = {
+    scrap: '⚙️',
+    bottle: '🍾',
+    stew: '🥫',
+    vodka: '🍾',
+    bandage: '🩹'
+  };
+  lootItems.push({
+    x: Math.round(x),
+    y: Math.round(y),
+    type: type,
+    icon: icons[type] || '⚙️',
+    val: Math.max(1, Math.round(val))
+  });
+}
+
 function scavengeContainer(c) {
   if (c.searched) return;
   c.searched = true;
 
-  const bottleRoll = Math.floor(Math.random() * 3) + 1;
-  const scrapRoll = Math.floor(Math.random() * 4) + 1;
+  const dist = getDistrictAt(c.x, c.y);
+  const mult = dist.lootMult || 1.0;
+  const toPlayerAngle = Math.atan2(player.y - c.y, player.x - c.x);
+
+  let bottleRoll = 1;
+  let scrapRoll = 1;
+  const bonusDrops = [];
+
+  if (c.type === 'trash') {
+    // 🗑️ Мусорный бак ЖЭК-4: специализация — Стеклотара, бинты, а в районе Теплотрассы — Водка!
+    bottleRoll = Math.round((2 + Math.floor(Math.random() * 3)) * mult);
+    scrapRoll = Math.round((Math.floor(Math.random() * 2)) * mult);
+    const r = Math.random();
+    if (dist.id === 'heating' && r < 0.65) {
+      bonusDrops.push('vodka');
+    } else if (r < 0.38) {
+      bonusDrops.push('bandage');
+    } else if (r < 0.55) {
+      bonusDrops.push('vodka');
+    }
+  } else if (c.type === 'car' && c.subType !== 'uaz') {
+    // 🚗 ВАЗ-2101 Жигули: специализация — Чермет и запчасти (особенно в Гаражном кооперативе)
+    const garageBonus = dist.id === 'garages' ? 2 : 0;
+    scrapRoll = Math.round((3 + Math.floor(Math.random() * 3) + garageBonus) * mult);
+    bottleRoll = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+    const r = Math.random();
+    if (r < 0.42) bonusDrops.push('stew');
+    else if (r < 0.65) bonusDrops.push('bandage');
+  } else if (c.type === 'car' && c.subType === 'uaz') {
+    // 🚑 Санитарный УАЗ-452 «Буханка»: много чермета + гарантированная медицина / спирт!
+    scrapRoll = Math.round((4 + Math.floor(Math.random() * 3)) * mult);
+    bottleRoll = Math.round((2 + Math.floor(Math.random() * 2)) * mult);
+    bonusDrops.push('bandage');
+    if (Math.random() < 0.55) bonusDrops.push('vodka');
+  } else {
+    // 📦 Армейский ящик (Военторг / Спецхран): максимальный чермет + гарантированные пайки!
+    scrapRoll = Math.round((5 + Math.floor(Math.random() * 4)) * mult);
+    bottleRoll = Math.round((2 + Math.floor(Math.random() * 3)) * mult);
+    bonusDrops.push('stew');
+    if (dist.tier >= 3 || Math.random() < 0.65) {
+      bonusDrops.push(Math.random() < 0.5 ? 'bandage' : 'vodka');
+    }
+  }
+
+  // Начисляем базовую часть и выбрасываем вокруг контейнера 3D-предметы лута
   player.resources.bottles += bottleRoll;
   player.resources.scrap += scrapRoll;
 
-  addFloatingText(c.x, c.y - 25, `+${bottleRoll} 🍾 +${scrapRoll} ⚙️`, '#38bdf8');
+  const tierTag = mult > 1.0 ? ` (×${mult})` : '';
+  addFloatingText(c.x, c.y - 28, `+${bottleRoll} 🍾  +${scrapRoll} ⚙️${tierTag}`, dist.color || '#38bdf8');
 
-  const foodRoll = Math.random();
-  if (foodRoll < 0.35) {
-    player.items.stew += 1;
-    addFloatingText(c.x, c.y - 45, "+1 🥫", '#fbbf24');
-  } else if (foodRoll < 0.60) {
-    player.items.bandage += 1;
-    addFloatingText(c.x, c.y - 45, "+1 🩹", '#4ade80');
-  } else if (foodRoll < 0.75) {
-    player.items.vodka += 1;
-    addFloatingText(c.x, c.y - 45, "+1 🍾", '#f59e0b');
-  }
+  // Выбрасываем 3D-модели расходников (`loot_stew.glb`, `loot_vodka.glb`, `loot_bandage.glb`) рядом с контейнером в сторону игрока
+  bonusDrops.forEach((itemType, idx) => {
+    const spreadAngle = toPlayerAngle + (idx - (bonusDrops.length - 1) * 0.5) * 0.55;
+    const dropDist = c.radius + 18;
+    spawn3DLootItem(
+      c.x + Math.cos(spreadAngle) * dropDist,
+      c.y + Math.sin(spreadAngle) * dropDist,
+      itemType,
+      1
+    );
+  });
 
-  createParticles(c.x, c.y, '#94a3b8', 12);
+  createParticles(c.x, c.y, dist.color || '#94a3b8', 14);
   updateHUD();
 }
 
@@ -1597,6 +1979,25 @@ function updateHUD() {
   const inSafeZone = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
   document.getElementById('safe-zone-tag').style.display = inSafeZone ? 'block' : 'none';
 
+  // Обновление индикатора текущего района и уровня угрозы
+  const dist = getDistrictAt(player.x, player.y);
+  const badgeEl = document.getElementById('district-badge');
+  const titleEl = document.getElementById('district-title');
+  const metaEl = document.getElementById('district-meta');
+  if (badgeEl && titleEl && metaEl && dist) {
+    titleEl.innerText = currentLang === 'ru' ? dist.name_ru : dist.name_en;
+    titleEl.style.color = dist.color;
+    metaEl.innerText = currentLang === 'ru' ? dist.meta_ru : dist.meta_en;
+    badgeEl.style.borderColor = dist.color;
+  }
+
+  // Всплывающее оповещение при переходе в другой район
+  if (gameState === 'PLAYING' && dist && dist.id !== lastPlayerDistrictId) {
+    lastPlayerDistrictId = dist.id;
+    const label = currentLang === 'ru' ? dist.name_ru : dist.name_en;
+    addFloatingText(player.x, player.y - 52, `📍 ${label}`, dist.color);
+  }
+
   // Подсветка активного оружия в хотбаре
   ['shotgun', 'drill', 'plasma'].forEach(w => {
     const el = document.getElementById(`slot-w-${w}`);
@@ -1626,13 +2027,60 @@ function addFloatingText(x, y, text, color) {
   floatingTexts.push({ x, y, text, color, life: 45, vy: -1.2 });
 }
 
-function spawnLootDrop(x, y) {
-  const r = Math.random();
-  if (r < 0.6) {
-    lootItems.push({ x, y, type: 'scrap', icon: '⚙️', val: Math.floor(Math.random()*2)+1 });
+function spawnLootDrop(enemyOrX, yOpt) {
+  // Поддержка вызова spawnLootDrop(enemy) с полным учетом типа жабы и множителя района
+  const isEnemyObj = (typeof enemyOrX === 'object' && enemyOrX !== null);
+  const x = isEnemyObj ? enemyOrX.x : enemyOrX;
+  const y = isEnemyObj ? enemyOrX.y : yOpt;
+  const eType = isEnemyObj ? (enemyOrX.type || 'grunt') : 'grunt';
+  const dist = getDistrictAt(x, y);
+  const mult = dist.lootMult || 1.0;
+
+  if (eType === 'brute') {
+    // 🟣 Жаба-Громила (Танк): гарантированный богатый 3D-дроп (Чермет + Бутылки + Припасы)
+    const scrapVal = Math.round((3 + Math.floor(Math.random() * 3)) * mult);
+    const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * mult);
+    spawn3DLootItem(x - 16, y - 6, 'scrap', scrapVal);
+    spawn3DLootItem(x + 16, y - 6, 'bottle', bottleVal);
+
+    if (dist.tier >= 4 || Math.random() < 0.72) {
+      const supplyPool = ['vodka', 'stew', 'bandage'];
+      const chosenSupply = supplyPool[Math.floor(Math.random() * supplyPool.length)];
+      spawn3DLootItem(x, y + 16, chosenSupply, 1);
+    }
+  } else if (eType === 'sniper') {
+    // 🟢 Жаба-Снайпер: повышенный шанс на стеклотару + шанс на 3D-аптечку или тушёнку
+    const bottleVal = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+    spawn3DLootItem(x - 10, y, 'bottle', bottleVal);
+    if (Math.random() < 0.45) {
+      spawn3DLootItem(x + 12, y + 6, Math.random() < 0.5 ? 'bandage' : 'stew', 1);
+    } else if (dist.id === 'garages') {
+      spawn3DLootItem(x + 12, y + 6, 'scrap', Math.round(2 * mult));
+    }
   } else {
-    lootItems.push({ x, y, type: 'bottle', icon: '🍾', val: 1 });
+    // 🟡 Жаба-Пехотинец: базовый дроп по специализации района
+    const r = Math.random();
+    const scrapBias = dist.id === 'garages' ? 0.78 : (dist.id === 'courtyards' ? 0.40 : 0.58);
+    if (r < scrapBias) {
+      const val = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+      spawn3DLootItem(x, y, 'scrap', val);
+    } else {
+      const val = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+      spawn3DLootItem(x, y, 'bottle', val);
+    }
+    if (dist.tier >= 3 && Math.random() < 0.25) {
+      spawn3DLootItem(x + 14, y - 8, 'bandage', 1);
+    }
   }
+}
+
+function handleEnemyKilled(index) {
+  const dead = enemies[index];
+  if (!dead) return;
+  createParticles(dead.x, dead.y, dead.type === 'brute' ? '#a855f7' : '#16a34a', 22);
+  spawnLootDrop(dead);
+  enemies.splice(index, 1);
+  setTimeout(() => spawnPatrolEnemy(dead), 12000);
 }
 
 function update() {
@@ -1738,16 +2186,17 @@ function update() {
     promptEl.style.display = 'none';
   }
 
-  if (player.hasPerk('tentacle_arm')) {
-    lootItems.forEach(item => {
-      const dist = Math.hypot(player.x - item.x, player.y - item.y);
-      if (dist < 180) {
-        const pullAngle = Math.atan2(player.y - item.y, player.x - item.x);
-        item.x += Math.cos(pullAngle) * 5;
-        item.y += Math.sin(pullAngle) * 5;
-      }
-    });
-  }
+  // Магнитное притяжение 3D-лута (базовый радиус 58px, с Жабьим Языком — 185px)
+  const pullRadius = player.hasPerk('tentacle_arm') ? 185 : 58;
+  const pullSpeed = player.hasPerk('tentacle_arm') ? 5.5 : 3.2;
+  lootItems.forEach(item => {
+    const dist = Math.hypot(player.x - item.x, player.y - item.y);
+    if (dist < pullRadius) {
+      const pullAngle = Math.atan2(player.y - item.y, player.x - item.x);
+      item.x += Math.cos(pullAngle) * pullSpeed;
+      item.y += Math.sin(pullAngle) * pullSpeed;
+    }
+  });
 
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
@@ -1782,15 +2231,15 @@ function update() {
         }
 
         bullets.splice(i, 1);
-        
-        if (e.hp <= 0) {
-          createParticles(e.x, e.y, '#16a34a', 20);
-          spawnLootDrop(e.x, e.y);
-          enemies.splice(j, 1);
-          setTimeout(spawnPatrolEnemy, 4000);
-        }
         break;
       }
+    }
+  }
+
+  // Проверка гибели врагов от любого источника урона (пули, бур, электро-разряд, кувырок с дрелью)
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    if (enemies[i].hp <= 0) {
+      handleEnemyKilled(i);
     }
   }
 
@@ -1849,7 +2298,6 @@ function update() {
         } else if (distToPlayer < 200) {
           e.x -= Math.cos(angle) * eSpeed;
           e.y -= Math.sin(angle) * eSpeed;
-          // Face running direction while sprinting away, face player when preparing to shoot
           if (e.shootCooldown > 25) {
             e.angle = angle + Math.PI;
           } else {
@@ -1906,12 +2354,26 @@ function update() {
     }
   }
 
+  // Подбор всех 5 типов 360° 3D-лута (scrap, bottle, stew, vodka, bandage)
   for (let i = lootItems.length - 1; i >= 0; i--) {
     const item = lootItems[i];
-    if (Math.hypot(item.x - player.x, item.y - player.y) < player.radius + 16) {
-      if (item.type === 'scrap') player.resources.scrap += item.val;
-      if (item.type === 'bottle') player.resources.bottles += item.val;
-      addFloatingText(item.x, item.y - 15, `+${item.val} ${item.icon}`, '#38bdf8');
+    if (Math.hypot(item.x - player.x, item.y - player.y) < player.radius + 22) {
+      if (item.type === 'scrap') {
+        player.resources.scrap += item.val;
+        addFloatingText(item.x, item.y - 16, `+${item.val} ⚙️`, '#38bdf8');
+      } else if (item.type === 'bottle') {
+        player.resources.bottles += item.val;
+        addFloatingText(item.x, item.y - 16, `+${item.val} 🍾`, '#22c55e');
+      } else if (item.type === 'stew') {
+        player.items.stew += item.val;
+        addFloatingText(item.x, item.y - 20, `+${item.val} 🥫 ТУШЁНКА`, '#fbbf24');
+      } else if (item.type === 'vodka') {
+        player.items.vodka += item.val;
+        addFloatingText(item.x, item.y - 20, `+${item.val} 🍾 ВОДКА`, '#f59e0b');
+      } else if (item.type === 'bandage') {
+        player.items.bandage += item.val;
+        addFloatingText(item.x, item.y - 20, `+${item.val} 🩹 БИНТЫ`, '#4ade80');
+      }
       lootItems.splice(i, 1);
     }
   }

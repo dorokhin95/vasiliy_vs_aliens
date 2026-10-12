@@ -86,22 +86,52 @@
       transition: width 0.08s linear;
     }
 
-    /* Safe Zone Banner */
+    /* Safe Zone Banner & District HUD Badge */
     .safe-zone-tag {
       position: absolute;
-      top: 15px;
+      top: 56px;
       left: 50%;
       transform: translateX(-50%);
-      background: rgba(16, 185, 129, 0.9);
+      background: rgba(16, 185, 129, 0.92);
       color: #064e3b;
-      padding: 5px 16px;
+      padding: 4px 16px;
       border-radius: 20px;
       font-weight: 800;
-      font-size: 13px;
+      font-size: 12px;
       letter-spacing: 1px;
       display: none;
       box-shadow: 0 0 15px rgba(16, 185, 129, 0.5);
       z-index: 10;
+    }
+    .district-badge {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 20, 28, 0.90);
+      border: 1px solid #475569;
+      padding: 5px 16px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      z-index: 10;
+      pointer-events: none;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .district-title {
+      font-weight: 800;
+      font-size: 13px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: #f8fafc;
+    }
+    .district-meta {
+      font-size: 11px;
+      font-weight: 600;
+      color: #cbd5e1;
     }
 
     /* Resources HUD */
@@ -478,6 +508,12 @@
       </div>
     </div>
 
+    <!-- District HUD Badge -->
+    <div id="district-badge" class="district-badge">
+      <div class="district-title" id="district-title">🟢 ПЯТАЧОК У МИХАЛЫЧА</div>
+      <div class="district-meta" id="district-meta">Угроза: Безопасно | База выживших</div>
+    </div>
+
     <!-- Safe Zone Tag -->
     <div id="safe-zone-tag" class="safe-zone-tag">БЕЗОПАСНАЯ ЗОНА: У МИХАЛЫЧА</div>
 
@@ -595,9 +631,10 @@
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1010"></script>
-  <script src="src/three_character.js?v=1010"></script>
-  <script src="src/three_enemies.js?v=1010"></script>
-  <script src="src/game.js?v=1010"></script>
+  <script src="src/environment.js?v=1021"></script>
+  <script src="src/three_character.js?v=1021"></script>
+  <script src="src/three_enemies.js?v=1021"></script>
+  <script src="src/three_props.js?v=1021"></script>
+  <script src="src/game.js?v=1021"></script>
 </body>
 </html>
