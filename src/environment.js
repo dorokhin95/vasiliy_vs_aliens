@@ -21,10 +21,19 @@ class EnvironmentRenderer {
     this.props = {};
     this.buildings = {};
 
-    // Предварительно сгенерированные фиксированные позиции луж, люков и дворовых объектов
+    // Предварительно сгенерированные фиксированные позиции луж, люков, фонарей и дворового благоустройства
     this.staticPuddles = [];
     this.staticManholes = [];
-    this.staticCourtyardProps = [];
+    this.staticStreetLamps = [];
+    this.staticSidewalkBins = [];
+
+    this.courtyardBuilt = false;
+    this.courtyardWalkways = [];
+    this.courtyardLawns = [];
+    this.courtyardBenches = [];
+    this.courtyardBins = [];
+    this.courtyardBushes = [];
+    this.courtyardTrees = [];
 
     this.initAssets();
     this.generateDecorations();
@@ -33,11 +42,11 @@ class EnvironmentRenderer {
   initAssets() {
     const assetsToLoad = [
       // Текстуры поверхности
-      { key: 'asphalt', path: 'assets/textures/asphalt_road.png', type: 'pattern' },
-      { key: 'ground', path: 'assets/textures/ground_terrain.png', type: 'pattern' },
-      { key: 'sidewalk', path: 'assets/textures/sidewalk_tiles.png', type: 'pattern' },
+      { key: 'asphalt', path: 'assets/textures/asphalt_road.png?v=1025', type: 'pattern' },
+      { key: 'ground', path: 'assets/textures/ground_terrain.png?v=1025', type: 'pattern' },
+      { key: 'sidewalk', path: 'assets/textures/sidewalk_tiles.png?v=1025', type: 'pattern' },
 
-      // Пропсы
+      // Пропсы дорог и дворов
       { key: 'manhole', path: 'assets/sprites/props/manhole_cover.png?v=1011', type: 'prop' },
       { key: 'puddle', path: 'assets/sprites/props/puddle.png?v=1011', type: 'prop' },
       { key: 'car_zhiguli', path: 'assets/sprites/props/car_zhiguli.png?v=1011', type: 'prop' },
@@ -46,6 +55,13 @@ class EnvironmentRenderer {
       { key: 'military_crate', path: 'assets/sprites/props/military_crate.png?v=1011', type: 'prop' },
       { key: 'fence_po2', path: 'assets/sprites/props/fence_po2.png?v=1016', type: 'prop' },
       { key: 'heating_pipes', path: 'assets/sprites/props/heating_pipes.png?v=1016', type: 'prop' },
+      { key: 'street_lamp', path: 'assets/sprites/props/street_lamp.png?v=1025', type: 'prop' },
+      { key: 'courtyard_bench', path: 'assets/sprites/props/courtyard_bench.png?v=1025', type: 'prop' },
+      { key: 'small_trash_bin', path: 'assets/sprites/props/small_trash_bin.png?v=1025', type: 'prop' },
+      { key: 'autumn_tree_1', path: 'assets/sprites/props/autumn_tree_1.png?v=1025', type: 'prop' },
+      { key: 'autumn_tree_2', path: 'assets/sprites/props/autumn_tree_2.png?v=1025', type: 'prop' },
+      { key: 'courtyard_bush', path: 'assets/sprites/props/courtyard_bush.png?v=1025', type: 'prop' },
+      { key: 'courtyard_bush_2', path: 'assets/sprites/props/courtyard_bush_2.png?v=1025', type: 'prop' },
 
       // Здания
       { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png?v=1024', type: 'building' },
@@ -94,32 +110,199 @@ class EnvironmentRenderer {
     });
   }
 
+  isNearIntersection(coord) {
+    return (
+      (coord > 710 && coord < 1010) ||
+      (coord > 1810 && coord < 2190) ||
+      (coord > 3010 && coord < 3310)
+    );
+  }
+
   generateDecorations() {
-    // Статичные лужи и люки по всей дорожной сети (дороги y=800, 1900, 3100 и x=800, 1900, 3100)
+    // Статичные лужи, люки, фонарные столбы и уличные урны по всей дорожной сети
     const roadLinesH = [800, 1900, 3100];
     const roadLinesV = [800, 1900, 3100];
 
     roadLinesH.forEach(ry => {
       const h = (ry === 1900) ? 200 : 140;
-      for (let x = 150; x < 3900; x += 320) {
-        // Люки каждые 320 пикселей ближе к обочине
-        this.staticManholes.push({ x: x + ((x * 17) % 70), y: ry + 30 + ((x * 11) % (h - 60)) });
-        // Лужи каждые 480 пикселей
-        if (x % 480 < 300) {
+      for (let x = 160; x < 3880; x += 320) {
+        if (!this.isNearIntersection(x)) {
+          this.staticManholes.push({ x: x + ((x * 17) % 60), y: ry + 32 + ((x * 11) % (h - 64)) });
+        }
+        if (x % 480 < 300 && !this.isNearIntersection(x + 80)) {
           this.staticPuddles.push({
-            x: x + 90,
+            x: x + 80,
             y: ry + h / 2 + ((x % 3) - 1) * 20,
-            scale: 0.75 + (x % 5) * 0.1,
+            scale: 0.72 + (x % 5) * 0.08,
             rotation: ((x % 7) / 7) * Math.PI
           });
+        }
+      }
+
+      // Уличные фонарные столбы «Кобра» вдоль тротуаров горизонтальных улиц
+      for (let lx = 220; lx < 3820; lx += 340) {
+        if (this.isNearIntersection(lx)) continue;
+        // Чередуем верхний и нижний тротуар (а на центральном проспекте — по обе стороны)
+        this.staticStreetLamps.push({
+          x: lx,
+          y: ry - 18,
+          lightX: lx + 18,
+          lightY: ry + 26,
+          flipX: 1
+        });
+        if (ry === 1900 || ((lx / 340) % 2 === 0)) {
+          this.staticStreetLamps.push({
+            x: lx + 140,
+            y: ry + h + 18,
+            lightX: lx + 122,
+            lightY: ry + h - 24,
+            flipX: -1
+          });
+        }
+        // Маленькие советские урны на тротуарах возле столбов
+        if ((lx % 680) === 220) {
+          this.staticSidewalkBins.push({ x: lx - 24, y: ry - 16 });
         }
       }
     });
 
     roadLinesV.forEach(rx => {
       const w = (rx === 1900) ? 200 : 140;
-      for (let y = 150; y < 3900; y += 350) {
-        this.staticManholes.push({ x: rx + 30 + ((y * 13) % (w - 60)), y: y + ((y * 19) % 80) });
+      for (let y = 160; y < 3880; y += 350) {
+        if (!this.isNearIntersection(y)) {
+          this.staticManholes.push({ x: rx + 32 + ((y * 13) % (w - 64)), y: y + ((y * 19) % 70) });
+        }
+      }
+      // Фонарные столбы вдоль вертикальных улиц
+      for (let ly = 240; ly < 3800; ly += 380) {
+        if (this.isNearIntersection(ly)) continue;
+        this.staticStreetLamps.push({
+          x: rx - 18,
+          y: ly,
+          lightX: rx + 26,
+          lightY: ly + 10,
+          flipX: 1
+        });
+        if (rx === 1900) {
+          this.staticStreetLamps.push({
+            x: rx + w + 18,
+            y: ly + 160,
+            lightX: rx + w - 26,
+            lightY: ly + 170,
+            flipX: -1
+          });
+        }
+      }
+    });
+
+    // Пара фонарей и урн прямо на площади у Ларька Михалыча
+    this.staticStreetLamps.push(
+      { x: 1888, y: 1936, lightX: 1916, lightY: 1956, flipX: 1 },
+      { x: 2112, y: 1936, lightX: 2084, lightY: 1956, flipX: -1 }
+    );
+    this.staticSidewalkBins.push(
+      { x: 1898, y: 1952 },
+      { x: 2102, y: 1952 }
+    );
+  }
+
+  ensureCourtyardLayout(buildings) {
+    if (this.courtyardBuilt || !buildings || buildings.length === 0) return;
+    this.courtyardBuilt = true;
+
+    buildings.forEach((b, idx) => {
+      if (b.type !== 'panel' && b.type !== 'boiler_house' && b.type !== 'military_hq') return;
+
+      // 1. Внутридворовой тротуар перед фасадом здания
+      const pathY = b.y + b.h + 28;
+      const pathH = 22;
+      this.courtyardWalkways.push({
+        x: b.x - 14,
+        y: pathY,
+        w: b.w + 28,
+        h: pathH,
+        isMainPath: true
+      });
+
+      // Определяем координаты подъездов по типу здания
+      let entrances = [];
+      if (b.type === 'panel' && b.w >= 300) {
+        // Хрущевка 320x160: 2 подъезда
+        entrances = [b.x + 80, b.x + 244];
+      } else if (b.type === 'panel' && b.h >= 240) {
+        // Брежневка 220x260: 1 центральный подъезд
+        entrances = [b.x + 108];
+      } else {
+        // Котельная / Военный штаб: центральный вход
+        entrances = [b.x + b.w * 0.5];
+      }
+
+      // 2. Бетонные дорожки от каждого подъезда к дворовому тротуару + лавочки и урны
+      entrances.forEach((ex, eIdx) => {
+        const walkW = 34;
+        this.courtyardWalkways.push({
+          x: ex - walkW * 0.5,
+          y: b.y + b.h - 2,
+          w: walkW,
+          h: 32,
+          isMainPath: false
+        });
+
+        if (b.type === 'panel') {
+          // У каждого подъезда жилого дома — деревянная скамейка и маленькая зеленая урна
+          const side = (eIdx % 2 === 0) ? -1 : 1;
+          const benchX = ex + side * 42;
+          const benchY = b.y + b.h + 15;
+          this.courtyardBenches.push({ x: benchX, y: benchY, flipX: side });
+          this.courtyardBins.push({ x: ex - side * 28, y: b.y + b.h + 14 });
+        } else {
+          // У котельной и штаба — урна у входа
+          this.courtyardBins.push({ x: ex + 34, y: b.y + b.h + 14 });
+        }
+      });
+
+      // 3. Палисадники (газоны с низким побеленным поребриком) вдоль фасада и кусты/деревья
+      if (b.type === 'panel' && b.w >= 300) {
+        this.courtyardLawns.push(
+          { x: b.x + 4,   y: b.y + b.h + 2, w: 54, h: 22 },
+          { x: b.x + 104, y: b.y + b.h + 2, w: 116, h: 22 },
+          { x: b.x + 266, y: b.y + b.h + 2, w: 50, h: 22 }
+        );
+        // Кусты в палисаднике под окнами первого этажа
+        this.courtyardBushes.push(
+          { x: b.x + 26,  y: b.y + b.h + 12, variant: 1, scale: 0.88 },
+          { x: b.x + 162, y: b.y + b.h + 13, variant: 2, scale: 0.94 },
+          { x: b.x + 294, y: b.y + b.h + 12, variant: 1, scale: 0.86 }
+        );
+        // Побеленные осенние деревья по углам двора перед домом
+        this.courtyardTrees.push(
+          { x: b.x - 28,       y: b.y + b.h + 24, variant: (idx % 2) + 1, scale: 0.95 },
+          { x: b.x + b.w + 28, y: b.y + b.h + 28, variant: ((idx + 1) % 2) + 1, scale: 0.92 }
+        );
+      } else if (b.type === 'panel' && b.h >= 240) {
+        this.courtyardLawns.push(
+          { x: b.x + 6,   y: b.y + b.h + 2, w: 78, h: 22 },
+          { x: b.x + 132, y: b.y + b.h + 2, w: 82, h: 22 }
+        );
+        this.courtyardBushes.push(
+          { x: b.x + 36,  y: b.y + b.h + 12, variant: 2, scale: 0.90 },
+          { x: b.x + 182, y: b.y + b.h + 12, variant: 1, scale: 0.90 }
+        );
+        this.courtyardTrees.push(
+          { x: b.x - 26,       y: b.y + b.h + 18, variant: ((idx + 1) % 2) + 1, scale: 0.94 },
+          { x: b.x + b.w + 26, y: b.y + b.h - 20, variant: (idx % 2) + 1, scale: 0.90 }
+        );
+      } else {
+        // Озеленение вокруг котельных и штабов
+        this.courtyardBushes.push(
+          { x: b.x + 34,       y: b.y + b.h + 14, variant: 1, scale: 0.85 },
+          { x: b.x + b.w - 34, y: b.y + b.h + 14, variant: 2, scale: 0.85 }
+        );
+        if (idx % 2 === 0) {
+          this.courtyardTrees.push(
+            { x: b.x - 30, y: b.y + b.h + 20, variant: 1, scale: 0.90 }
+          );
+        }
       }
     });
   }
@@ -149,6 +332,7 @@ class EnvironmentRenderer {
 
   draw(ctx, camera, screenW, screenH, worldWidth, worldHeight, roads, buildings, containers, safeZone) {
     this.ensurePatterns(ctx);
+    this.ensureCourtyardLayout(buildings);
 
     const viewX = Math.max(0, camera.x);
     const viewY = Math.max(0, camera.y);
@@ -164,11 +348,14 @@ class EnvironmentRenderer {
       ctx.fillRect(viewX, viewY, viewW, viewH);
     }
 
-    // 1.5. АТМОСФЕРНОЕ ЗОНИРОВАНИЕ РАЙОНОВ (оттенки почвы, масляные пятна у гаражей, воронки на кордоне, био-слизь в гнездах)
+    // 1.5. АТМОСФЕРНОЕ ЗОНИРОВАНИЕ РАЙОНОВ
     this.drawDistrictAtmosphere(ctx, camera, screenW, screenH);
 
-    // 2. ДОРОЖНАЯ СЕТЬ (Тротуары, бордюры, асфальт, разметка)
+    // 2. ДОРОЖНАЯ СЕТЬ (Тротуары из плит, объемные бордюры со швами, треснувший асфальт, потертая разметка)
     this.drawRoadNetwork(ctx, camera, screenW, screenH, roads);
+
+    // 2.5. ВНУТРИДВОРОВЫЕ ДОРОЖКИ К ПОДЪЕЗДАМ И ПАЛИСАДНИКИ
+    this.drawCourtyardGround(ctx, camera, screenW, screenH);
 
     // 3. ДОРОЖНЫЕ ДЕТАЛИ (Люки, лужи и трафаретные указатели районов)
     this.drawRoadProps(ctx, camera, screenW, screenH);
@@ -176,8 +363,11 @@ class EnvironmentRenderer {
     // 4. БЕЗОПАСНАЯ ЗОНА (Магазин Михалыча на бетонной площади, защитный купол)
     this.drawSafeZone(ctx, camera, screenW, screenH, safeZone);
 
-    // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (Панельки, 3D Гаражи, Секционные заборы ПО-2, Теплотрассы с камерами и паром)
+    // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (3D Хрущевки, Брежневки, Котельные, Штабы, 3D Гаражи, Заборы ПО-2, Теплотрассы)
     this.drawBuildings(ctx, camera, screenW, screenH, buildings);
+
+    // 5.5. ДВОРОВОЕ БЛАГОУСТРОЙСТВО И УЛИЧНОЕ ОСВЕЩЕНИЕ (Скамейки, маленькие урны, кусты, деревья с побелкой, фонари «Кобра»)
+    this.drawStreetAndCourtyardProps(ctx, camera, screenW, screenH);
 
     // 6. КОНТЕЙНЕРЫ (Жигули, УАЗики, мусорные баки, армейские ящики)
     this.drawContainers(ctx, camera, screenW, screenH, containers);
@@ -257,9 +447,9 @@ class EnvironmentRenderer {
     const sidewalkPattern = this.patterns['sidewalk'] || '#4b5563';
     const asphaltPattern = this.patterns['asphalt'] || '#1e2430';
 
-    const SIDEWALK_WIDTH = 28;
+    const SIDEWALK_WIDTH = 36;
 
-    // Сначала тротуары по бокам дорог
+    // 1. Тротуары из крупной советской бетонной плитки по бокам дорог + внешний поребрик газона
     roads.forEach(r => {
       if (!this.isVisible(r.x - SIDEWALK_WIDTH, r.y - SIDEWALK_WIDTH, r.w + SIDEWALK_WIDTH * 2, r.h + SIDEWALK_WIDTH * 2, camera, screenW, screenH)) return;
 
@@ -269,55 +459,85 @@ class EnvironmentRenderer {
         ctx.fillRect(r.x, r.y - SIDEWALK_WIDTH, r.w, SIDEWALK_WIDTH);
         ctx.fillRect(r.x, r.y + r.h, r.w, SIDEWALK_WIDTH);
 
-        // Бордюрный камень (темно-серый бетон со швами)
-        ctx.fillStyle = '#1e2530';
-        ctx.fillRect(r.x, r.y - 4, r.w, 4);
-        ctx.fillRect(r.x, r.y + r.h, r.w, 4);
+        // Внешний бетонный поребрик на границе тротуара и дворового газона
+        ctx.fillStyle = '#262c34';
+        ctx.fillRect(r.x, r.y - SIDEWALK_WIDTH - 3, r.w, 3);
+        ctx.fillRect(r.x, r.y + r.h + SIDEWALK_WIDTH, r.w, 3);
       } else {
         // Вертикальная дорога: тротуары слева и справа
         ctx.fillRect(r.x - SIDEWALK_WIDTH, r.y, SIDEWALK_WIDTH, r.h);
         ctx.fillRect(r.x + r.w, r.y, SIDEWALK_WIDTH, r.h);
 
-        // Бордюр
-        ctx.fillStyle = '#1e2530';
-        ctx.fillRect(r.x - 4, r.y, 4, r.h);
-        ctx.fillRect(r.x + r.w, r.y, 4, r.h);
+        ctx.fillStyle = '#262c34';
+        ctx.fillRect(r.x - SIDEWALK_WIDTH - 3, r.y, 3, r.h);
+        ctx.fillRect(r.x + r.w + SIDEWALK_WIDTH, r.y, 3, r.h);
       }
     });
 
-    // Полотно асфальта
+    // 2. Полотно треснувшего советского асфальта
     roads.forEach(r => {
       if (!this.isVisible(r.x, r.y, r.w, r.h, camera, screenW, screenH)) return;
 
       ctx.fillStyle = asphaltPattern;
       ctx.fillRect(r.x, r.y, r.w, r.h);
 
-      // Глубокая тень по кромке обочины
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      // Объемный советский дорожный бордюр БР 100.30.15 (светлая грань + темная фаска + водосточная тень)
       if (r.w > r.h) {
-        ctx.fillRect(r.x, r.y, r.w, 3);
-        ctx.fillRect(r.x, r.y + r.h - 3, r.w, 3);
+        // Верхний и нижний бортовой камень
+        ctx.fillStyle = '#6c7582';
+        ctx.fillRect(r.x, r.y - 6, r.w, 4);
+        ctx.fillRect(r.x, r.y + r.h + 2, r.w, 4);
+
+        ctx.fillStyle = '#252b33';
+        ctx.fillRect(r.x, r.y - 2, r.w, 2);
+        ctx.fillRect(r.x, r.y + r.h, r.w, 2);
+
+        // Тень и грязь в водосточном желобе у бордюра
+        ctx.fillStyle = 'rgba(8, 10, 14, 0.52)';
+        ctx.fillRect(r.x, r.y, r.w, 5);
+        ctx.fillRect(r.x, r.y + r.h - 5, r.w, 5);
       } else {
-        ctx.fillRect(r.x, r.y, 3, r.h);
-        ctx.fillRect(r.x + r.w - 3, r.y, 3, r.h);
+        ctx.fillStyle = '#6c7582';
+        ctx.fillRect(r.x - 6, r.y, 4, r.h);
+        ctx.fillRect(r.x + r.w + 2, r.y, 4, r.h);
+
+        ctx.fillStyle = '#252b33';
+        ctx.fillRect(r.x - 2, r.y, 2, r.h);
+        ctx.fillRect(r.x + r.w, r.y, 2, r.h);
+
+        ctx.fillStyle = 'rgba(8, 10, 14, 0.52)';
+        ctx.fillRect(r.x, r.y, 5, r.h);
+        ctx.fillRect(r.x + r.w - 5, r.y, 5, r.h);
       }
     });
 
-    // Разметка дорог: белая прерывистая и пешеходные переходы
+    // 3. Разметка дорог: потертая прерывистая линия (прерывается на перекрестках!) и зебры со стоп-линиями
+    const dashSegments = [
+      [20, 725],
+      [1015, 1825],
+      [2175, 3025],
+      [3315, 3980]
+    ];
+
     roads.forEach(r => {
       if (!this.isVisible(r.x, r.y, r.w, r.h, camera, screenW, screenH)) return;
 
-      // Прерывистая разделительная полоса
-      ctx.strokeStyle = '#e2e8f0';
+      ctx.strokeStyle = 'rgba(214, 222, 232, 0.62)';
       ctx.lineWidth = 4;
-      ctx.setLineDash([32, 24]);
+      ctx.setLineDash([28, 24]);
       ctx.beginPath();
       if (r.w > r.h) {
-        ctx.moveTo(r.x, r.y + r.h / 2);
-        ctx.lineTo(r.x + r.w, r.y + r.h / 2);
+        const cy = r.y + r.h / 2;
+        dashSegments.forEach(([s, e]) => {
+          ctx.moveTo(s, cy);
+          ctx.lineTo(e, cy);
+        });
       } else {
-        ctx.moveTo(r.x + r.w / 2, r.y);
-        ctx.lineTo(r.x + r.w / 2, r.y + r.h);
+        const cx = r.x + r.w / 2;
+        dashSegments.forEach(([s, e]) => {
+          ctx.moveTo(cx, s);
+          ctx.lineTo(cx, e);
+        });
       }
       ctx.stroke();
       ctx.setLineDash([]);
@@ -328,33 +548,195 @@ class EnvironmentRenderer {
   }
 
   drawCrosswalks(ctx, r) {
-    // Зебры на въездах к центральному перекрестку (1900, 1900) и второстепенным
-    const intersections = [800, 1900, 3100];
-    ctx.fillStyle = 'rgba(235, 240, 248, 0.9)';
+    const crossRoads = [
+      { pos: 800,  size: 140 },
+      { pos: 1900, size: 200 },
+      { pos: 3100, size: 140 }
+    ];
 
     if (r.w > r.h) {
-      intersections.forEach(ix => {
-        // Зебра слева (перед перекрестком) и справа (после перекрестка)
-        const leftCrossX = ix - 60;
-        const rightCrossX = ix + 220;
-        
-        [leftCrossX, rightCrossX].forEach(zx => {
-          for (let zy = r.y + 12; zy < r.y + r.h - 12; zy += 18) {
-            ctx.fillRect(zx, zy, 40, 10);
+      crossRoads.forEach(cr => {
+        const leftCrossX = cr.pos - 54;
+        const rightCrossX = cr.pos + cr.size + 14;
+
+        [leftCrossX, rightCrossX].forEach((zx, sideIdx) => {
+          // Стоп-линия перед зеброй
+          ctx.fillStyle = 'rgba(214, 222, 232, 0.52)';
+          const stopX = sideIdx === 0 ? zx - 10 : zx + 44;
+          ctx.fillRect(stopX, r.y + 10, 4, r.h - 20);
+
+          // Полосы зебры с легкой потертостью от колес
+          for (let zy = r.y + 12; zy < r.y + r.h - 14; zy += 18) {
+            ctx.fillStyle = 'rgba(220, 226, 234, 0.66)';
+            ctx.fillRect(zx, zy, 38, 10);
+            ctx.fillStyle = 'rgba(30, 36, 44, 0.28)';
+            ctx.fillRect(zx + 10, zy, 18, 10);
           }
         });
       });
     } else {
-      intersections.forEach(iy => {
-        const topCrossY = iy - 60;
-        const bottomCrossY = iy + 220;
+      crossRoads.forEach(cr => {
+        const topCrossY = cr.pos - 54;
+        const bottomCrossY = cr.pos + cr.size + 14;
 
-        [topCrossY, bottomCrossY].forEach(zy => {
-          for (let zx = r.x + 12; zx < r.x + r.w - 12; zx += 18) {
-            ctx.fillRect(zx, zy, 10, 40);
+        [topCrossY, bottomCrossY].forEach((zy, sideIdx) => {
+          ctx.fillStyle = 'rgba(214, 222, 232, 0.52)';
+          const stopY = sideIdx === 0 ? zy - 10 : zy + 44;
+          ctx.fillRect(r.x + 10, stopY, r.w - 20, 4);
+
+          for (let zx = r.x + 12; zx < r.x + r.w - 14; zx += 18) {
+            ctx.fillStyle = 'rgba(220, 226, 234, 0.66)';
+            ctx.fillRect(zx, zy, 10, 38);
+            ctx.fillStyle = 'rgba(30, 36, 44, 0.28)';
+            ctx.fillRect(zx, zy + 10, 10, 18);
           }
         });
       });
+    }
+  }
+
+  drawCourtyardGround(ctx, camera, screenW, screenH) {
+    const sidewalkPattern = this.patterns['sidewalk'] || '#4b5563';
+
+    // 1. Палисадники (газоны с низким побеленным советским поребриком под окнами домов)
+    for (let i = 0; i < this.courtyardLawns.length; i++) {
+      const lw = this.courtyardLawns[i];
+      if (!this.isVisible(lw.x - 10, lw.y - 10, lw.w + 20, lw.h + 20, camera, screenW, screenH)) continue;
+
+      ctx.fillStyle = 'rgba(24, 34, 20, 0.52)';
+      ctx.fillRect(lw.x, lw.y, lw.w, lw.h);
+
+      // Побеленный кирпичный/бетонный бордюрчик палисадника
+      ctx.strokeStyle = 'rgba(186, 194, 202, 0.58)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(lw.x, lw.y, lw.w, lw.h);
+    }
+
+    // 2. Бетонные дорожки от подъездов и дворовые тротуары
+    for (let i = 0; i < this.courtyardWalkways.length; i++) {
+      const cw = this.courtyardWalkways[i];
+      if (!this.isVisible(cw.x - 10, cw.y - 10, cw.w + 20, cw.h + 20, camera, screenW, screenH)) continue;
+
+      // Тень бордюра дорожки
+      ctx.fillStyle = 'rgba(10, 14, 18, 0.55)';
+      ctx.fillRect(cw.x - 2, cw.y - 2, cw.w + 4, cw.h + 4);
+
+      // Мощение тротуарной плиткой
+      ctx.fillStyle = sidewalkPattern;
+      ctx.fillRect(cw.x, cw.y, cw.w, cw.h);
+
+      // Светлый бетонный поребрик по краям дорожки
+      ctx.strokeStyle = '#5c6572';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cw.x, cw.y, cw.w, cw.h);
+    }
+  }
+
+  drawStreetAndCourtyardProps(ctx, camera, screenW, screenH) {
+    const benchImg = this.props['courtyard_bench'];
+    const binImg = this.props['small_trash_bin'];
+    const bush1Img = this.props['courtyard_bush'];
+    const bush2Img = this.props['courtyard_bush_2'] || bush1Img;
+    const tree1Img = this.props['autumn_tree_1'];
+    const tree2Img = this.props['autumn_tree_2'] || tree1Img;
+    const lampImg = this.props['street_lamp'];
+
+    // 1. Теплые пятна натриевого света от уличных фонарей на асфальте и тротуарах
+    for (let i = 0; i < this.staticStreetLamps.length; i++) {
+      const lp = this.staticStreetLamps[i];
+      if (!this.isVisible(lp.lightX - 90, lp.lightY - 90, 180, 180, camera, screenW, screenH)) continue;
+
+      ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
+      ctx.beginPath();
+      ctx.ellipse(lp.lightX, lp.lightY, 78, 52, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(253, 224, 71, 0.11)';
+      ctx.beginPath();
+      ctx.ellipse(lp.lightX, lp.lightY, 42, 28, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 2. Дворовые кусты в палисадниках
+    if (bush1Img) {
+      for (let i = 0; i < this.courtyardBushes.length; i++) {
+        const b = this.courtyardBushes[i];
+        if (!this.isVisible(b.x - 50, b.y - 50, 100, 100, camera, screenW, screenH)) continue;
+        const img = (b.variant === 2 && bush2Img) ? bush2Img : bush1Img;
+        const w = 78 * b.scale;
+        const h = 62 * b.scale;
+        ctx.drawImage(img, b.x - w * 0.5, b.y - h * 0.55, w, h);
+      }
+    }
+
+    // 3. Дворовые деревянные скамейки у подъездов
+    if (benchImg) {
+      for (let i = 0; i < this.courtyardBenches.length; i++) {
+        const bn = this.courtyardBenches[i];
+        if (!this.isVisible(bn.x - 50, bn.y - 40, 100, 80, camera, screenW, screenH)) continue;
+        ctx.save();
+        ctx.translate(bn.x, bn.y);
+        ctx.scale(bn.flipX || 1, 1);
+        ctx.drawImage(benchImg, -36, -24, 72, 48);
+        ctx.restore();
+      }
+    }
+
+    // 4. Маленькие советские урны (у скамеек возле подъездов и вдоль тротуаров)
+    if (binImg) {
+      for (let i = 0; i < this.courtyardBins.length; i++) {
+        const tb = this.courtyardBins[i];
+        if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
+        ctx.drawImage(binImg, tb.x - 18, tb.y - 20, 36, 36);
+      }
+      for (let i = 0; i < this.staticSidewalkBins.length; i++) {
+        const tb = this.staticSidewalkBins[i];
+        if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
+        ctx.drawImage(binImg, tb.x - 18, tb.y - 20, 36, 36);
+      }
+    }
+
+    // 5. Осенние дворовые деревья с побеленными стволами
+    if (tree1Img) {
+      for (let i = 0; i < this.courtyardTrees.length; i++) {
+        const tr = this.courtyardTrees[i];
+        if (!this.isVisible(tr.x - 95, tr.y - 140, 190, 180, camera, screenW, screenH)) continue;
+        const img = (tr.variant === 2 && tree2Img) ? tree2Img : tree1Img;
+        const w = (tr.variant === 2 ? 156 : 142) * tr.scale;
+        const h = (tr.variant === 2 ? 146 : 164) * tr.scale;
+        // Мягкая тень на земле у корней дерева
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
+        ctx.beginPath();
+        ctx.ellipse(tr.x, tr.y + 4, 24 * tr.scale, 11 * tr.scale, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.drawImage(img, tr.x - w * 0.5, tr.y - h + 16, w, h);
+      }
+    }
+
+    // 6. Уличные бетонные фонарные столбы «Кобра»
+    if (lampImg) {
+      for (let i = 0; i < this.staticStreetLamps.length; i++) {
+        const lp = this.staticStreetLamps[i];
+        if (!this.isVisible(lp.x - 60, lp.y - 160, 120, 180, camera, screenW, screenH)) continue;
+
+        ctx.save();
+        ctx.translate(lp.x, lp.y);
+        // Тень у основания бетонного столба
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        ctx.beginPath();
+        ctx.ellipse(0, 2, 12, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.scale(lp.flipX || 1, 1);
+        ctx.drawImage(lampImg, -36, -138, 72, 144);
+
+        // Теплое свечение самой натриевой лампы в плафоне «Кобры»
+        ctx.fillStyle = 'rgba(253, 224, 71, 0.38)';
+        ctx.beginPath();
+        ctx.arc(16, -116, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     }
   }
 
