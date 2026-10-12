@@ -72,11 +72,15 @@ class EnvironmentRenderer {
       { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png?v=1016', type: 'building' },
 
       // Выпадающий 3D лут
-      { key: 'loot_scrap', path: 'assets/sprites/loot/loot_scrap.png?v=1012', type: 'loot' },
-      { key: 'loot_bottle', path: 'assets/sprites/loot/loot_bottle.png?v=1012', type: 'loot' },
-      { key: 'loot_stew', path: 'assets/sprites/loot/loot_stew.png?v=1012', type: 'loot' },
-      { key: 'loot_vodka', path: 'assets/sprites/loot/loot_vodka.png?v=1012', type: 'loot' },
-      { key: 'loot_bandage', path: 'assets/sprites/loot/loot_bandage.png?v=1012', type: 'loot' }
+      { key: 'loot_scrap', path: 'assets/sprites/loot/loot_scrap.png?v=1026', type: 'loot' },
+      { key: 'loot_bottle', path: 'assets/sprites/loot/loot_bottle.png?v=1026', type: 'loot' },
+      { key: 'loot_stew', path: 'assets/sprites/loot/loot_stew.png?v=1026', type: 'loot' },
+      { key: 'loot_vodka', path: 'assets/sprites/loot/loot_vodka.png?v=1026', type: 'loot' },
+      { key: 'loot_bandage', path: 'assets/sprites/loot/loot_bandage.png?v=1026', type: 'loot' },
+      { key: 'loot_mil_parts', path: 'assets/sprites/loot/loot_mil_parts.png?v=1026', type: 'loot' },
+      { key: 'loot_alien_core', path: 'assets/sprites/loot/loot_alien_core.png?v=1026', type: 'loot' },
+      { key: 'loot_ammo_9x18', path: 'assets/sprites/loot/ammo_9x18.png?v=1026', type: 'loot' },
+      { key: 'loot_ammo_12g', path: 'assets/sprites/loot/ammo_12g.png?v=1026', type: 'loot' }
     ];
 
     let remaining = assetsToLoad.length;
@@ -1054,13 +1058,20 @@ class EnvironmentRenderer {
     const hoverY = Math.sin(time + l.x) * 3;
 
     // Свечение редкости вокруг лута
-    ctx.fillStyle = l.type === 'vodka' ? 'rgba(245, 158, 11, 0.22)' : (l.type === 'bottle' ? 'rgba(34, 197, 94, 0.22)' : 'rgba(56, 189, 248, 0.22)');
+    let glowColor = 'rgba(56, 189, 248, 0.22)';
+    if (l.type === 'vodka') glowColor = 'rgba(245, 158, 11, 0.25)';
+    else if (l.type === 'bottle') glowColor = 'rgba(34, 197, 94, 0.22)';
+    else if (l.type === 'mil_parts') glowColor = 'rgba(239, 68, 68, 0.34)';
+    else if (l.type === 'alien_core') glowColor = 'rgba(168, 85, 247, 0.42)';
+    else if (l.type === 'ammo_9x18' || l.type === 'ammo_12g') glowColor = 'rgba(250, 204, 21, 0.28)';
+
+    ctx.fillStyle = glowColor;
     ctx.beginPath();
-    ctx.arc(0, hoverY, 14, 0, Math.PI * 2);
+    ctx.arc(0, hoverY, (l.type === 'alien_core' || l.type === 'mil_parts') ? 17 : 14, 0, Math.PI * 2);
     ctx.fill();
 
     if (img) {
-      const size = 28;
+      const size = (l.type === 'alien_core' || l.type === 'mil_parts') ? 32 : 28;
       ctx.drawImage(img, -size / 2, -size / 2 + hoverY, size, size);
     } else {
       ctx.font = '18px Arial';

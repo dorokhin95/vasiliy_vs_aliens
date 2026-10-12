@@ -13,19 +13,19 @@ const UPGRADE_TREES = {
         id: "drill_arm",
         name_ru: "Рука-Перфоратор",
         name_en: "Drill Arm",
-        desc_ru: "+15 урона, сплеш-удар дрелью при перекате",
-        desc_en: "+15 melee dmg, shockwave during roll",
-        cost: { scrap: 15, bottles: 5 },
-        statMods: { damage: 15 },
+        desc_ru: "+12 к базовому урону, ударная волна при перекате",
+        desc_en: "+12 base dmg, shockwave during roll",
+        cost: { bottles: 10, scrap: 18 },
+        statMods: { damage: 12 },
         locks: ["tentacle_arm"]
       },
       car_battery: {
         id: "car_battery",
         name_ru: "Аккумулятор от КАМАЗа",
         name_en: "Truck Battery Pack",
-        desc_ru: "Электро-разряды рикошетят в 2 соседние жабы",
+        desc_ru: "Цепная молния бьёт 2 соседние жабы при попадании",
         desc_en: "Chain lightning arcs to 2 nearby toads",
-        cost: { scrap: 25, bottles: 10 },
+        cost: { bottles: 14, scrap: 28, mil_parts: 2 },
         statMods: {},
         locks: ["shaman_carpet"]
       },
@@ -33,9 +33,9 @@ const UPGRADE_TREES = {
         id: "laser_eye",
         name_ru: "Лазерный прицел-глаз",
         name_en: "Cybernetic Bionic Eye",
-        desc_ru: "Красный луч, +25% шанс крита (x2.5)",
+        desc_ru: "Лазерный целеуказатель, +25% шанс крита (x2.5)",
         desc_en: "Red laser sight, +25% crit chance (x2.5)",
-        cost: { scrap: 35, bottles: 15 },
+        cost: { bottles: 20, scrap: 38, mil_parts: 4, alien_core: 2 },
         statMods: { critChance: 0.25, critMult: 2.5 },
         locks: ["third_frog_eye"]
       }
@@ -51,9 +51,9 @@ const UPGRADE_TREES = {
         id: "tentacle_arm",
         name_ru: "Жабий Хлыст-Язык",
         name_en: "Toad Tongue Whip",
-        desc_ru: "Авто-притягивание лута и чермета на 180px",
-        desc_en: "Auto-pull loot & scrap from 180px radius",
-        cost: { scrap: 10, bottles: 12 },
+        desc_ru: "Авто-притягивание всего лута в радиусе 185px",
+        desc_en: "Auto-pull loot & resources from 185px radius",
+        cost: { bottles: 14, scrap: 12 },
         statMods: {},
         locks: ["drill_arm"]
       },
@@ -61,9 +61,9 @@ const UPGRADE_TREES = {
         id: "slime_skin",
         name_ru: "Токсичная Слизь",
         name_en: "Toxic Mucus Skin",
-        desc_ru: "+20% к скорости перемещения",
-        desc_en: "+20% move speed bonus",
-        cost: { scrap: 20, bottles: 15 },
+        desc_ru: "+22% к скорости бега и +30% реген выносливости",
+        desc_en: "+22% move speed & +30% stamina regen",
+        cost: { bottles: 18, scrap: 22, mil_parts: 2 },
         statMods: {},
         locks: []
       },
@@ -71,10 +71,10 @@ const UPGRADE_TREES = {
         id: "third_frog_eye",
         name_ru: "Жабий Глаз-Пузырь",
         name_en: "Amphibian Bulging Eye",
-        desc_ru: "Круговой сектор внимания 360°",
-        desc_en: "360° visual awareness",
-        cost: { scrap: 25, bottles: 18 },
-        statMods: {},
+        desc_ru: "+35 макс. Выносливости и снижение расхода на 25%",
+        desc_en: "+35 Max Stamina & -25% stamina cost",
+        cost: { bottles: 22, scrap: 30, mil_parts: 3, alien_core: 3 },
+        statMods: { bonusMaxStamina: 35 },
         locks: ["laser_eye"]
       }
     }
@@ -91,7 +91,7 @@ const UPGRADE_TREES = {
         name_en: "Hangover Stench Aura",
         desc_ru: "Враги рядом замедлены на 45%",
         desc_en: "Nearby enemies slowed by 45%",
-        cost: { scrap: 15, bottles: 15 },
+        cost: { bottles: 16, scrap: 15 },
         statMods: {},
         locks: []
       },
@@ -99,20 +99,20 @@ const UPGRADE_TREES = {
         id: "shaman_carpet",
         name_ru: "Плащ из Советского Ковра",
         name_en: "Soviet Rug Cloak",
-        desc_ru: "+50 макс. HP, регенерация 1 HP в секунду",
-        desc_en: "+50 max HP, passive 1 HP/sec regen",
-        cost: { scrap: 20, bottles: 20 },
-        statMods: { bonusMaxHp: 50 },
+        desc_ru: "+60 макс. HP и пассивная регенерация здоровья",
+        desc_en: "+60 max HP & passive health regeneration",
+        cost: { bottles: 22, scrap: 24, mil_parts: 2 },
+        statMods: { bonusMaxHp: 60 },
         locks: ["car_battery"]
       },
       pigeon_familiar: {
         id: "pigeon_familiar",
         name_ru: "Призрачный Голубь Гена",
         name_en: "Ghost Pigeon Gena",
-        desc_ru: "Призывает летающего призрачного голубя",
-        desc_en: "Summons spectral companion pigeon",
-        cost: { scrap: 35, bottles: 25 },
-        statMods: {},
+        desc_ru: "+20 к базовому урону всех видов оружия",
+        desc_en: "+20 base damage to all weapons",
+        cost: { bottles: 28, scrap: 35, mil_parts: 3, alien_core: 3 },
+        statMods: { damage: 20 },
         locks: []
       }
     }
@@ -133,7 +133,7 @@ class VasiliyAnimator {
   }
 
   loadAssets() {
-    let toLoad = 16 + 2 + 3 + 2;
+    let toLoad = 16 + 2 + 5 + 2;
     let loadedCount = 0;
     const onLoad = () => {
       loadedCount++;
@@ -164,8 +164,10 @@ class VasiliyAnimator {
       this.backWalkFrames.push(imgBack);
     }
 
-    // 3. Модульное оружие (Откалиброванные пиксельные спрайты 80x48)
+    // 3. Модульное оружие
     const weaponDefs = [
+      ['bat', 'assets/sprites/weapons/weapon_bat.png?v=1026'],
+      ['makarov', 'assets/sprites/weapons/weapon_makarov.png?v=1026'],
       ['shotgun', 'assets/sprites/vasiliy_modular/weapons/shotgun.png'],
       ['drill', 'assets/sprites/vasiliy_modular/weapons/drill.png'],
       ['plasma', 'assets/sprites/vasiliy_modular/weapons/plasma.png']
@@ -815,10 +817,10 @@ const LANGS = {
     restart: "НАЧАТЬ ЗАНОВО",
     controls_title: "УПРАВЛЕНИЕ:",
     controls_move: "WASD — Передвижение по городу",
-    controls_aim: "Мышь — Прицел и Огонь",
-    controls_roll: "ПРОБЕЛ — Перекат",
-    controls_interact: "E — Обыск / Магазин",
-    controls_items: "1, 2, 3 — Расходники",
+    controls_aim: "ЛКМ — Удар / Стрельба | R — Перезарядка",
+    controls_roll: "ПРОБЕЛ — Перекат (-25 выносливости)",
+    controls_interact: "E — Обыскать тайник / Лавка Михалыча",
+    controls_items: "1, 2, 3 — Расходники | Q / 4..8 — Оружие",
     hp: "ЗДОРОВЬЕ",
     stamina: "ВЫНОСЛИВ.",
     vodka: "Водка",
@@ -831,11 +833,12 @@ const LANGS = {
     prompt_shop: "[E] Открыть лавку и верстак Михалыча",
     prompt_search: "[E] Обыскать тайник",
     shop_title: "ЛАВКА И ВЕРСТАК «У МИХАЛЫЧА»",
-    shop_sub: "Сдавай вторсырье, закупай припасы и улучшай Василия!",
-    tab_supplies: "🥫 Припасы",
-    tab_upgrades: "🧬 Ветки прокачки",
+    shop_sub: "Покупай оружие, патроны, припасы и собирай армейские/инопланетные модификации!",
+    tab_weapons: "Арсенал и Патроны",
+    tab_supplies: "Припасы",
+    tab_upgrades: "Ветки прокачки",
     shop_bandage: "Бинты (+45 HP)",
-    shop_stew: "Тушенка (+60 Вынослив.)",
+    shop_stew: "Тушенка (+65 Вынослив.)",
     shop_vodka: "Водка (+Урон берсерка)",
     shop_close: "ВЕРНУТЬСЯ В ГОРОД [ESC]",
     installed: "УСТАНОВЛЕНО",
@@ -850,10 +853,10 @@ const LANGS = {
     restart: "START OVER",
     controls_title: "CONTROLS:",
     controls_move: "WASD — Move around town",
-    controls_aim: "Mouse — Aim & Shoot",
-    controls_roll: "SPACE — Dodge Roll",
+    controls_aim: "LMB — Attack / Shoot | R — Reload",
+    controls_roll: "SPACE — Dodge Roll (-25 Stamina)",
     controls_interact: "E — Scavenge / Shop",
-    controls_items: "1, 2, 3 — Consumables",
+    controls_items: "1, 2, 3 — Consumables | Q / 4..8 — Weapons",
     hp: "HEALTH",
     stamina: "STAMINA",
     vodka: "Vodka",
@@ -866,11 +869,12 @@ const LANGS = {
     prompt_shop: "[E] Open Mikhalych's Workbench",
     prompt_search: "[E] Scavenge stash",
     shop_title: "MIKHALYCH'S SHOP & WORKBENCH",
-    shop_sub: "Trade salvage, buy rations and augment Vasiliy!",
-    tab_supplies: "🥫 Supplies",
-    tab_upgrades: "🧬 Skill Trees",
+    shop_sub: "Buy weapons, ammo, rations and craft military/alien augmentations!",
+    tab_weapons: "Arsenal & Ammo",
+    tab_supplies: "Supplies",
+    tab_upgrades: "Skill Trees",
     shop_bandage: "Bandages (+45 HP)",
-    shop_stew: "Stew (+60 Stamina)",
+    shop_stew: "Stew (+65 Stamina)",
     shop_vodka: "Vodka (+Berserk DMG)",
     shop_close: "RETURN TO CITY [ESC]",
     installed: "INSTALLED",
@@ -889,6 +893,10 @@ function updateUILanguage() {
   document.getElementById('lbl-vodka').innerText = t('vodka');
   document.getElementById('lbl-stew').innerText = t('stew');
   document.getElementById('lbl-bandage').innerText = t('bandage');
+  const lblBat = document.getElementById('lbl-w-bat');
+  if (lblBat) lblBat.innerText = currentLang === 'ru' ? 'Бита' : 'Spiked Bat';
+  const lblMakarov = document.getElementById('lbl-w-makarov');
+  if (lblMakarov) lblMakarov.innerText = currentLang === 'ru' ? 'ПМ 9×18' : 'Makarov PM';
   const lblShotgun = document.getElementById('lbl-w-shotgun');
   if (lblShotgun) lblShotgun.innerText = currentLang === 'ru' ? 'Обрез' : 'Shotgun';
   const lblDrill = document.getElementById('lbl-w-drill');
@@ -901,11 +909,12 @@ function updateUILanguage() {
   
   document.getElementById('shop-title').innerText = t('shop_title');
   document.getElementById('shop-sub').innerText = t('shop_sub');
-  document.getElementById('tab-btn-supplies').innerText = t('tab_supplies');
-  document.getElementById('tab-btn-upgrades').innerText = t('tab_upgrades');
-  document.getElementById('shop-txt-bandage').innerText = t('shop_bandage');
-  document.getElementById('shop-txt-stew').innerText = t('shop_stew');
-  document.getElementById('shop-txt-vodka').innerText = t('shop_vodka');
+  const lblTabWep = document.getElementById('lbl-tab-weapons');
+  if (lblTabWep) lblTabWep.innerText = t('tab_weapons');
+  const lblTabSup = document.getElementById('lbl-tab-supplies');
+  if (lblTabSup) lblTabSup.innerText = t('tab_supplies');
+  const lblTabUpg = document.getElementById('lbl-tab-upgrades');
+  if (lblTabUpg) lblTabUpg.innerText = t('tab_upgrades');
   document.getElementById('btn-shop-close').innerText = t('shop_close');
 
   const menuScreen = document.getElementById('screen-menu');
@@ -928,6 +937,7 @@ function updateUILanguage() {
   }
 
   if (document.getElementById('shop-modal').style.display === 'flex') {
+    renderArsenalAndSupplies();
     renderUpgradeTrees();
   }
 }
@@ -972,21 +982,40 @@ const player = {
   moveDir: 'side', // 'side', 'up', 'down'
   isMoving: false,
   animTimer: 0,
-  baseDamage: 25,
+  baseDamage: 24,
   critChance: 0.05,
-  critMult: 1.5,
+  critMult: 1.6,
   isDrunk: false,
   drunkTimer: 0,
   items: {
     vodka: 0,
     stew: 1,
-    bandage: 1
+    bandage: 2
   },
   resources: {
+    bottles: 0,
     scrap: 0,
-    bottles: 0
+    mil_parts: 0,
+    alien_core: 0
   },
-  currentWeapon: 'shotgun',
+  unlockedWeapons: {
+    bat: true,
+    makarov: false,
+    drill: false,
+    shotgun: false,
+    plasma: false
+  },
+  ammo: {
+    makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
+    shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 }
+  },
+  reloadingWeapon: null,
+  reloadTimer: 0,
+  reloadMaxTimer: 0,
+  plasmaHeat: 0,
+  plasmaOverheated: false,
+  plasmaOverheatTimer: 0,
+  currentWeapon: 'bat',
   unlockedPerks: new Set(),
   blockedPerks: new Set(),
   hasPerk(id) {
@@ -1024,8 +1053,8 @@ const DISTRICTS = {
     tier: 0,
     name_ru: '🟢 ПЯТАЧОК У МИХАЛЫЧА',
     name_en: '🟢 MIKHALYCH SAFE HUB',
-    meta_ru: 'Угроза: Безопасно | Лавка и Верстак',
-    meta_en: 'Threat: Safe | Shop & Workbench',
+    meta_ru: 'Угроза: Безопасно | Лавка Оружия, Патронов и Верстак',
+    meta_en: 'Threat: Safe | Arsenal, Ammo & Workbench',
     color: '#10b981',
     lootMult: 1.0
   },
@@ -1034,8 +1063,8 @@ const DISTRICTS = {
     tier: 1,
     name_ru: '🟡 СПАЛЬНЫЕ ХРУЩЁВКИ',
     name_en: '🟡 RESIDENTIAL COURTYARDS',
-    meta_ru: 'Угроза: ★☆☆☆ (Слабые пехотинцы) | Лут: 🍾 Стеклотара, 🩹 Бинты',
-    meta_en: 'Threat: ★☆☆☆ (Weak Grunts) | Loot: 🍾 Bottles, 🩹 Bandages',
+    meta_ru: 'Угроза: ★☆☆☆ (Болотные Прыгуны) | Ресурс: Стеклотара, Бинты',
+    meta_en: 'Threat: ★☆☆☆ (Swamp Leapers) | Loot: Bottles, Bandages',
     color: '#eab308',
     lootMult: 1.0
   },
@@ -1044,8 +1073,8 @@ const DISTRICTS = {
     tier: 2,
     name_ru: '🟠 ГАРАЖНЫЙ КООПЕРАТИВ «ВОСТОК»',
     name_en: '🟠 GARAGE COOPERATIVE',
-    meta_ru: 'Угроза: ★★☆☆ (Пехотинцы и Снайперы) | Лут: ⚙️ Чермет ×1.5',
-    meta_en: 'Threat: ★★☆☆ (Grunts & Snipers) | Loot: ⚙️ Scrap ×1.5',
+    meta_ru: 'Угроза: ★★☆☆ (Плевальщики и Пехота) | Ресурс: Чермет ×1.5 (на ПМ и Дрель)',
+    meta_en: 'Threat: ★★☆☆ (Spitters & Grunts) | Loot: Scrap ×1.5 (for PM & Drill)',
     color: '#f97316',
     lootMult: 1.5
   },
@@ -1054,8 +1083,8 @@ const DISTRICTS = {
     tier: 2,
     name_ru: '🔵 МАГИСТРАЛЬ ТЕПЛОТРАССЫ',
     name_en: '🔵 HEATING PIPELINE SECTOR',
-    meta_ru: 'Угроза: ★★☆☆ (Засады у труб) | Лут: 🍾 Водка, 🥫 Тушёнка ×1.5',
-    meta_en: 'Threat: ★★☆☆ (Pipe Ambushes) | Loot: 🍾 Vodka, 🥫 Stew ×1.5',
+    meta_ru: 'Угроза: ★★☆☆ (Засады у труб) | Ресурс: Чермет, Водка, Тушёнка ×1.5',
+    meta_en: 'Threat: ★★☆☆ (Pipe Ambushes) | Loot: Scrap, Vodka, Stew ×1.5',
     color: '#38bdf8',
     lootMult: 1.5
   },
@@ -1064,8 +1093,8 @@ const DISTRICTS = {
     tier: 3,
     name_ru: '🔴 ВОЕННЫЙ КОРДОН',
     name_en: '🔴 MILITARY CORDON',
-    meta_ru: 'Угроза: ★★★☆ (Громилы и Снайперы) | Лут: 📦 Военторг ×1.9',
-    meta_en: 'Threat: ★★★☆ (Brutes & Snipers) | Loot: 📦 Military Supply ×1.9',
+    meta_ru: 'Угроза: ★★★☆ (Штурмовики и Громилы) | Особый ресурс: Оружейные детали (на Обрез)',
+    meta_en: 'Threat: ★★★☆ (Troopers & Brutes) | Special Loot: Gun Parts (for Shotgun)',
     color: '#ef4444',
     lootMult: 1.9
   },
@@ -1074,8 +1103,8 @@ const DISTRICTS = {
     tier: 4,
     name_ru: '🟣 КВАКО-ГНЕЗДО (ЗОНА ВЫСАДКИ)',
     name_en: '🟣 TOAD NEST (DROP ZONE)',
-    meta_ru: 'Угроза: ★★★★ (Элитные Громилы) | Лут: 💎 Элитный ×2.5',
-    meta_en: 'Threat: ★★★★ (Elite Brutes) | Loot: 💎 Elite Loot ×2.5',
+    meta_ru: 'Угроза: ★★★★ (Элитные Квако-Танки) | Особый ресурс: Квако-ядра (на Плазмаган)',
+    meta_en: 'Threat: ★★★★ (Elite Toad Tanks) | Special Loot: Alien Cores (for Plasma Gun)',
     color: '#a855f7',
     lootMult: 2.5
   }
@@ -1377,54 +1406,54 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     const rand = Math.random();
     let type = 'grunt';
     let radius = 22;
-    let hp = 85;
-    let speed = 2.55;
+    let hp = 110;
+    let speed = 2.65;
     let aggroRadius = 290;
     let color = '#22c55e';
 
     if (dist.id === 'courtyards') {
-      // 🟡 TIER 1 (Рядом с базой): ТОЛЬКО ослабленные пехотинцы-разведчики (65 HP, меньший радиус агра)
+      // 🟡 TIER 1 (Спальные дворы): Болотные Прыгуны (92 HP — требует 4 полных удара битой с гвоздями и контроля выносливости!)
       type = 'grunt';
       radius = 21;
-      hp = 65;
-      speed = 2.35;
-      aggroRadius = 235;
+      hp = 92;
+      speed = 2.52;
+      aggroRadius = 250;
       color = '#22c55e';
     } else if (dist.id === 'garages') {
-      // 🟠 TIER 2A (Гаражи): 55% Пехотинец, 40% Снайпер, 5% Громила
-      if (rand < 0.05) {
-        type = 'brute'; radius = 34; hp = 240; speed = 1.65; aggroRadius = 300; color = '#a855f7';
+      // 🟠 TIER 2A (Гаражи): 55% Пехотинец (135 HP), 38% Кислотный Снайпер (110 HP), 7% Громила (360 HP)
+      if (rand < 0.07) {
+        type = 'brute'; radius = 34; hp = 360; speed = 1.75; aggroRadius = 310; color = '#a855f7';
       } else if (rand < 0.45) {
-        type = 'sniper'; radius = 16; hp = 45; speed = 2.0; aggroRadius = 360; color = '#84cc16';
+        type = 'sniper'; radius = 16; hp = 110; speed = 2.1; aggroRadius = 370; color = '#84cc16';
       } else {
-        type = 'grunt'; radius = 22; hp = 85; speed = 2.6; aggroRadius = 290; color = '#22c55e';
+        type = 'grunt'; radius = 22; hp = 135; speed = 2.7; aggroRadius = 300; color = '#22c55e';
       }
     } else if (dist.id === 'heating') {
-      // 🔵 TIER 2B (Теплотрасса): 50% Пехотинец, 40% Снайпер, 10% Громила
-      if (rand < 0.10) {
-        type = 'brute'; radius = 34; hp = 250; speed = 1.7; aggroRadius = 310; color = '#a855f7';
+      // 🔵 TIER 2B (Теплотрасса): 50% Пехотинец (140 HP), 38% Снайпер (115 HP), 12% Громила (380 HP)
+      if (rand < 0.12) {
+        type = 'brute'; radius = 34; hp = 380; speed = 1.8; aggroRadius = 320; color = '#a855f7';
       } else if (rand < 0.50) {
-        type = 'sniper'; radius = 16; hp = 50; speed = 2.05; aggroRadius = 370; color = '#84cc16';
+        type = 'sniper'; radius = 16; hp = 115; speed = 2.12; aggroRadius = 380; color = '#84cc16';
       } else {
-        type = 'grunt'; radius = 22; hp = 85; speed = 2.6; aggroRadius = 295; color = '#22c55e';
+        type = 'grunt'; radius = 22; hp = 140; speed = 2.72; aggroRadius = 305; color = '#22c55e';
       }
     } else if (dist.id === 'cordon') {
-      // 🔴 TIER 3 (Военный кордон): 35% Громила, 35% Снайпер, 30% Ветеран-пехотинец
-      if (rand < 0.35) {
-        type = 'brute'; radius = 34; hp = 265; speed = 1.75; aggroRadius = 330; color = '#a855f7';
-      } else if (rand < 0.70) {
-        type = 'sniper'; radius = 16; hp = 55; speed = 2.1; aggroRadius = 390; color = '#84cc16';
+      // 🔴 TIER 3 (Военный кордон): 38% Бронированный Громила (480 HP), 35% Снайпер (145 HP), 27% Штурмовик (185 HP)
+      if (rand < 0.38) {
+        type = 'brute'; radius = 35; hp = 480; speed = 1.88; aggroRadius = 345; color = '#a855f7';
+      } else if (rand < 0.73) {
+        type = 'sniper'; radius = 16; hp = 145; speed = 2.2; aggroRadius = 405; color = '#84cc16';
       } else {
-        type = 'grunt'; radius = 23; hp = 105; speed = 2.7; aggroRadius = 315; color = '#22c55e';
+        type = 'grunt'; radius = 23; hp = 185; speed = 2.82; aggroRadius = 325; color = '#22c55e';
       }
     } else if (dist.id === 'nest') {
-      // 🟣 TIER 4 (Квако-Гнездо): 50% Элитный Громила (320 HP), 35% Снайпер, 15% Мутант-пехотинец
-      if (rand < 0.50) {
-        type = 'brute'; radius = 36; hp = 320; speed = 1.85; aggroRadius = 350; color = '#a855f7';
+      // 🟣 TIER 4 (Квако-Гнездо): 52% Элитный Квако-Танк (680 HP), 33% Элитный Снайпер (180 HP), 15% Мутант (230 HP)
+      if (rand < 0.52) {
+        type = 'brute'; radius = 37; hp = 680; speed = 1.98; aggroRadius = 365; color = '#a855f7';
       } else if (rand < 0.85) {
-        type = 'sniper'; radius = 17; hp = 65; speed = 2.15; aggroRadius = 400; color = '#84cc16';
+        type = 'sniper'; radius = 17; hp = 180; speed = 2.25; aggroRadius = 420; color = '#84cc16';
       } else {
-        type = 'grunt'; radius = 24; hp = 120; speed = 2.8; aggroRadius = 330; color = '#22c55e';
+        type = 'grunt'; radius = 24; hp = 230; speed = 2.92; aggroRadius = 345; color = '#22c55e';
       }
     }
 
@@ -1447,7 +1476,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
       hitFlash: 0,
       patrolAngle: Math.random() * Math.PI * 2,
       patrolTimer: Math.random() * 120 + 60,
-      shootCooldown: Math.random() * 80 + 60
+      shootCooldown: Math.random() * 70 + 45
     });
     return true;
   }
@@ -1458,7 +1487,6 @@ function spawnPatrolEnemy(deadEnemy = null) {
   if (deadEnemy && deadEnemy.bounds) {
     const b = deadEnemy.bounds;
     const dist = DISTRICTS[deadEnemy.districtId] || getDistrictAt((b.x1 + b.x2) * 0.5, (b.y1 + b.y2) * 0.5);
-    // Не спавнить прямо на голову игроку
     if (Math.hypot(player.x - (b.x1 + b.x2) * 0.5, player.y - (b.y1 + b.y2) * 0.5) > 550) {
       spawnEnemyInRect(b.x1, b.y1, b.x2, b.y2, dist);
     }
@@ -1482,16 +1510,16 @@ window.addEventListener('keydown', (e) => {
 
   if (gameState === 'PLAYING') {
     if (e.code === 'Space') performRoll();
+    if (e.code === 'KeyR') startReload();
     if (e.code === 'KeyQ') cycleWeapon();
     if (e.code === 'Digit1') useItem('vodka');
     if (e.code === 'Digit2') useItem('stew');
     if (e.code === 'Digit3') useItem('bandage');
-    if (e.code === 'Digit4') switchWeapon('shotgun');
-    if (e.code === 'Digit5') switchWeapon('drill');
-    if (e.code === 'Digit6') switchWeapon('plasma');
-    if (e.code === 'Digit7') togglePerkDebug('shaman_carpet');
-    if (e.code === 'Digit8') togglePerkDebug('car_battery');
-    if (e.code === 'Digit9') togglePerkDebug('laser_eye');
+    if (e.code === 'Digit4') switchWeapon('bat');
+    if (e.code === 'Digit5') switchWeapon('makarov');
+    if (e.code === 'Digit6') switchWeapon('drill');
+    if (e.code === 'Digit7') switchWeapon('shotgun');
+    if (e.code === 'Digit8') switchWeapon('plasma');
   }
 });
 
@@ -1511,19 +1539,45 @@ function startGame() {
 
   player.x = safeZone.x;
   player.y = safeZone.y + 70;
+  player.maxHp = 100;
   player.hp = player.maxHp;
+  player.maxStamina = 100;
   player.stamina = player.maxStamina;
   player.isDrunk = false;
   player.drunkTimer = 0;
-  player.items = { vodka: 0, stew: 1, bandage: 1 };
-  player.resources = { scrap: 0, bottles: 0 };
-  player.baseDamage = 25;
+  player.items = { vodka: 0, stew: 1, bandage: 2 };
+  player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0 };
+  player.unlockedWeapons = {
+    bat: true,
+    makarov: false,
+    drill: false,
+    shotgun: false,
+    plasma: false
+  };
+  player.ammo = {
+    makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
+    shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 }
+  };
+  player.reloadingWeapon = null;
+  player.reloadTimer = 0;
+  player.reloadMaxTimer = 0;
+  player.plasmaHeat = 0;
+  player.plasmaOverheated = false;
+  player.plasmaOverheatTimer = 0;
+  player.currentWeapon = 'bat';
+  player.baseDamage = 24;
+  player.critChance = 0.05;
+  player.critMult = 1.6;
   player.unlockedPerks.clear();
   player.blockedPerks.clear();
   lastPlayerDistrictId = 'hub';
 
+  if (window.threeCharacter) {
+    window.threeCharacter.setWeapon('bat');
+  }
+
   generateWorld();
-  updateHUD();
+  updateHUD(true);
 }
 
 function gameOver() {
@@ -1543,6 +1597,10 @@ function spawn3DLootItem(x, y, type, val = 1) {
   const icons = {
     scrap: '⚙️',
     bottle: '🍾',
+    mil_parts: '🧰',
+    alien_core: '🔮',
+    ammo_9x18: '🔫',
+    ammo_12g: '💥',
     stew: '🥫',
     vodka: '🍾',
     bandage: '🩹'
@@ -1565,53 +1623,61 @@ function scavengeContainer(c) {
   const toPlayerAngle = Math.atan2(player.y - c.y, player.x - c.x);
 
   let bottleRoll = 1;
-  let scrapRoll = 1;
+  let scrapRoll = 0;
   const bonusDrops = [];
 
   if (c.type === 'trash') {
-    // 🗑️ Мусорный бак ЖЭК-4: специализация — Стеклотара, бинты, а в районе Теплотрассы — Водка!
-    bottleRoll = Math.round((2 + Math.floor(Math.random() * 3)) * mult);
-    scrapRoll = Math.round((Math.floor(Math.random() * 2)) * mult);
+    // Мусорный бак ЖЭК-4: в спальных дворах — главный источник стеклотары и бинтов
+    bottleRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 2)) * mult));
+    scrapRoll = Math.floor(Math.random() * 2);
     const r = Math.random();
-    if (dist.id === 'heating' && r < 0.65) {
+    if (dist.id === 'heating' && r < 0.55) {
       bonusDrops.push('vodka');
-    } else if (r < 0.38) {
+    } else if (r < 0.35) {
       bonusDrops.push('bandage');
-    } else if (r < 0.55) {
-      bonusDrops.push('vodka');
+    } else if (r < 0.50 && player.unlockedWeapons.makarov) {
+      bonusDrops.push('ammo_9x18');
     }
   } else if (c.type === 'car' && c.subType !== 'uaz') {
-    // 🚗 ВАЗ-2101 Жигули: специализация — Чермет и запчасти (особенно в Гаражном кооперативе)
+    // ВАЗ-2101 Жигули: источник чермета (особенно в Гаражном кооперативе «Восток»)
     const garageBonus = dist.id === 'garages' ? 2 : 0;
-    scrapRoll = Math.round((3 + Math.floor(Math.random() * 3) + garageBonus) * mult);
-    bottleRoll = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+    scrapRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 3) + garageBonus) * mult));
+    bottleRoll = 1 + Math.floor(Math.random() * 2);
     const r = Math.random();
-    if (r < 0.42) bonusDrops.push('stew');
-    else if (r < 0.65) bonusDrops.push('bandage');
+    if (r < 0.38) bonusDrops.push('stew');
+    else if (r < 0.62) bonusDrops.push('ammo_9x18');
   } else if (c.type === 'car' && c.subType === 'uaz') {
-    // 🚑 Санитарный УАЗ-452 «Буханка»: много чермета + гарантированная медицина / спирт!
-    scrapRoll = Math.round((4 + Math.floor(Math.random() * 3)) * mult);
-    bottleRoll = Math.round((2 + Math.floor(Math.random() * 2)) * mult);
+    // Санитарный УАЗ-452 «Буханка»: чермет + медицина, а на Кордоне — Оружейные детали!
+    scrapRoll = Math.round((3 + Math.floor(Math.random() * 3)) * mult);
+    bottleRoll = 1 + Math.floor(Math.random() * 2);
     bonusDrops.push('bandage');
-    if (Math.random() < 0.55) bonusDrops.push('vodka');
+    if (dist.id === 'cordon' || dist.id === 'nest') {
+      bonusDrops.push('mil_parts');
+    }
+    if (Math.random() < 0.5) bonusDrops.push('ammo_12g');
   } else {
-    // 📦 Армейский ящик (Военторг / Спецхран): максимальный чермет + гарантированные пайки!
-    scrapRoll = Math.round((5 + Math.floor(Math.random() * 4)) * mult);
-    bottleRoll = Math.round((2 + Math.floor(Math.random() * 3)) * mult);
+    // Армейский ящик (Военторг / Спецхран):
+    scrapRoll = Math.round((4 + Math.floor(Math.random() * 3)) * mult);
+    bottleRoll = 1 + Math.floor(Math.random() * 2);
     bonusDrops.push('stew');
-    if (dist.tier >= 3 || Math.random() < 0.65) {
-      bonusDrops.push(Math.random() < 0.5 ? 'bandage' : 'vodka');
+    if (dist.id === 'cordon') {
+      // На Военном Кордоне гарантированно падают Оружейные детали!
+      bonusDrops.push('mil_parts');
+      if (Math.random() < 0.55) bonusDrops.push('ammo_12g');
+    } else if (dist.id === 'nest') {
+      // В Квако-Гнезде падают Квако-ядра и Оружейные детали!
+      bonusDrops.push('alien_core');
+      if (Math.random() < 0.65) bonusDrops.push('mil_parts');
+    } else {
+      bonusDrops.push('ammo_9x18');
     }
   }
 
-  // Начисляем базовую часть и выбрасываем вокруг контейнера 3D-предметы лута
   player.resources.bottles += bottleRoll;
   player.resources.scrap += scrapRoll;
 
-  const tierTag = mult > 1.0 ? ` (×${mult})` : '';
-  addFloatingText(c.x, c.y - 28, `+${bottleRoll} 🍾  +${scrapRoll} ⚙️${tierTag}`, dist.color || '#38bdf8');
+  addFloatingText(c.x, c.y - 28, `+${bottleRoll} Стеклотара  +${scrapRoll} Чермет`, dist.color || '#38bdf8');
 
-  // Выбрасываем 3D-модели расходников (`loot_stew.glb`, `loot_vodka.glb`, `loot_bandage.glb`) рядом с контейнером в сторону игрока
   bonusDrops.forEach((itemType, idx) => {
     const spreadAngle = toPlayerAngle + (idx - (bonusDrops.length - 1) * 0.5) * 0.55;
     const dropDist = c.radius + 18;
@@ -1619,18 +1685,168 @@ function scavengeContainer(c) {
       c.x + Math.cos(spreadAngle) * dropDist,
       c.y + Math.sin(spreadAngle) * dropDist,
       itemType,
-      1
+      itemType === 'ammo_9x18' ? 8 : (itemType === 'ammo_12g' ? 4 : 1)
     );
   });
 
   createParticles(c.x, c.y, dist.color || '#94a3b8', 14);
-  updateHUD();
+  updateHUD(true);
+}
+
+// --- КАТАЛОГ ОРУЖИЯ, ПАТРОНОВ И ПРИПАСОВ МИХАЛЫЧА (С PNG-РЕНДЕРАМИ) ---
+const SHOP_ARSENAL_ITEMS = [
+  {
+    id: 'makarov',
+    type: 'weapon',
+    weaponKey: 'makarov',
+    slotKey: '[5]',
+    img: 'assets/sprites/weapons/weapon_makarov.png?v=1026',
+    name_ru: 'Пистолет Макарова (ПМ 9×18)',
+    name_en: 'Makarov Pistol (PM 9×18)',
+    desc_ru: 'Урон: 34 | Магазин: 8 патр. (+24 в комплекте). Надёжное табельное оружие против плевальщиков.',
+    desc_en: 'DMG: 34 | Mag: 8 rds (+24 included). Reliable sidearm against ranged spitters.',
+    zone_ru: '📍 Ресурсы: Дворы (Стеклотара) + Гаражи (Чермет)',
+    zone_en: '📍 Loot in: Courtyards (Bottles) + Garages (Scrap)',
+    cost: { bottles: 12, scrap: 10 }
+  },
+  {
+    id: 'ammo_9x18',
+    type: 'ammo',
+    ammoKey: 'makarov',
+    amount: 16,
+    img: 'assets/sprites/loot/ammo_9x18.png?v=1026',
+    name_ru: 'Пачка патронов 9×18 ПМ (+16 шт.)',
+    name_en: '9×18mm Makarov Ammo Pack (+16)',
+    desc_ru: 'Пополняет боезапас для Пистолета Макарова (перезарядка — клавиша R).',
+    desc_en: 'Replenishes reserve ammo for the Makarov Pistol (press R to reload).',
+    zone_ru: '📦 Всегда в наличии у Михалыча',
+    zone_en: '📦 Always in stock',
+    cost: { bottles: 4, scrap: 2 }
+  },
+  {
+    id: 'drill',
+    type: 'weapon',
+    weaponKey: 'drill',
+    slotKey: '[6]',
+    img: 'assets/sprites/weapons/weapon_drill.png?v=1026',
+    name_ru: 'Ударная дрель ИЭ-1035',
+    name_en: 'Soviet Impact Drill IE-1035',
+    desc_ru: 'Урон: 36/тик | Тратит выносливость (-4.5/тик). Перемалывает жаб в ближнем бою без патронов.',
+    desc_en: 'DMG: 36/tick | Drains stamina (-4.5/tick). Shreds armor at close range.',
+    zone_ru: '📍 Ресурсы: Гаражный кооператив и Теплосеть',
+    zone_en: '📍 Loot in: Garages & Heating Pipeline',
+    cost: { bottles: 15, scrap: 22 }
+  },
+  {
+    id: 'shotgun',
+    type: 'weapon',
+    weaponKey: 'shotgun',
+    slotKey: '[7]',
+    img: 'assets/sprites/weapons/weapon_shotgun.png?v=1026',
+    name_ru: 'Дедовский Обрез 12 калибра',
+    name_en: 'Grandpa\'s Sawed-Off 12G',
+    desc_ru: 'Урон: 7×18 картечь | Стволы: 2 патр. (+12 в комплекте). Сносит штурмовиков в упор.',
+    desc_en: 'DMG: 7×18 buckshot | Barrels: 2 shells (+12 included). Devastating stopping power.',
+    zone_ru: '🔴 Нужны Оружейные детали с Военного Кордона!',
+    zone_en: '🔴 Requires Military Gun Parts from Military Cordon!',
+    cost: { bottles: 20, scrap: 25, mil_parts: 5 }
+  },
+  {
+    id: 'ammo_12g',
+    type: 'ammo',
+    ammoKey: 'shotgun',
+    amount: 8,
+    img: 'assets/sprites/loot/ammo_12g.png?v=1026',
+    name_ru: 'Пачка картечи 12 калибра (+8 шт.)',
+    name_en: '12-Gauge Buckshot Pack (+8)',
+    desc_ru: 'Охотничьи патроны в красной гильзе для Дедовского Обреза (клавиша R).',
+    desc_en: 'Heavy 12-gauge shells for the Sawed-Off Shotgun (press R to reload).',
+    zone_ru: '📦 Всегда в наличии у Михалыча',
+    zone_en: '📦 Always in stock',
+    cost: { bottles: 6, scrap: 4 }
+  },
+  {
+    id: 'plasma',
+    type: 'weapon',
+    weaponKey: 'plasma',
+    slotKey: '[8]',
+    img: 'assets/sprites/weapons/weapon_plasma.png?v=1026',
+    name_ru: 'Трофейный Плазмаган «Тесла»',
+    name_en: 'Trophy Alien Plasma Rifle',
+    desc_ru: 'Урон: 48 | Боезапас бесконечен! Нагревается (+16%/выстр.), при 100% — клин на 3 сек.',
+    desc_en: 'DMG: 48 | Infinite ammo! Builds heat (+16%/shot), overheats at 100% for 3s.',
+    zone_ru: '🟣 Нужны Квако-ядра из угловых Квако-Гнёзд!',
+    zone_en: '🟣 Requires Alien Cores from corner Toad Nests!',
+    cost: { bottles: 30, scrap: 35, mil_parts: 6, alien_core: 5 }
+  }
+];
+
+const SHOP_SUPPLY_ITEMS = [
+  {
+    id: 'bandage',
+    img: 'assets/sprites/loot/loot_bandage.png?v=1026',
+    name_ru: 'Стерильный бинт (+45 HP)',
+    name_en: 'Sterile Bandage (+45 HP)',
+    desc_ru: 'Перевязка ран после укусов и кислотных плевков (клавиша [3]).',
+    desc_en: 'Restores 45 Health in combat (key [3]).',
+    cost: { bottles: 3 }
+  },
+  {
+    id: 'stew',
+    img: 'assets/sprites/loot/loot_stew.png?v=1026',
+    name_ru: 'Говядина тушёная ГОСТ (+65 Вын.)',
+    name_en: 'Soviet Beef Stew (+65 Stamina)',
+    desc_ru: 'Мгновенно восстанавливает силы для ударов битой, дрели и перекатов (клавиша [2]).',
+    desc_en: 'Instantly restores 65 Stamina for melee & dodge rolls (key [2]).',
+    cost: { bottles: 4 }
+  },
+  {
+    id: 'vodka',
+    img: 'assets/sprites/loot/loot_vodka.png?v=1026',
+    name_ru: 'Водка «Крепкая» (Берсерк ×1.8)',
+    name_en: 'Stolichnaya Vodka (Berserk ×1.8)',
+    desc_ru: 'Увеличивает урон биты, дрели и стрельбы на 10 секунд (клавиша [1]).',
+    desc_en: 'Boosts melee and weapon damage for 10 seconds (key [1]).',
+    cost: { bottles: 5 }
+  }
+];
+
+function canAffordCost(cost) {
+  if (cost.bottles && player.resources.bottles < cost.bottles) return false;
+  if (cost.scrap && player.resources.scrap < cost.scrap) return false;
+  if (cost.mil_parts && player.resources.mil_parts < cost.mil_parts) return false;
+  if (cost.alien_core && player.resources.alien_core < cost.alien_core) return false;
+  return true;
+}
+
+function payCost(cost) {
+  if (cost.bottles) player.resources.bottles -= cost.bottles;
+  if (cost.scrap) player.resources.scrap -= cost.scrap;
+  if (cost.mil_parts) player.resources.mil_parts -= cost.mil_parts;
+  if (cost.alien_core) player.resources.alien_core -= cost.alien_core;
+}
+
+function formatCostHTML(cost) {
+  const parts = [];
+  if (cost.bottles) {
+    parts.push(`<span><img class="inline-res-icon" src="assets/sprites/loot/loot_bottle.png?v=1026">${cost.bottles}</span>`);
+  }
+  if (cost.scrap) {
+    parts.push(`<span><img class="inline-res-icon" src="assets/sprites/loot/loot_scrap.png?v=1026">${cost.scrap}</span>`);
+  }
+  if (cost.mil_parts) {
+    parts.push(`<span style="color:#fca5a5;"><img class="inline-res-icon" src="assets/sprites/loot/loot_mil_parts.png?v=1026">${cost.mil_parts}</span>`);
+  }
+  if (cost.alien_core) {
+    parts.push(`<span style="color:#d8b4fe;"><img class="inline-res-icon" src="assets/sprites/loot/loot_alien_core.png?v=1026">${cost.alien_core}</span>`);
+  }
+  return parts.join(' ');
 }
 
 function openShop() {
   gameState = 'SHOP';
   document.getElementById('shop-modal').style.display = 'flex';
-  updateShopButtons();
+  renderArsenalAndSupplies();
   renderUpgradeTrees();
 }
 
@@ -1640,29 +1856,131 @@ window.closeShop = function() {
 };
 
 window.switchShopTab = function(tab) {
+  const weaponsView = document.getElementById('shop-view-weapons');
   const suppliesView = document.getElementById('shop-view-supplies');
   const upgradesView = document.getElementById('shop-view-upgrades');
+  const btnWeapons = document.getElementById('tab-btn-weapons');
   const btnSupplies = document.getElementById('tab-btn-supplies');
   const btnUpgrades = document.getElementById('tab-btn-upgrades');
 
-  if (tab === 'supplies') {
-    suppliesView.style.display = 'block';
-    upgradesView.style.display = 'none';
-    btnSupplies.classList.add('active');
-    btnUpgrades.classList.remove('active');
-  } else {
-    suppliesView.style.display = 'none';
-    upgradesView.style.display = 'block';
-    btnSupplies.classList.remove('active');
-    btnUpgrades.classList.add('active');
-    renderUpgradeTrees();
-  }
+  if (weaponsView) weaponsView.style.display = tab === 'weapons' ? 'block' : 'none';
+  if (suppliesView) suppliesView.style.display = tab === 'supplies' ? 'block' : 'none';
+  if (upgradesView) upgradesView.style.display = tab === 'upgrades' ? 'block' : 'none';
+
+  if (btnWeapons) btnWeapons.classList.toggle('active', tab === 'weapons');
+  if (btnSupplies) btnSupplies.classList.toggle('active', tab === 'supplies');
+  if (btnUpgrades) btnUpgrades.classList.toggle('active', tab === 'upgrades');
+
+  if (tab === 'upgrades') renderUpgradeTrees();
+  else renderArsenalAndSupplies();
 };
 
-function updateShopButtons() {
-  document.getElementById('btn-buy-bandage').disabled = player.resources.bottles < 3;
-  document.getElementById('btn-buy-stew').disabled = player.resources.bottles < 4;
-  document.getElementById('btn-buy-vodka').disabled = player.resources.bottles < 5;
+function renderArsenalAndSupplies() {
+  const wB = document.getElementById('shop-res-bottles');
+  const wS = document.getElementById('shop-res-scrap');
+  const wM = document.getElementById('shop-res-mil');
+  const wC = document.getElementById('shop-res-core');
+  if (wB) wB.innerText = player.resources.bottles;
+  if (wS) wS.innerText = player.resources.scrap;
+  if (wM) wM.innerText = player.resources.mil_parts;
+  if (wC) wC.innerText = player.resources.alien_core;
+
+  const arsenalBox = document.getElementById('arsenal-container');
+  if (arsenalBox) {
+    arsenalBox.innerHTML = '';
+    SHOP_ARSENAL_ITEMS.forEach(item => {
+      const isOwnedWeapon = item.type === 'weapon' && player.unlockedWeapons[item.weaponKey];
+      const card = document.createElement('div');
+      card.className = `shop-card ${isOwnedWeapon ? 'owned' : ''}`;
+
+      const ammoInfo = item.type === 'ammo'
+        ? ` (Запас: ${player.ammo[item.ammoKey].clip}/${player.ammo[item.ammoKey].reserve})`
+        : '';
+
+      const left = document.createElement('div');
+      left.className = 'shop-card-left';
+      left.innerHTML = `
+        <img class="shop-card-img" src="${item.img}" alt="">
+        <div>
+          <div class="shop-card-title">${currentLang === 'ru' ? item.name_ru : item.name_en}${ammoInfo}</div>
+          <div class="shop-card-desc">${currentLang === 'ru' ? item.desc_ru : item.desc_en}</div>
+          <div class="shop-card-zone">${currentLang === 'ru' ? item.zone_ru : item.zone_en}</div>
+        </div>
+      `;
+
+      const btn = document.createElement('button');
+      btn.className = 'shop-buy-btn';
+      if (isOwnedWeapon) {
+        btn.disabled = true;
+        btn.style.background = '#166534';
+        btn.style.borderColor = '#22c55e';
+        btn.style.color = '#fff';
+        btn.innerHTML = currentLang === 'ru' ? `✅ КУПЛЕНО ${item.slotKey}` : `✅ OWNED ${item.slotKey}`;
+      } else {
+        btn.disabled = !canAffordCost(item.cost);
+        btn.innerHTML = formatCostHTML(item.cost);
+        btn.onclick = () => buyArsenalItem(item);
+      }
+
+      card.appendChild(left);
+      card.appendChild(btn);
+      arsenalBox.appendChild(card);
+    });
+  }
+
+  const suppliesBox = document.getElementById('supplies-container');
+  if (suppliesBox) {
+    suppliesBox.innerHTML = '';
+    SHOP_SUPPLY_ITEMS.forEach(sup => {
+      const card = document.createElement('div');
+      card.className = 'shop-card';
+
+      const left = document.createElement('div');
+      left.className = 'shop-card-left';
+      left.innerHTML = `
+        <img class="shop-card-img" src="${sup.img}" alt="">
+        <div>
+          <div class="shop-card-title">${currentLang === 'ru' ? sup.name_ru : sup.name_en} (${player.items[sup.id]} шт.)</div>
+          <div class="shop-card-desc">${currentLang === 'ru' ? sup.desc_ru : sup.desc_en}</div>
+        </div>
+      `;
+
+      const btn = document.createElement('button');
+      btn.className = 'shop-buy-btn';
+      btn.disabled = !canAffordCost(sup.cost);
+      btn.innerHTML = formatCostHTML(sup.cost);
+      btn.onclick = () => buyItem(sup.id, sup.cost.bottles);
+
+      card.appendChild(left);
+      card.appendChild(btn);
+      suppliesBox.appendChild(card);
+    });
+  }
+}
+
+function buyArsenalItem(item) {
+  if (!canAffordCost(item.cost)) return;
+  if (item.type === 'weapon' && player.unlockedWeapons[item.weaponKey]) return;
+
+  payCost(item.cost);
+  if (item.type === 'weapon') {
+    player.unlockedWeapons[item.weaponKey] = true;
+    if (item.weaponKey === 'makarov') {
+      player.ammo.makarov.clip = 8;
+      player.ammo.makarov.reserve += 16;
+    } else if (item.weaponKey === 'shotgun') {
+      player.ammo.shotgun.clip = 2;
+      player.ammo.shotgun.reserve += 10;
+    }
+    window.switchWeapon(item.weaponKey);
+  } else if (item.type === 'ammo') {
+    player.ammo[item.ammoKey].reserve += item.amount;
+    addFloatingText(player.x, player.y - 30, `+${item.amount} ПАТРОНОВ`, '#facc15');
+  }
+
+  SoundFX.reload();
+  updateHUD(true);
+  renderArsenalAndSupplies();
 }
 
 window.buyItem = function(item, costBottles) {
@@ -1670,14 +1988,24 @@ window.buyItem = function(item, costBottles) {
     player.resources.bottles -= costBottles;
     player.items[item]++;
     addFloatingText(player.x, player.y - 30, `+1 ${t(item).toUpperCase()}`, '#4ade80');
-    updateHUD();
-    updateShopButtons();
+    updateHUD(true);
+    renderArsenalAndSupplies();
   }
 };
 
 function renderUpgradeTrees() {
   const container = document.getElementById('tree-container');
+  if (!container) return;
   container.innerHTML = '';
+
+  const wB = document.getElementById('shop-res-bottles');
+  const wS = document.getElementById('shop-res-scrap');
+  const wM = document.getElementById('shop-res-mil');
+  const wC = document.getElementById('shop-res-core');
+  if (wB) wB.innerText = player.resources.bottles;
+  if (wS) wS.innerText = player.resources.scrap;
+  if (wM) wM.innerText = player.resources.mil_parts;
+  if (wC) wC.innerText = player.resources.alien_core;
 
   for (const treeKey in UPGRADE_TREES) {
     const tree = UPGRADE_TREES[treeKey];
@@ -1708,7 +2036,7 @@ function renderUpgradeTrees() {
 
       const costEl = document.createElement('div');
       costEl.className = 'perk-cost';
-      costEl.innerText = `⚙️ ${perk.cost.scrap} ${t('cost_scrap')} | 🍾 ${perk.cost.bottles} ${t('cost_bottles')}`;
+      costEl.innerHTML = formatCostHTML(perk.cost);
 
       card.appendChild(nameEl);
       card.appendChild(descEl);
@@ -1717,7 +2045,7 @@ function renderUpgradeTrees() {
       if (isLocked) {
         const lockWarn = document.createElement('div');
         lockWarn.className = 'perk-lock-warn';
-        lockWarn.innerText = `⚠️ ${t('locked_by')} несовместимый апгрейд!`;
+        lockWarn.innerText = `${t('locked_by')} несовместимый апгрейд!`;
         card.appendChild(lockWarn);
       } else if (isInstalled) {
         const installedBadge = document.createElement('div');
@@ -1730,10 +2058,7 @@ function renderUpgradeTrees() {
         const buyBtn = document.createElement('button');
         buyBtn.className = 'btn-buy-perk';
         buyBtn.innerText = currentLang === 'ru' ? 'Установить' : 'Install';
-        
-        const canAfford = player.resources.scrap >= perk.cost.scrap && player.resources.bottles >= perk.cost.bottles;
-        buyBtn.disabled = !canAfford;
-
+        buyBtn.disabled = !canAffordCost(perk.cost);
         buyBtn.onclick = () => buyPerk(perk);
         card.appendChild(buyBtn);
       }
@@ -1746,11 +2071,10 @@ function renderUpgradeTrees() {
 }
 
 function buyPerk(perk) {
-  if (player.resources.scrap < perk.cost.scrap || player.resources.bottles < perk.cost.bottles) return;
+  if (!canAffordCost(perk.cost)) return;
   if (player.blockedPerks.has(perk.id)) return;
 
-  player.resources.scrap -= perk.cost.scrap;
-  player.resources.bottles -= perk.cost.bottles;
+  payCost(perk.cost);
   player.unlockedPerks.add(perk.id);
 
   if (perk.locks && perk.locks.length > 0) {
@@ -1764,13 +2088,17 @@ function buyPerk(perk) {
     player.maxHp += perk.statMods.bonusMaxHp;
     player.hp += perk.statMods.bonusMaxHp;
   }
+  if (perk.statMods.bonusMaxStamina) {
+    player.maxStamina += perk.statMods.bonusMaxStamina;
+    player.stamina += perk.statMods.bonusMaxStamina;
+  }
   if (perk.statMods.critChance) player.critChance += perk.statMods.critChance;
   if (perk.statMods.critMult) player.critMult = perk.statMods.critMult;
 
-  addFloatingText(player.x, player.y - 35, `🧬 ${perk.name_ru.toUpperCase()}`, '#38bdf8');
+  addFloatingText(player.x, player.y - 35, `${perk.name_ru.toUpperCase()}`, '#38bdf8');
   createParticles(player.x, player.y, '#38bdf8', 20);
 
-  updateHUD();
+  updateHUD(true);
   renderUpgradeTrees();
 }
 
@@ -1785,19 +2113,21 @@ window.useItem = function(itemType) {
     addFloatingText(player.x, player.y - 30, t('status_drunk'), '#f59e0b');
     createParticles(player.x, player.y, '#f59e0b', 14);
   } else if (itemType === 'stew') {
-    player.stamina = Math.min(player.maxStamina, player.stamina + 60);
-    addFloatingText(player.x, player.y - 30, "+60 ВЫНОСЛИВ.", '#38bdf8');
+    player.stamina = Math.min(player.maxStamina, player.stamina + 65);
+    addFloatingText(player.x, player.y - 30, "+65 ВЫНОСЛИВ.", '#38bdf8');
     createParticles(player.x, player.y, '#38bdf8', 10);
   } else if (itemType === 'bandage') {
     player.hp = Math.min(player.maxHp, player.hp + 45);
     addFloatingText(player.x, player.y - 30, "+45 HP", '#22c55e');
     createParticles(player.x, player.y, '#22c55e', 12);
   }
-  updateHUD();
+  updateHUD(true);
 };
 
 function performRoll() {
-  if (player.isRolling || player.rollCooldown > 0 || player.stamina < 25) return;
+  const stamMult = player.hasPerk('third_frog_eye') ? 0.75 : 1.0;
+  const rollCost = Math.round(25 * stamMult);
+  if (player.isRolling || player.rollCooldown > 0 || player.stamina < rollCost) return;
   
   let dx = 0, dy = 0;
   if (keys['KeyW']) dy -= 1;
@@ -1818,53 +2148,78 @@ function performRoll() {
   player.rollCooldown = 35;
   player.rollDx = dx;
   player.rollDy = dy;
-  player.stamina -= 25;
+  player.stamina -= rollCost;
   createParticles(player.x, player.y, '#94a3b8', 8);
 
   if (player.hasPerk('drill_arm')) {
     createParticles(player.x, player.y, '#eab308', 15);
     enemies.forEach(e => {
-      if (Math.hypot(player.x - e.x, player.y - e.y) < 70) {
-        e.hp -= 30;
-        addFloatingText(e.x, e.y - 20, '-30 ДРЕЛЬ', '#eab308');
+      if (Math.hypot(player.x - e.x, player.y - e.y) < 75) {
+        e.hp -= 35;
+        addFloatingText(e.x, e.y - 20, '-35 УДАР', '#eab308');
       }
     });
   }
 }
 
 window.switchWeapon = function(weaponKey) {
-  if (['shotgun', 'drill', 'plasma'].includes(weaponKey)) {
-    player.currentWeapon = weaponKey;
-    const names = {
-      shotgun: currentLang === 'ru' ? 'ОБРЕЗ ДВУСТВОЛКИ' : 'SAWED-OFF SHOTGUN',
-      drill: currentLang === 'ru' ? 'РУКА-ПЕРФОРАТОР' : 'DRILL ARM',
-      plasma: currentLang === 'ru' ? 'ПЛАЗМЕННЫЙ КАРАБИН' : 'PLASMA CARBINE'
-    };
-    addFloatingText(player.x, player.y - 35, `🔫 ${names[weaponKey]}`, '#38bdf8');
-    createParticles(player.x, player.y, '#38bdf8', 8);
-    updateHUD();
+  const allWeapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+  if (!allWeapons.includes(weaponKey)) return;
+
+  if (!player.unlockedWeapons[weaponKey]) {
+    SoundFX.emptyClick();
+    addFloatingText(player.x, player.y - 38, currentLang === 'ru' ? '🔒 КУПИТЕ В ЛАВКЕ МИХАЛЫЧА!' : '🔒 BUY AT MIKHALYCH SHOP!', '#f87171');
+    return;
   }
+
+  if (player.reloadingWeapon && player.reloadingWeapon !== weaponKey) {
+    player.reloadingWeapon = null;
+    player.reloadTimer = 0;
+  }
+
+  player.currentWeapon = weaponKey;
+  const names = {
+    bat: currentLang === 'ru' ? 'БИТА С ГВОЗДЯМИ' : 'SPIKED BAT',
+    makarov: currentLang === 'ru' ? 'ПИСТОЛЕТ МАКАРОВА (ПМ)' : 'MAKAROV PM 9x18',
+    drill: currentLang === 'ru' ? 'УДАРНАЯ ДРЕЛЬ ИЭ-1035' : 'IMPACT DRILL',
+    shotgun: currentLang === 'ru' ? 'ДЕДОВСКИЙ ОБРЕЗ 12К' : 'SAWED-OFF SHOTGUN',
+    plasma: currentLang === 'ru' ? 'ТРОФЕЙНЫЙ ПЛАЗМАГАН' : 'TROPHY PLASMA GUN'
+  };
+  addFloatingText(player.x, player.y - 35, `${names[weaponKey]}`, '#38bdf8');
+  createParticles(player.x, player.y, '#38bdf8', 8);
+  updateHUD(true);
 };
 
 window.cycleWeapon = function() {
-  const weapons = ['shotgun', 'drill', 'plasma'];
+  const weapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'].filter(w => player.unlockedWeapons[w]);
+  if (weapons.length <= 1) return;
   const curIdx = weapons.indexOf(player.currentWeapon);
   const nextIdx = (curIdx + 1) % weapons.length;
   window.switchWeapon(weapons[nextIdx]);
 };
 
-window.togglePerkDebug = function(perkId) {
-  if (player.hasPerk(perkId)) {
-    player.unlockedPerks.delete(perkId);
-    addFloatingText(player.x, player.y - 35, `- СНЯТО: ${perkId}`, '#94a3b8');
-  } else {
-    player.unlockedPerks.add(perkId);
-    addFloatingText(player.x, player.y - 35, `+ НАДЕТО: ${perkId}`, '#22c55e');
-  }
-  updateHUD();
-};
+function startReload() {
+  const wKey = player.currentWeapon;
+  if (wKey !== 'makarov' && wKey !== 'shotgun') return;
+  if (player.reloadingWeapon) return;
 
-// --- ПРОЦЕДУРНЫЙ АУДИО-СИНТЕЗАТОР ВЫСТРЕЛОВ (WebAudio API, 0 внешних файлов) ---
+  const ammoState = player.ammo[wKey];
+  if (ammoState.clip >= ammoState.maxClip) return;
+  if (ammoState.reserve <= 0) {
+    SoundFX.emptyClick();
+    addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'НЕТ ПАТРОНОВ! (К МИХАЛЫЧУ)' : 'OUT OF AMMO!', '#ef4444');
+    return;
+  }
+
+  player.reloadingWeapon = wKey;
+  player.reloadMaxTimer = ammoState.reloadTime;
+  player.reloadTimer = ammoState.reloadTime;
+  SoundFX.reload();
+  addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'ПЕРЕЗАРЯДКА [R]...' : 'RELOADING [R]...', '#facc15');
+  updateHUD(true);
+}
+
+// --- ПРОЦЕДУРНЫЙ АУДИО-СИНТЕЗАТОР ВЫСТРЕЛОВ И УДАРОВ (WebAudio API, 0 внешних файлов) ---
 const SoundFX = {
   ctx: null,
   noiseBuf: null,
@@ -1886,12 +2241,77 @@ const SoundFX = {
     }
     return this.ctx;
   },
+  batSwing(hit = false) {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    // Свист рассекаемого воздуха + глухой удар битой с гвоздями
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(380, now);
+    filter.frequency.exponentialRampToValueAtTime(140, now + 0.14);
+    const nGain = ac.createGain();
+    nGain.gain.setValueAtTime(0.22, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    nSrc.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ac.destination);
+    nSrc.start(now);
+    nSrc.stop(now + 0.16);
+
+    if (hit) {
+      const osc = ac.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(135, now);
+      osc.frequency.exponentialRampToValueAtTime(38, now + 0.11);
+      const oGain = ac.createGain();
+      oGain.gain.setValueAtTime(0.38, now);
+      oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.connect(oGain);
+      oGain.connect(ac.destination);
+      osc.start(now);
+      osc.stop(now + 0.13);
+    }
+  },
+  makarov() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    // Сухой хлесткий хлопок 9х18 ПМ
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1850, now);
+    filter.frequency.exponentialRampToValueAtTime(320, now + 0.13);
+    const nGain = ac.createGain();
+    nGain.gain.setValueAtTime(0.30, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    nSrc.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ac.destination);
+    nSrc.start(now);
+    nSrc.stop(now + 0.15);
+
+    const osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(210, now);
+    osc.frequency.exponentialRampToValueAtTime(58, now + 0.09);
+    const oGain = ac.createGain();
+    oGain.gain.setValueAtTime(0.28, now);
+    oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
+    osc.connect(oGain);
+    oGain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.11);
+  },
   shotgun() {
     const ac = this.ensure();
     if (!ac) return;
     const now = ac.currentTime;
 
-    // 1. Тяжелый пороховой хлопок (White Noise -> Bandpass/Lowpass)
     const nSrc = ac.createBufferSource();
     nSrc.buffer = this.noiseBuf;
     const filter = ac.createBiquadFilter();
@@ -1907,7 +2327,6 @@ const SoundFX = {
     nSrc.start(now);
     nSrc.stop(now + 0.26);
 
-    // 2. Низкочастотный удар в грудь (Sub-bass punch)
     const osc = ac.createOscillator();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(145, now);
@@ -1925,7 +2344,6 @@ const SoundFX = {
     if (!ac) return;
     const now = ac.currentTime;
 
-    // Высоковольтный импульс Тесла-коллайдера
     const osc = ac.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(980, now);
@@ -1943,7 +2361,6 @@ const SoundFX = {
     if (!ac) return;
     const now = ac.currentTime;
 
-    // Рёв промышленного перфоратора и скрежет металла
     const osc = ac.createOscillator();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(95, now);
@@ -1956,6 +2373,57 @@ const SoundFX = {
     gain.connect(ac.destination);
     osc.start(now);
     osc.stop(now + 0.18);
+  },
+  reload() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.setValueAtTime(780, now + 0.06);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.10, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.13);
+  },
+  emptyClick() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(920, now);
+    osc.frequency.exponentialRampToValueAtTime(260, now + 0.035);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.045);
+  },
+  overheat() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(2800, now);
+    filter.frequency.exponentialRampToValueAtTime(650, now + 0.35);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.28, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    nSrc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ac.destination);
+    nSrc.start(now);
+    nSrc.stop(now + 0.37);
   },
   ricochet() {
     const ac = this.ensure();
@@ -2016,7 +2484,6 @@ function spawnGunpowderSmoke(x, y, baseAngle, count = 5) {
 }
 
 function spawnShellCasing(x, y, weaponAngle, shellType = 'shotgun') {
-  // Выброс гильзы вправо-назад от казённика
   const ejectAngle = weaponAngle + Math.PI * (0.55 + (Math.random() - 0.5) * 0.22);
   const spd = 2.4 + Math.random() * 2.0;
   shellCasings.push({
@@ -2040,10 +2507,13 @@ function spawnShellCasing(x, y, weaponAngle, shellType = 'shotgun') {
 function shootPlayerWeapon() {
   if (shootCooldown > 0) return;
 
-  const wKey = player.currentWeapon || 'shotgun';
-  if (window.threeCharacter) {
-    window.threeCharacter.triggerRecoil(wKey === 'shotgun' ? 1.25 : (wKey === 'plasma' ? 0.7 : 0.45));
-  }
+  const wKey = player.currentWeapon || 'bat';
+  if (!player.unlockedWeapons[wKey]) return;
+
+  // Если оружие сейчас перезаряжается — ждём окончания перезарядки
+  if (player.reloadingWeapon === wKey) return;
+
+  const stamMult = player.hasPerk('third_frog_eye') ? 0.75 : 1.0;
 
   // Exact 2.5D Muzzle Position projected from 3D weapon model
   let muzzle = null;
@@ -2058,11 +2528,174 @@ function shootPlayerWeapon() {
     };
   }
 
+  // =========================================================================
+  // [4] БИТА С ГВОЗДЯМИ (Рукопашное оружие, старт игры, тратит 18 выносливости)
+  // =========================================================================
+  if (wKey === 'bat') {
+    const batStamCost = 18 * stamMult;
+    const isExhausted = player.stamina < batStamCost;
+
+    if (isExhausted) {
+      player.stamina = Math.max(0, player.stamina - 6);
+      shootCooldown = 36;
+      addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'ВЫДОХСЯ! (-УРОН)' : 'EXHAUSTED!', '#f97316');
+    } else {
+      player.stamina = Math.max(0, player.stamina - batStamCost);
+      shootCooldown = 22;
+    }
+
+    if (window.threeCharacter && typeof window.threeCharacter.triggerSwing === 'function') {
+      window.threeCharacter.triggerSwing();
+    }
+
+    const batReach = 84;
+    let hitAny = false;
+
+    muzzleFlashes.push({
+      x: player.x + Math.cos(player.angle) * 26,
+      y: player.y - 18 + Math.sin(player.angle) * 26,
+      angle: player.angle,
+      type: 'bat_slash',
+      life: 6,
+      maxLife: 6,
+      scale: isExhausted ? 0.78 : 1.08
+    });
+
+    enemies.forEach(e => {
+      const dist = Math.hypot(e.x - player.x, e.y - (player.y - 16));
+      if (dist < batReach + e.radius) {
+        const toEnemyAngle = Math.atan2(e.y - (player.y - 16), e.x - player.x);
+        let angleDiff = Math.abs(toEnemyAngle - player.angle);
+        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+        angleDiff = Math.abs(angleDiff);
+
+        if (angleDiff < 1.18) {
+          hitAny = true;
+          let dmg = (player.baseDamage + 2) * (player.isDrunk ? 1.8 : 1.0);
+          if (isExhausted) dmg *= 0.45;
+          const isCrit = !isExhausted && (Math.random() < player.critChance);
+          if (isCrit) dmg *= player.critMult;
+
+          e.hp -= dmg;
+          e.isAggroed = true;
+          e.hitFlash = 6;
+
+          // Отбрасывание жабы шипованной битой (чтобы можно было держать дистанцию в стартовой зоне!)
+          const kb = isExhausted ? 7 : (e.type === 'brute' ? 8 : 20);
+          const kx = e.x + Math.cos(toEnemyAngle) * kb;
+          const ky = e.y + Math.sin(toEnemyAngle) * kb;
+          if (!checkBuildingCollision(kx, ky, e.radius)) {
+            e.x = kx;
+            e.y = ky;
+          }
+
+          spawnDirectionalSparks(e.x, e.y - 8, toEnemyAngle, 1.0, 9, '#ef4444', 4, 11, 12);
+          createParticles(e.x, e.y, '#22c55e', 6);
+          addFloatingText(e.x, e.y - 20, `${isCrit ? 'КРИТ! ' : ''}-${Math.round(dmg)}`, isCrit ? '#ef4444' : '#f8fafc');
+        }
+      }
+    });
+
+    SoundFX.batSwing(hitAny);
+    if (hitAny) {
+      cameraKickX += Math.cos(player.angle) * 3.2;
+      cameraKickY += Math.sin(player.angle) * 3.2;
+    }
+    updateHUD();
+    return;
+  }
+
+  // =========================================================================
+  // [5] ПИСТОЛЕТ МАКАРОВА (ПМ 9×18, магазин 8 патр., перезарядка R)
+  // =========================================================================
+  if (wKey === 'makarov') {
+    const pmAmmo = player.ammo.makarov;
+    if (pmAmmo.clip <= 0) {
+      startReload();
+      shootCooldown = 14;
+      return;
+    }
+
+    pmAmmo.clip--;
+    shootCooldown = 14;
+    SoundFX.makarov();
+    if (window.threeCharacter) {
+      window.threeCharacter.triggerRecoil(0.65);
+    }
+
+    const spread = player.isDrunk ? 0.14 : 0.035;
+    const angle = player.angle + (Math.random() - 0.5) * spread;
+    const speed = 25;
+    const isCrit = Math.random() < (player.critChance + 0.05);
+    let dmg = (player.baseDamage + 12) * (player.isDrunk ? 1.6 : 1.0) * (isCrit ? player.critMult : 1.0);
+
+    cameraKickX -= Math.cos(angle) * 2.1;
+    cameraKickY -= Math.sin(angle) * 2.1;
+
+    muzzleFlashes.push({
+      x: muzzle.x,
+      y: muzzle.y,
+      angle: angle,
+      type: 'makarov',
+      life: 3,
+      maxLife: 3,
+      scale: 0.72 + Math.random() * 0.15
+    });
+
+    bullets.push({
+      x: muzzle.x,
+      y: muzzle.y,
+      prevX: muzzle.x,
+      prevY: muzzle.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      angle: angle,
+      speed: speed,
+      drag: 0.992,
+      radius: 3.0,
+      damage: dmg,
+      isCrit: isCrit,
+      weaponType: 'makarov',
+      trailLen: 30,
+      life: 34,
+      maxLife: 34,
+      color: isCrit ? '#ef4444' : '#fde047'
+    });
+
+    spawnDirectionalSparks(muzzle.x, muzzle.y, angle, 0.35, 5, '#fbbf24', 5, 12, 9);
+    spawnGunpowderSmoke(muzzle.x, muzzle.y, angle, 2);
+    spawnShellCasing(muzzle.x, muzzle.y, player.angle, 'makarov');
+
+    if (pmAmmo.clip === 0 && pmAmmo.reserve > 0) {
+      setTimeout(() => {
+        if (player.currentWeapon === 'makarov' && player.ammo.makarov.clip === 0) {
+          startReload();
+        }
+      }, 220);
+    }
+    updateHUD(true);
+    return;
+  }
+
+  // =========================================================================
+  // [6] УДАРНАЯ ДРЕЛЬ ИЭ-1035 (Контактный бур, тратит 4.5 выносливости за тик)
+  // =========================================================================
   if (wKey === 'drill') {
-    // 1. Рука-перфоратор: ближний секторный удар вращающимся шнеком + сноп искр болгарки
-    shootCooldown = 16;
+    const drillStamCost = 4.5 * stamMult;
+    if (player.stamina < drillStamCost) {
+      shootCooldown = 18;
+      SoundFX.emptyClick();
+      addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'НЕТ ВЫНОСЛИВОСТИ ДЛЯ ДРЕЛИ!' : 'NO STAMINA FOR DRILL!', '#f97316');
+      return;
+    }
+
+    player.stamina = Math.max(0, player.stamina - drillStamCost);
+    shootCooldown = 12;
     const drillReach = 88;
     SoundFX.drill();
+    if (window.threeCharacter) {
+      window.threeCharacter.triggerRecoil(0.45);
+    }
 
     cameraKickX += (Math.random() - 0.5) * 3.0;
     cameraKickY += (Math.random() - 0.5) * 3.0;
@@ -2072,12 +2705,11 @@ function shootPlayerWeapon() {
       y: muzzle.y,
       angle: player.angle,
       type: 'drill',
-      life: 6,
-      maxLife: 6,
+      life: 5,
+      maxLife: 5,
       scale: 1.0
     });
 
-    // Сноп тангенциальных раскаленных искр от бура
     spawnDirectionalSparks(muzzle.x, muzzle.y, player.angle, 1.35, 14, '#fbbf24', 5, 13, 13);
 
     enemies.forEach(e => {
@@ -2088,30 +2720,52 @@ function shootPlayerWeapon() {
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         angleDiff = Math.abs(angleDiff);
 
-        if (angleDiff < 1.05) { // В конусе удара шнека
-          const dmg = (player.baseDamage + 25) * (player.isDrunk ? 1.8 : 1.0);
+        if (angleDiff < 1.05) {
+          const dmg = (player.baseDamage + 14) * (player.isDrunk ? 1.8 : 1.0);
           e.hp -= dmg;
           e.isAggroed = true;
-          e.hitFlash = 6;
+          e.hitFlash = 5;
           spawnDirectionalSparks(e.x, e.y - 8, toEnemyAngle, 1.1, 10, '#f97316', 5, 12, 12);
           createParticles(e.x, e.y, '#22c55e', 6);
-          addFloatingText(e.x, e.y - 20, `-${Math.round(dmg)} 💥 БУР`, '#eab308');
+          addFloatingText(e.x, e.y - 20, `-${Math.round(dmg)} БУР`, '#eab308');
         }
       }
     });
+    updateHUD();
     return;
   }
 
+  // =========================================================================
+  // [8] ТРОФЕЙНЫЙ ПЛАЗМАГАН (Бесконечный боезапас, но перегревается при 100%)
+  // =========================================================================
   if (wKey === 'plasma') {
-    // 2. Кустарный плазмомёт «Тесла-Коллайдер»: продольный плазменный разряд с электро-дугой
-    shootCooldown = 9;
-    SoundFX.plasma();
+    if (player.plasmaOverheated) {
+      shootCooldown = 16;
+      SoundFX.emptyClick();
+      addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? '⚡ ПЕРЕГРЕВ КАТУШКИ!' : '⚡ OVERHEATED!', '#ef4444');
+      return;
+    }
 
-    let dmg = (player.baseDamage * 0.92);
+    shootCooldown = 10;
+    SoundFX.plasma();
+    if (window.threeCharacter) {
+      window.threeCharacter.triggerRecoil(0.7);
+    }
+
+    player.plasmaHeat = Math.min(100, player.plasmaHeat + 16);
+    if (player.plasmaHeat >= 100) {
+      player.plasmaOverheated = true;
+      player.plasmaOverheatTimer = 180; // 3.0 сек аварийного охлаждения
+      SoundFX.overheat();
+      spawnGunpowderSmoke(muzzle.x, muzzle.y, player.angle, 9);
+      addFloatingText(player.x, player.y - 42, currentLang === 'ru' ? '🔥 ПЕРЕГРЕВ ПЛАЗМЫ (3 СЕК)!' : '🔥 PLASMA OVERHEAT (3s)!', '#ef4444');
+    }
+
+    let dmg = (player.baseDamage + 24) * (player.isDrunk ? 1.5 : 1.0);
     let isCrit = Math.random() < player.critChance;
     if (isCrit) dmg *= player.critMult;
 
-    const angle = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.18 : 0.025);
+    const angle = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.16 : 0.025);
     const speed = 22;
 
     cameraKickX -= Math.cos(angle) * 1.8;
@@ -2151,17 +2805,30 @@ function shootPlayerWeapon() {
     if (Math.random() < 0.5) {
       spawnShellCasing(muzzle.x, muzzle.y, player.angle, 'plasma');
     }
+    updateHUD(true);
     return;
   }
 
-  // 3. Обрез двустволки 12-го калибра: мощная дульная вспышка, сноп картечи с трассерами, вылет пыжа, пороховой дым и гильзы
-  shootCooldown = 27;
+  // =========================================================================
+  // [7] ДЕДОВСКИЙ ОБРЕЗ 12 КАЛИБРА (2 патрона в стволах, перезарядка R)
+  // =========================================================================
+  const sgAmmo = player.ammo.shotgun;
+  if (sgAmmo.clip <= 0) {
+    startReload();
+    shootCooldown = 18;
+    return;
+  }
+
+  sgAmmo.clip--;
+  shootCooldown = 26;
   SoundFX.shotgun();
+  if (window.threeCharacter) {
+    window.threeCharacter.triggerRecoil(1.25);
+  }
 
   cameraKickX -= Math.cos(player.angle) * 4.5;
   cameraKickY -= Math.sin(player.angle) * 4.5;
 
-  // Направленная дульная вспышка пламени из спаренных стволов
   muzzleFlashes.push({
     x: muzzle.x,
     y: muzzle.y,
@@ -2172,15 +2839,13 @@ function shootPlayerWeapon() {
     scale: 1.05 + Math.random() * 0.25
   });
 
-  // Сноп из 7 высокоскоростных картечин с баллистическими трассерами
   const pellets = 7;
-  const basePelletDmg = (player.baseDamage * 0.42) * (player.isDrunk ? 2.0 : 1.0);
+  const basePelletDmg = (player.baseDamage * 0.72) * (player.isDrunk ? 1.85 : 1.0);
 
   for (let p = 0; p < pellets; p++) {
-    // Веерный разлёт с гарантированной центральной кучностью
     const conePos = (p / (pellets - 1)) - 0.5;
     const jitter = (Math.random() - 0.5) * 0.08;
-    const spreadSpan = player.isDrunk ? 0.42 : 0.24;
+    const spreadSpan = player.isDrunk ? 0.40 : 0.24;
     const pelletAngle = player.angle + conePos * spreadSpan + jitter;
     const speed = 23 + Math.random() * 5.5;
     let isCrit = Math.random() < player.critChance;
@@ -2207,7 +2872,6 @@ function shootPlayerWeapon() {
     });
   }
 
-  // Вылетающий войлочный пыж (летит медленнее картечи и дымит)
   const wadAngle = player.angle + (Math.random() - 0.5) * 0.12;
   bullets.push({
     x: muzzle.x,
@@ -2229,10 +2893,18 @@ function shootPlayerWeapon() {
     color: '#a8a29e'
   });
 
-  // Искры несгоревшего пороха из ствола вперед по конусу + клубы порохового дыма + выброс гильзы 12 калибра
   spawnDirectionalSparks(muzzle.x, muzzle.y, player.angle, 0.52, 9, '#fb923c', 7, 16, 12);
   spawnGunpowderSmoke(muzzle.x, muzzle.y, player.angle, 5);
   spawnShellCasing(muzzle.x, muzzle.y, player.angle, 'shotgun');
+
+  if (sgAmmo.clip === 0 && sgAmmo.reserve > 0) {
+    setTimeout(() => {
+      if (player.currentWeapon === 'shotgun' && player.ammo.shotgun.clip === 0) {
+        startReload();
+      }
+    }, 260);
+  }
+  updateHUD(true);
 }
 
 function checkBuildingCollision(x, y, radius) {
@@ -2253,6 +2925,8 @@ const _hudCache = {
   bandage: -1,
   scrap: -1,
   bottles: -1,
+  mil_parts: -1,
+  alien_core: -1,
   isDrunk: null,
   inSafeZone: null,
   districtId: null,
@@ -2260,7 +2934,7 @@ const _hudCache = {
   weapon: null
 };
 
-function updateHUD() {
+function updateHUD(forceWeaponRefresh = false) {
   const hpPct = Math.round(Math.max(0, (player.hp / player.maxHp) * 100));
   if (_hudCache.hpPct !== hpPct) {
     _hudCache.hpPct = hpPct;
@@ -2293,6 +2967,16 @@ function updateHUD() {
     _hudCache.bottles = player.resources.bottles;
     document.getElementById('res-bottles').innerText = player.resources.bottles;
   }
+  if (_hudCache.mil_parts !== player.resources.mil_parts) {
+    _hudCache.mil_parts = player.resources.mil_parts;
+    const el = document.getElementById('res-mil-parts');
+    if (el) el.innerText = player.resources.mil_parts;
+  }
+  if (_hudCache.alien_core !== player.resources.alien_core) {
+    _hudCache.alien_core = player.resources.alien_core;
+    const el = document.getElementById('res-alien-core');
+    if (el) el.innerText = player.resources.alien_core;
+  }
 
   if (_hudCache.isDrunk !== player.isDrunk) {
     _hudCache.isDrunk = player.isDrunk;
@@ -2306,7 +2990,6 @@ function updateHUD() {
     document.getElementById('safe-zone-tag').style.display = inSafeZone ? 'block' : 'none';
   }
 
-  // Обновление индикатора текущего района и уровня угрозы (только при смене района или языка)
   const dist = getDistrictAt(player.x, player.y);
   if (dist && (_hudCache.districtId !== dist.id || _hudCache.lang !== currentLang)) {
     _hudCache.districtId = dist.id;
@@ -2322,24 +3005,73 @@ function updateHUD() {
     }
   }
 
-  // Всплывающее оповещение при переходе в другой район
   if (gameState === 'PLAYING' && dist && dist.id !== lastPlayerDistrictId) {
     lastPlayerDistrictId = dist.id;
     const label = currentLang === 'ru' ? dist.name_ru : dist.name_en;
     addFloatingText(player.x, player.y - 52, `📍 ${label}`, dist.color);
   }
 
-  // Подсветка активного оружия в хотбаре
-  if (_hudCache.weapon !== player.currentWeapon) {
-    _hudCache.weapon = player.currentWeapon;
-    ['shotgun', 'drill', 'plasma'].forEach(w => {
-      const el = document.getElementById(`slot-w-${w}`);
-      if (el) {
-        if (player.currentWeapon === w) el.classList.add('active');
-        else el.classList.remove('active');
+  // Обновление всех 5 оружейных слотов в хотбаре (активность, замки, патроны, перезарядка, нагрев плазмы)
+  const allW = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+  allW.forEach(w => {
+    const slotEl = document.getElementById(`slot-w-${w}`);
+    if (!slotEl) return;
+
+    const unlocked = !!player.unlockedWeapons[w];
+    slotEl.classList.toggle('locked-weapon', !unlocked);
+    slotEl.classList.toggle('active', player.currentWeapon === w);
+
+    if (w === 'drill') {
+      const subEl = document.getElementById('sub-w-drill');
+      if (subEl) subEl.innerText = unlocked ? '-4.5 ВЫН' : '🔒';
+    } else if (w === 'makarov' || w === 'shotgun') {
+      const ammoEl = document.getElementById(`ammo-w-${w}`);
+      const wrapEl = document.getElementById(`wrap-w-${w}`);
+      const barEl = document.getElementById(`bar-w-${w}`);
+      if (ammoEl) {
+        if (!unlocked) {
+          ammoEl.innerText = '🔒';
+        } else if (player.reloadingWeapon === w) {
+          ammoEl.innerText = 'R...';
+        } else {
+          ammoEl.innerText = `${player.ammo[w].clip}/${player.ammo[w].reserve}`;
+        }
       }
-    });
-  }
+      if (wrapEl && barEl) {
+        if (player.reloadingWeapon === w && player.reloadMaxTimer > 0) {
+          wrapEl.style.display = 'block';
+          const pct = Math.round((1 - player.reloadTimer / player.reloadMaxTimer) * 100);
+          barEl.style.width = `${pct}%`;
+        } else {
+          wrapEl.style.display = 'none';
+        }
+      }
+    } else if (w === 'plasma') {
+      const ammoEl = document.getElementById('ammo-w-plasma');
+      const wrapEl = document.getElementById('wrap-w-plasma');
+      const barEl = document.getElementById('bar-w-plasma');
+      slotEl.classList.toggle('overheated', !!player.plasmaOverheated);
+      if (ammoEl) {
+        if (!unlocked) {
+          ammoEl.innerText = '🔒';
+        } else if (player.plasmaOverheated) {
+          ammoEl.innerText = 'КЛИН!';
+          ammoEl.style.color = '#ef4444';
+        } else {
+          ammoEl.innerText = `${Math.round(player.plasmaHeat)}%`;
+          ammoEl.style.color = player.plasmaHeat > 70 ? '#fb923c' : '#38bdf8';
+        }
+      }
+      if (wrapEl && barEl) {
+        if (unlocked && (player.plasmaHeat > 0 || player.plasmaOverheated)) {
+          wrapEl.style.display = 'block';
+          barEl.style.width = `${Math.round(player.plasmaHeat)}%`;
+        } else {
+          wrapEl.style.display = 'none';
+        }
+      }
+    }
+  });
 }
 
 function createParticles(x, y, color, count = 6) {
@@ -2365,7 +3097,6 @@ function addFloatingText(x, y, text, color) {
 }
 
 function spawnLootDrop(enemyOrX, yOpt) {
-  // Поддержка вызова spawnLootDrop(enemy) с полным учетом типа жабы и множителя района
   const isEnemyObj = (typeof enemyOrX === 'object' && enemyOrX !== null);
   const x = isEnemyObj ? enemyOrX.x : enemyOrX;
   const y = isEnemyObj ? enemyOrX.y : yOpt;
@@ -2374,39 +3105,46 @@ function spawnLootDrop(enemyOrX, yOpt) {
   const mult = dist.lootMult || 1.0;
 
   if (eType === 'brute') {
-    // 🟣 Жаба-Громила (Танк): гарантированный богатый 3D-дроп (Чермет + Бутылки + Припасы)
-    const scrapVal = Math.round((3 + Math.floor(Math.random() * 3)) * mult);
-    const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * mult);
+    const scrapVal = Math.round((2 + Math.floor(Math.random() * 3)) * mult);
+    const bottleVal = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
     spawn3DLootItem(x - 16, y - 6, 'scrap', scrapVal);
     spawn3DLootItem(x + 16, y - 6, 'bottle', bottleVal);
 
-    if (dist.tier >= 4 || Math.random() < 0.72) {
+    if (dist.id === 'cordon') {
+      spawn3DLootItem(x, y + 16, 'mil_parts', 1);
+    } else if (dist.id === 'nest') {
+      spawn3DLootItem(x - 12, y + 16, 'alien_core', 1);
+      if (Math.random() < 0.65) spawn3DLootItem(x + 14, y + 16, 'mil_parts', 1);
+    } else if (Math.random() < 0.55) {
       const supplyPool = ['vodka', 'stew', 'bandage'];
-      const chosenSupply = supplyPool[Math.floor(Math.random() * supplyPool.length)];
-      spawn3DLootItem(x, y + 16, chosenSupply, 1);
+      spawn3DLootItem(x, y + 16, supplyPool[Math.floor(Math.random() * supplyPool.length)], 1);
     }
   } else if (eType === 'sniper') {
-    // 🟢 Жаба-Снайпер: повышенный шанс на стеклотару + шанс на 3D-аптечку или тушёнку
     const bottleVal = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
     spawn3DLootItem(x - 10, y, 'bottle', bottleVal);
-    if (Math.random() < 0.45) {
-      spawn3DLootItem(x + 12, y + 6, Math.random() < 0.5 ? 'bandage' : 'stew', 1);
+    if (dist.id === 'nest' && Math.random() < 0.55) {
+      spawn3DLootItem(x + 12, y + 6, 'alien_core', 1);
+    } else if (dist.id === 'cordon' && Math.random() < 0.50) {
+      spawn3DLootItem(x + 12, y + 6, 'mil_parts', 1);
+    } else if (Math.random() < 0.42) {
+      spawn3DLootItem(x + 12, y + 6, Math.random() < 0.5 ? 'bandage' : 'ammo_9x18', 6);
     } else if (dist.id === 'garages') {
       spawn3DLootItem(x + 12, y + 6, 'scrap', Math.round(2 * mult));
     }
   } else {
-    // 🟡 Жаба-Пехотинец: базовый дроп по специализации района
     const r = Math.random();
-    const scrapBias = dist.id === 'garages' ? 0.78 : (dist.id === 'courtyards' ? 0.40 : 0.58);
+    const scrapBias = dist.id === 'garages' ? 0.78 : (dist.id === 'courtyards' ? 0.30 : 0.58);
     if (r < scrapBias) {
-      const val = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+      const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * (dist.id === 'courtyards' ? 0.8 : mult)));
       spawn3DLootItem(x, y, 'scrap', val);
     } else {
-      const val = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+      const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * mult));
       spawn3DLootItem(x, y, 'bottle', val);
     }
-    if (dist.tier >= 3 && Math.random() < 0.25) {
-      spawn3DLootItem(x + 14, y - 8, 'bandage', 1);
+    if (dist.id === 'cordon' && Math.random() < 0.28) {
+      spawn3DLootItem(x + 14, y - 8, 'mil_parts', 1);
+    } else if (dist.id === 'nest' && Math.random() < 0.30) {
+      spawn3DLootItem(x + 14, y - 8, 'alien_core', 1);
     }
   }
 }
@@ -2429,20 +3167,52 @@ function update() {
   mouseWorld.y = mouseScreen.y + camera.y;
 
   if (player.hasPerk('shaman_carpet') && player.hp < player.maxHp) {
-    player.hp = Math.min(player.maxHp, player.hp + 0.016);
+    player.hp = Math.min(player.maxHp, player.hp + 0.018);
   }
 
+  // Восстановление выносливости (медленнее, чтобы в бою на битах нужно было следить за дыханием и пить тушёнку!)
   if (!player.isRolling && player.stamina < player.maxStamina) {
-    player.stamina += 0.35;
+    const regenRate = player.hasPerk('slime_skin') ? 0.34 : 0.25;
+    player.stamina = Math.min(player.maxStamina, player.stamina + regenRate);
   }
-  
+
+  // Прогресс перезарядки огнестрельного оружия (ПМ и Обрез)
+  if (player.reloadingWeapon) {
+    player.reloadTimer--;
+    if (player.reloadTimer <= 0) {
+      const rw = player.reloadingWeapon;
+      const aState = player.ammo[rw];
+      const needed = aState.maxClip - aState.clip;
+      const loadCount = Math.min(needed, aState.reserve);
+      aState.clip += loadCount;
+      aState.reserve -= loadCount;
+      player.reloadingWeapon = null;
+      player.reloadTimer = 0;
+      SoundFX.reload();
+      addFloatingText(player.x, player.y - 34, `${aState.clip}/${aState.reserve} ГОТОВО!`, '#4ade80');
+    }
+  }
+
+  // Охлаждение и перегрев Трофейного Плазмагана
+  if (player.plasmaOverheated) {
+    player.plasmaOverheatTimer--;
+    player.plasmaHeat = Math.max(0, (player.plasmaOverheatTimer / 180) * 100);
+    if (player.plasmaOverheatTimer <= 0) {
+      player.plasmaOverheated = false;
+      player.plasmaHeat = 0;
+      addFloatingText(player.x, player.y - 34, currentLang === 'ru' ? '❄️ ПЛАЗМА ОСТЫЛА' : '❄️ PLASMA COOLED', '#38bdf8');
+    }
+  } else if (player.plasmaHeat > 0) {
+    player.plasmaHeat = Math.max(0, player.plasmaHeat - 0.36); // ~22% в секунду
+  }
+
   if (player.isDrunk) {
     player.drunkTimer--;
     if (player.drunkTimer <= 0) player.isDrunk = false;
   }
 
   let currentSpeed = player.speed;
-  if (player.hasPerk('slime_skin')) currentSpeed *= 1.2;
+  if (player.hasPerk('slime_skin')) currentSpeed *= 1.22;
 
   if (player.rollCooldown > 0) player.rollCooldown--;
   if (player.isRolling) {
@@ -2483,7 +3253,6 @@ function update() {
   player.x = Math.max(player.radius, Math.min(WORLD_WIDTH - player.radius, player.x));
   player.y = Math.max(player.radius, Math.min(WORLD_HEIGHT - player.radius, player.y));
 
-  // Плавный возврат отдачи камеры после выстрела
   cameraKickX *= 0.72;
   cameraKickY *= 0.72;
   if (Math.abs(cameraKickX) < 0.05) cameraKickX = 0;
@@ -2493,7 +3262,6 @@ function update() {
   camera.y = player.y - canvas.height / 2 + cameraKickY;
   player.angle = Math.atan2(mouseWorld.y - player.y, mouseWorld.x - player.x);
 
-  // Direction and aiming: follows mouse cursor (Twin-Stick / Top-Down Shooter)
   const angleDeg = (player.angle * 180 / Math.PI + 360) % 360;
   if (angleDeg > 230 && angleDeg < 310) {
     player.moveDir = 'up';
@@ -2538,7 +3306,6 @@ function update() {
     }
   }
 
-  // Магнитное притяжение 3D-лута (базовый радиус 58px, с Жабьим Языком — 185px)
   const pullRadius = player.hasPerk('tentacle_arm') ? 185 : 58;
   const pullSpeed = player.hasPerk('tentacle_arm') ? 5.5 : 3.2;
   for (let i = 0; i < lootItems.length; i++) {
@@ -2572,7 +3339,6 @@ function update() {
       }
     }
 
-    // Ионный след за плазменным сгустком
     if (b.weaponType === 'plasma' && (b.life % 2 === 0)) {
       particles.push({
         x: b.x - b.vx * 0.4 + (Math.random() - 0.5) * 4,
@@ -2610,7 +3376,6 @@ function update() {
         e.isAggroed = true;
         e.hitFlash = 5;
 
-        // Направленные брызги ихора и искры при пробитии брони жабы
         const hitAngle = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
         const bloodColor = e.type === 'brute' ? '#a855f7' : '#22c55e';
         spawnDirectionalSparks(b.x, b.y, hitAngle, 0.85, 5, b.weaponType === 'plasma' ? '#38bdf8' : '#fde047', 4, 10, 9);
@@ -2635,10 +3400,10 @@ function update() {
         if (player.hasPerk('car_battery')) {
           enemies.forEach(otherE => {
             if (otherE !== e && Math.hypot(e.x - otherE.x, e.y - otherE.y) < 140) {
-              otherE.hp -= 20;
+              otherE.hp -= 22;
               otherE.isAggroed = true;
               otherE.hitFlash = 5;
-              addFloatingText(otherE.x, otherE.y - 15, '-20 ⚡', '#38bdf8');
+              addFloatingText(otherE.x, otherE.y - 15, '-22 ⚡', '#38bdf8');
             }
           });
         }
@@ -2649,7 +3414,6 @@ function update() {
     }
   }
 
-  // Проверка гибели врагов от любого источника урона (пули, бур, электро-разряд, кувырок с дрелью)
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (enemies[i].hp <= 0) {
       handleEnemyKilled(i);
@@ -2664,7 +3428,6 @@ function update() {
     const dxP = player.x - e.x;
     const dyP = player.y - e.y;
 
-    // Спящий режим для далеких неагрессивных врагов за пределами экрана (экономит 90% CPU и кэша WebGL)
     if (!e.isAggroed && Math.abs(dxP) > activeSimRadius && Math.abs(dyP) > activeSimRadius) {
       continue;
     }
@@ -2713,7 +3476,9 @@ function update() {
         if (!checkBuildingCollision(e.x, ny, e.radius)) e.y = ny;
 
         if (distToPlayer < player.radius + e.radius && !player.isRolling) {
-          const dmg = e.type === 'brute' ? 1.4 : 0.6;
+          // Усиленный контактный урон по тирам зоны!
+          const tierMult = 1 + (e.tier || 1) * 0.22;
+          const dmg = (e.type === 'brute' ? 1.65 : 0.78) * tierMult;
           player.hp -= dmg;
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
@@ -2737,10 +3502,11 @@ function update() {
 
         e.shootCooldown--;
         if (e.shootCooldown <= 0) {
-          e.shootCooldown = 110;
+          e.shootCooldown = e.tier >= 3 ? 92 : 105;
           const muzX = e.x + Math.cos(angle) * 26;
           const muzY = e.y + Math.sin(angle) * 26 - 8;
-          const ebSpeed = 9.5;
+          const ebSpeed = e.tier >= 3 ? 10.8 : 9.6;
+          const shotDmg = e.tier >= 4 ? 38 : (e.tier === 3 ? 30 : 22);
           enemyBullets.push({
             x: muzX,
             y: muzY,
@@ -2748,7 +3514,7 @@ function update() {
             vy: Math.sin(angle) * ebSpeed,
             angle: angle,
             radius: 5,
-            damage: 20
+            damage: shotDmg
           });
           muzzleFlashes.push({
             x: muzX,
@@ -2796,7 +3562,7 @@ function update() {
     }
   }
 
-  // Подбор всех 5 типов 360° 3D-лута (scrap, bottle, stew, vodka, bandage)
+  // Подбор всех типов 3D-лута (scrap, bottle, mil_parts, alien_core, ammo_9x18, ammo_12g, stew, vodka, bandage)
   const pickupRadius = player.radius + 22;
   for (let i = lootItems.length - 1; i >= 0; i--) {
     const item = lootItems[i];
@@ -2804,32 +3570,42 @@ function update() {
       if (Math.hypot(item.x - player.x, item.y - player.y) < pickupRadius) {
         if (item.type === 'scrap') {
           player.resources.scrap += item.val;
-          addFloatingText(item.x, item.y - 16, `+${item.val} ⚙️`, '#38bdf8');
+          addFloatingText(item.x, item.y - 16, `+${item.val} Чермет`, '#38bdf8');
         } else if (item.type === 'bottle') {
           player.resources.bottles += item.val;
-          addFloatingText(item.x, item.y - 16, `+${item.val} 🍾`, '#22c55e');
+          addFloatingText(item.x, item.y - 16, `+${item.val} Стеклотара`, '#22c55e');
+        } else if (item.type === 'mil_parts') {
+          player.resources.mil_parts += item.val;
+          addFloatingText(item.x, item.y - 22, `+${item.val} ОРУЖЕЙНЫЕ ДЕТАЛИ!`, '#f87171');
+        } else if (item.type === 'alien_core') {
+          player.resources.alien_core += item.val;
+          addFloatingText(item.x, item.y - 22, `+${item.val} КВАКО-ЯДРО!`, '#c084fc');
+        } else if (item.type === 'ammo_9x18') {
+          player.ammo.makarov.reserve += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 9×18`, '#facc15');
+        } else if (item.type === 'ammo_12g') {
+          player.ammo.shotgun.reserve += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 12К`, '#fb923c');
         } else if (item.type === 'stew') {
           player.items.stew += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} 🥫 ТУШЁНКА`, '#fbbf24');
+          addFloatingText(item.x, item.y - 20, `+${item.val} ТУШЁНКА`, '#fbbf24');
         } else if (item.type === 'vodka') {
           player.items.vodka += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} 🍾 ВОДКА`, '#f59e0b');
+          addFloatingText(item.x, item.y - 20, `+${item.val} ВОДКА`, '#f59e0b');
         } else if (item.type === 'bandage') {
           player.items.bandage += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} 🩹 БИНТЫ`, '#4ade80');
+          addFloatingText(item.x, item.y - 20, `+${item.val} БИНТЫ`, '#4ade80');
         }
         lootItems.splice(i, 1);
       }
     }
   }
 
-  // Обновление дульных вспышек
   for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
     muzzleFlashes[i].life--;
     if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
   }
 
-  // Обновление гильз (падение на асфальт с отскоком)
   for (let i = shellCasings.length - 1; i >= 0; i--) {
     const sc = shellCasings[i];
     if (sc.z > 0 || sc.vz !== 0) {
@@ -2857,7 +3633,6 @@ function update() {
     if (sc.life <= 0) shellCasings.splice(i, 1);
   }
 
-  // Обновление частиц (искры, пороховой дым, брызги)
   for (let i = particles.length - 1; i >= 0; i--) {
     const p = particles[i];
     p.x += p.vx;
@@ -2891,14 +3666,41 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
     ctx.translate(mf.x, mf.y);
     ctx.rotate(mf.angle);
 
-    if (mf.type === 'shotgun') {
-      // 1. Отсвет выстрела на асфальте под дулом
+    if (mf.type === 'bat_slash') {
+      // Широкий росчерк удара битой с гвоздями
+      ctx.strokeStyle = `rgba(248, 250, 252, ${0.78 * t})`;
+      ctx.lineWidth = 4.5 * s;
+      ctx.beginPath();
+      ctx.arc(0, 0, 38 * s, -0.95, 0.95);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(239, 68, 68, ${0.65 * t})`;
+      ctx.lineWidth = 2.2 * s;
+      ctx.beginPath();
+      ctx.arc(4, 0, 44 * s, -0.82, 0.82);
+      ctx.stroke();
+
+    } else if (mf.type === 'makarov') {
+      // Компактная хлесткая вспышка пистолета Макарова 9х18
+      ctx.fillStyle = `rgba(251, 146, 60, ${0.88 * t})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -3 * s);
+      ctx.lineTo(22 * s, 0);
+      ctx.lineTo(0, 3 * s);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(3 * s, 0, 3.2 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (mf.type === 'shotgun') {
       ctx.fillStyle = `rgba(251, 146, 60, ${0.22 * t})`;
       ctx.beginPath();
       ctx.ellipse(16 * s, 0, 34 * s, 22 * s, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // 2. Боковые пороховые выбросы газов
       ctx.fillStyle = `rgba(234, 88, 12, ${0.82 * t})`;
       ctx.beginPath();
       ctx.moveTo(0, 0);
@@ -2908,7 +3710,6 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.closePath();
       ctx.fill();
 
-      // 3. Внешний длинный конус пламени из двустволки
       ctx.fillStyle = `rgba(249, 115, 22, ${0.92 * t})`;
       ctx.beginPath();
       ctx.moveTo(-2, -4 * s);
@@ -2921,7 +3722,6 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.closePath();
       ctx.fill();
 
-      // 4. Яркое раскалённое бело-желтое ядро вспышки
       ctx.fillStyle = `rgba(254, 240, 138, ${0.98 * t})`;
       ctx.beginPath();
       ctx.moveTo(0, -2.5 * s);
@@ -2938,7 +3738,6 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.fill();
 
     } else if (mf.type === 'plasma') {
-      // Электрическая дуговая вспышка Тесла-Коллайдера
       ctx.fillStyle = `rgba(6, 182, 212, ${0.32 * t})`;
       ctx.beginPath();
       ctx.arc(8 * s, 0, 22 * s, 0, Math.PI * 2);
@@ -2961,7 +3760,6 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.fill();
 
     } else if (mf.type === 'drill') {
-      // Вращающиеся стальные дуги бура при бурении
       ctx.strokeStyle = `rgba(250, 204, 21, ${0.85 * t})`;
       ctx.lineWidth = 3.0;
       ctx.beginPath();
@@ -2975,7 +3773,6 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.stroke();
 
     } else if (mf.type === 'sniper') {
-      // Токсичная вспышка снайперской винтовки жабы
       ctx.fillStyle = `rgba(132, 204, 22, ${0.88 * t})`;
       ctx.beginPath();
       ctx.moveTo(0, -3 * s);
@@ -3003,22 +3800,19 @@ function render() {
     ctx.translate(wobbleX, wobbleY);
   }
 
-  // Границы видимой области экрана (Frustum Culling) с запасом 120px под крупные 3D-модели
   const viewMinX = camera.x - 120;
   const viewMaxX = camera.x + canvas.width + 120;
   const viewMinY = camera.y - 120;
   const viewMaxY = camera.y + canvas.height + 120;
 
-  // 1-5. Высокодетализированный 2.5D мир Новохмуринска (асфальт, дворы, тротуары, разметка, здания, пропсы, магазин)
   if (window.environmentRenderer) {
     window.environmentRenderer.draw(ctx, camera, canvas.width, canvas.height, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
   } else {
-    // Fallback
     ctx.fillStyle = '#161b24';
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   }
 
-  // 5.5. Стреляные гильзы 12-го калибра и энергоячейки на асфальте
+  // 5.5. Стреляные гильзы 9х18 ПМ, 12-го калибра и энергоячейки на асфальте
   for (let i = 0; i < shellCasings.length; i++) {
     const sc = shellCasings[i];
     if (sc.x < viewMinX || sc.x > viewMaxX || sc.y < viewMinY || sc.y > viewMaxY) continue;
@@ -3038,8 +3832,13 @@ function render() {
       ctx.fillRect(-4, -1.6, 5.5, 3.2);
       ctx.fillStyle = '#eab308';
       ctx.fillRect(1.5, -1.6, 2.5, 3.2);
+    } else if (sc.type === 'makarov') {
+      // Латунная гильза 9х18 ПМ
+      ctx.fillStyle = '#eab308';
+      ctx.fillRect(-3.2, -1.3, 4.8, 2.6);
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(0.8, -1.3, 1.4, 2.6);
     } else {
-      // Классическая красная папковая/пластиковая гильза 12 калибра с латунным донцем
       ctx.fillStyle = '#dc2626';
       ctx.fillRect(-4.5, -1.8, 6.2, 3.6);
       ctx.fillStyle = '#facc15';

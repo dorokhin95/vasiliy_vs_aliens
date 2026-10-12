@@ -79,6 +79,8 @@ class ThreeCharacterManager {
     this.rollAction = null;
     this.activeActionName = '';
     this.recoil = 0;
+    this.swingTimer = 0;
+    this.swingDir = 1;
     this.rollAngle = 0;
     this.lastX = null;
     this.lastY = null;
@@ -86,6 +88,8 @@ class ThreeCharacterManager {
     this.lastRenderState = '';
 
     // Weapon Objects loaded from glTF
+    this.batObj = null;
+    this.makarovObj = null;
     this.shotgunObj = null;
     this.drillObj = null;
     this.plasmaObj = null;
@@ -101,7 +105,7 @@ class ThreeCharacterManager {
     }
 
     const loader = new THREE.GLTFLoader();
-    const modelUrl = 'assets/models/vasiliy.glb?v=1022';
+    const modelUrl = 'assets/models/vasiliy.glb?v=1026';
     loader.load(
       modelUrl,
       (gltf) => {
@@ -114,6 +118,23 @@ class ThreeCharacterManager {
         this.shotgunObj = this.model.getObjectByName('Vasiliy_Shotgun');
         this.drillObj = this.model.getObjectByName('Vasiliy_Drill');
         this.plasmaObj = this.model.getObjectByName('Vasiliy_Plasma');
+
+        // Load Spiked Bat (weapon_bat.glb) and Makarov PM (weapon_makarov.glb) into Vasily's hands
+        loader.load('assets/models/weapon_bat.glb?v=1026', (batGltf) => {
+          this.batObj = batGltf.scene;
+          this.batObj.position.set(-0.068, 1.24, 0.36);
+          this.batObj.rotation.set(-0.28, 0.15, 0);
+          this.model.add(this.batObj);
+          this.setWeapon(this.currentWeaponId || 'bat');
+        });
+
+        loader.load('assets/models/weapon_makarov.glb?v=1026', (pmGltf) => {
+          this.makarovObj = pmGltf.scene;
+          this.makarovObj.position.set(-0.068, 1.25, 0.54);
+          this.makarovObj.rotation.set(0, 0, 0);
+          this.model.add(this.makarovObj);
+          this.setWeapon(this.currentWeaponId || 'bat');
+        });
 
         // Texture filtering
         this.model.traverse((child) => {
@@ -153,11 +174,11 @@ class ThreeCharacterManager {
 
         this.rollPivot.add(this.model);
 
-        // Initial weapon setup (default shotgun)
-        this.setWeapon('shotgun');
+        // Initial weapon setup (default spiked bat)
+        this.setWeapon('bat');
 
         this.isLoaded = true;
-        console.log('[ThreeCharacter] Vasily Master Path A loaded with Walk, Idle & Roll animations!');
+        console.log('[ThreeCharacter] Vasily Master Path A loaded with Bat, Makarov, Drill, Shotgun & Plasma!');
       },
       undefined,
       (err) => console.error('[ThreeCharacter] Failed to load vasiliy.glb:', err)
@@ -187,6 +208,8 @@ class ThreeCharacterManager {
   }
 
   setWeapon(weaponId) {
+    if (this.batObj) this.batObj.visible = (weaponId === 'bat');
+    if (this.makarovObj) this.makarovObj.visible = (weaponId === 'makarov');
     if (this.shotgunObj) this.shotgunObj.visible = (weaponId === 'shotgun');
     if (this.drillObj) this.drillObj.visible = (weaponId === 'drill');
     if (this.plasmaObj) this.plasmaObj.visible = (weaponId === 'plasma');
@@ -205,8 +228,10 @@ class ThreeCharacterManager {
     this.lastY = player.y;
 
     // 1. Weapon Selection (hide weapon briefly during tight somersault roll so barrel doesn't poke ground)
-    const currentWeapon = player.currentWeapon || 'shotgun';
+    const currentWeapon = player.currentWeapon || 'bat';
     if (player.isRolling) {
+      if (this.batObj) this.batObj.visible = false;
+      if (this.makarovObj) this.makarovObj.visible = false;
       if (this.shotgunObj) this.shotgunObj.visible = false;
       if (this.drillObj) this.drillObj.visible = false;
       if (this.plasmaObj) this.plasmaObj.visible = false;
@@ -288,9 +313,24 @@ class ThreeCharacterManager {
       this.rollPivot.position.z = 0;
     }
 
-    // 4. Drill Vibration / Spin
+    // 4. Drill Vibration / Spin & Bat Melee Swing Animation
     if (currentWeapon === 'drill' && this.drillObj && !player.isRolling) {
       this.drillObj.rotation.z = Math.sin(Date.now() * 0.08) * 0.04;
+    }
+    if (this.batObj) {
+      if (this.swingTimer > 0 && !player.isRolling) {
+        this.swingTimer = Math.max(0, this.swingTimer - dt * 4.5);
+        const p = 1.0 - this.swingTimer; // 0 -> 1
+        // Wide horizontal cleave arc + torso twist
+        const swingArc = Math.sin(p * Math.PI) * 1.35 * this.swingDir;
+        this.batObj.rotation.set(-0.12, 0.15 + swingArc, 0.35 * Math.sin(p * Math.PI));
+        this.rollPivot.rotation.y = swingArc * 0.38;
+      } else {
+        this.batObj.rotation.set(-0.28, 0.15, 0);
+        this.rollPivot.rotation.y = 0;
+      }
+    } else {
+      this.rollPivot.rotation.y = 0;
     }
 
     // Render to offscreen canvas
@@ -301,14 +341,22 @@ class ThreeCharacterManager {
     this.recoil = Math.min(1.4, strength);
   }
 
+  triggerSwing() {
+    this.swingTimer = 1.0;
+    this.swingDir = -this.swingDir;
+    this.recoil = 0.55;
+  }
+
   /**
    * Calculates the exact screen position (x, y) of the weapon muzzle in 2.5D space.
    * Projects the 3D tip position through the orthographic camera.
    */
   getMuzzlePosition(player) {
-    const weaponId = player.currentWeapon || 'shotgun';
+    const weaponId = player.currentWeapon || 'bat';
     
     // Model tip coordinates in glTF local space (Blender coords converted to glTF):
+    // bat:     x = -0.068, y = 1.240 (height), z = 1.050 (forward)
+    // makarov: x = -0.068, y = 1.295 (height), z = 0.880 (forward)
     // shotgun: x = -0.068, y = 1.264 (height), z = 1.090 (forward)
     // drill:   x = -0.090, y = 1.215 (height), z = 1.137 (forward)
     // plasma:  x = -0.065, y = 1.215 (height), z = 1.140 (forward)
@@ -316,7 +364,15 @@ class ThreeCharacterManager {
     let tipY = 1.264;
     let tipZ = 1.090;
 
-    if (weaponId === 'drill') {
+    if (weaponId === 'bat') {
+      tipX = -0.068;
+      tipY = 1.240;
+      tipZ = 1.050;
+    } else if (weaponId === 'makarov') {
+      tipX = -0.068;
+      tipY = 1.295;
+      tipZ = 0.880;
+    } else if (weaponId === 'drill') {
       tipX = -0.090;
       tipY = 1.215;
       tipZ = 1.137;

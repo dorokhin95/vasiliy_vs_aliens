@@ -141,18 +141,32 @@
       right: 15px;
       display: flex;
       gap: 14px;
-      background: rgba(15, 20, 25, 0.88);
-      padding: 8px 14px;
+      background: rgba(12, 16, 24, 0.92);
+      padding: 7px 14px;
       border-radius: 8px;
       border: 1px solid #334155;
-      font-weight: bold;
+      font-weight: 800;
       font-size: 14px;
       z-index: 10;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.65);
     }
     .resource-item {
       display: flex;
       align-items: center;
       gap: 6px;
+    }
+    .res-icon {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8));
+    }
+    .inline-res-icon {
+      width: 18px;
+      height: 18px;
+      object-fit: contain;
+      vertical-align: middle;
+      margin: 0 2px;
     }
 
     /* Language Switcher */
@@ -194,7 +208,7 @@
     /* Interaction Prompt */
     .interact-prompt {
       position: absolute;
-      bottom: 95px;
+      bottom: 112px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(15, 23, 42, 0.95);
@@ -217,64 +231,136 @@
     /* Bottom Hotbar */
     .hotbar {
       position: absolute;
-      bottom: 20px;
+      bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 12px;
-      background: rgba(12, 16, 22, 0.92);
+      gap: 9px;
+      background: linear-gradient(180deg, rgba(15, 21, 30, 0.95), rgba(9, 13, 19, 0.97));
       padding: 8px 14px;
-      border-radius: 10px;
+      border-radius: 12px;
       border: 2px solid #334155;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.85), inset 0 1px 0 rgba(255,255,255,0.06);
       z-index: 10;
     }
     .hotbar-slot {
       display: flex;
       flex-direction: column;
       align-items: center;
-      background: #1e293b;
-      padding: 6px 12px;
-      border-radius: 6px;
+      justify-content: space-between;
+      background: linear-gradient(180deg, #1e293b 0%, #131b29 100%);
+      padding: 6px 10px 5px;
+      border-radius: 8px;
       border: 1px solid #475569;
-      min-width: 80px;
+      min-width: 82px;
+      height: 82px;
       cursor: pointer;
       position: relative;
+      transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .hotbar-slot:hover {
+      border-color: #64748b;
+      transform: translateY(-2px);
+    }
+    .hotbar-slot.locked-weapon {
+      opacity: 0.52;
+      filter: grayscale(0.65);
+      border-style: dashed;
+      border-color: #334155;
     }
     .slot-key {
-      font-size: 11px;
+      position: absolute;
+      top: 4px;
+      left: 6px;
+      font-size: 10px;
       color: #94a3b8;
-      font-weight: bold;
+      font-weight: 800;
     }
-    .slot-icon {
-      font-size: 22px;
-      margin: 2px 0;
+    .slot-img {
+      width: 44px;
+      height: 44px;
+      object-fit: contain;
+      margin-top: 8px;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.75));
+      pointer-events: none;
     }
     .slot-name {
       font-size: 11px;
-      font-weight: bold;
+      font-weight: 800;
       color: #f1f5f9;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
     }
     .slot-count {
       position: absolute;
       top: 4px;
-      right: 6px;
-      font-size: 11px;
+      right: 5px;
+      font-size: 10px;
       background: #0284c7;
       color: #fff;
       padding: 1px 6px;
       border-radius: 8px;
-      font-weight: bold;
+      font-weight: 800;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.6);
+    }
+    .slot-ammo {
+      position: absolute;
+      top: 4px;
+      right: 5px;
+      font-size: 10px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #475569;
+      color: #facc15;
+      padding: 1px 5px;
+      border-radius: 6px;
+      font-weight: 800;
+    }
+    .slot-sub {
+      position: absolute;
+      top: 4px;
+      right: 5px;
+      font-size: 9px;
+      background: rgba(15, 23, 42, 0.85);
+      color: #fb923c;
+      padding: 1px 4px;
+      border-radius: 5px;
+      font-weight: 800;
+    }
+    .slot-bar-wrap {
+      position: absolute;
+      bottom: 20px;
+      left: 8px;
+      right: 8px;
+      height: 3px;
+      background: rgba(0, 0, 0, 0.65);
+      border-radius: 2px;
+      overflow: hidden;
+      display: none;
+    }
+    .slot-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: #38bdf8;
+      transition: width 0.08s linear;
+    }
+    .slot-bar-fill.heat-fill {
+      background: linear-gradient(90deg, #38bdf8, #f97316, #ef4444);
     }
 
     .hotbar-slot.active {
       border-color: #38bdf8;
-      background: #0f2744;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+      background: linear-gradient(180deg, #133258 0%, #0b1d36 100%);
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+    }
+    .hotbar-slot.overheated {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 16px rgba(239, 68, 68, 0.7) !important;
     }
     .hotbar-divider {
       width: 2px;
       background: #334155;
-      margin: 0 4px;
+      margin: 4px 2px;
+      border-radius: 1px;
     }
 
     /* Shop & Workbench Modal */
@@ -293,10 +379,10 @@
       background: #151922;
       border: 2px solid #3b82f6;
       border-radius: 12px;
-      padding: 24px;
-      max-width: 820px;
+      padding: 22px;
+      max-width: 900px;
       width: 100%;
-      max-height: 90vh;
+      max-height: 92vh;
       overflow-y: auto;
       box-shadow: 0 0 40px rgba(59, 130, 246, 0.3);
       display: flex;
@@ -304,17 +390,33 @@
       gap: 14px;
     }
     .shop-header {
-      text-align: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
     }
     .shop-title {
-      font-size: 24px;
+      font-size: 22px;
       color: #60a5fa;
       font-weight: 800;
     }
     .shop-sub {
       color: #94a3b8;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    .shop-wallet {
+      display: flex;
+      gap: 12px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-weight: 800;
       font-size: 13px;
-      margin-top: 4px;
     }
     
     /* Shop Tabs */
@@ -333,11 +435,89 @@
       cursor: pointer;
       font-weight: bold;
       font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .tab-btn.active {
       background: #2563eb;
       border-color: #60a5fa;
       color: #fff;
+    }
+
+    /* Arsenal & Supplies Grid */
+    .arsenal-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .shop-card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: space-between;
+    }
+    .shop-card.owned {
+      border-color: #22c55e;
+      background: rgba(34, 197, 94, 0.08);
+    }
+    .shop-card-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .shop-card-img {
+      width: 54px;
+      height: 54px;
+      object-fit: contain;
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 4px;
+      border: 1px solid #334155;
+    }
+    .shop-card-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+    .shop-card-desc {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+      line-height: 1.35;
+    }
+    .shop-card-zone {
+      font-size: 10px;
+      color: #fbbf24;
+      margin-top: 3px;
+      font-weight: 700;
+    }
+    .shop-buy-btn {
+      background: #2563eb;
+      border: 1px solid #60a5fa;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+      min-width: 135px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .shop-buy-btn:hover:not(:disabled) {
+      background: #3b82f6;
+    }
+    .shop-buy-btn:disabled {
+      background: #334155;
+      border-color: #475569;
+      color: #94a3b8;
+      cursor: not-allowed;
+      opacity: 0.65;
     }
 
     /* Tree Sections */
@@ -395,6 +575,10 @@
       font-size: 11px;
       font-weight: bold;
       color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     .perk-lock-warn {
       font-size: 10px;
@@ -421,7 +605,7 @@
     }
 
     .shop-close-btn {
-      margin-top: 10px;
+      margin-top: 6px;
       background: #475569;
       border: none;
       padding: 10px;
@@ -523,49 +707,87 @@
     <!-- Language Selector -->
     <button class="lang-btn" id="btn-lang">RU / EN</button>
 
-    <!-- Top Right Resources -->
+    <!-- Top Right Resources (4 Zone Resources with Real PNG Renders) -->
     <div class="resources">
-      <div class="resource-item">⚙️ <span id="res-scrap">0</span></div>
-      <div class="resource-item">🍾 <span id="res-bottles">0</span></div>
+      <div class="resource-item" title="Стеклотара (Дворы)">
+        <img class="res-icon" src="assets/sprites/loot/loot_bottle.png?v=1026" alt="Стеклотара">
+        <span id="res-bottles">0</span>
+      </div>
+      <div class="resource-item" title="Чермет (Гаражи и Теплосеть)">
+        <img class="res-icon" src="assets/sprites/loot/loot_scrap.png?v=1026" alt="Чермет">
+        <span id="res-scrap">0</span>
+      </div>
+      <div class="resource-item" title="Оружейные детали (Военный Кордон)">
+        <img class="res-icon" src="assets/sprites/loot/loot_mil_parts.png?v=1026" alt="Детали">
+        <span id="res-mil-parts" style="color:#f87171;">0</span>
+      </div>
+      <div class="resource-item" title="Квако-ядра (Квако-Гнёзда)">
+        <img class="res-icon" src="assets/sprites/loot/loot_alien_core.png?v=1026" alt="Квако-ядра">
+        <span id="res-alien-core" style="color:#c084fc;">0</span>
+      </div>
     </div>
 
     <!-- Interaction Prompt Hint -->
     <div id="interact-prompt" class="interact-prompt">[E] Обыскать</div>
 
-    <!-- Bottom Hotbar (Consumables & Modular Weapons) -->
-    <div class="hotbar">
-      <div class="hotbar-slot" onclick="useItem('vodka')">
+    <!-- Bottom Hotbar (Real PNG Renders for Consumables & 5 Weapons) -->
+    <div class="hotbar" id="hotbar">
+      <div class="hotbar-slot" onclick="useItem('vodka')" title="Водка [1]: режим берсерка (+урон)">
         <span class="slot-key">[1]</span>
-        <span class="slot-icon">🍾</span>
+        <img class="slot-img" src="assets/sprites/loot/loot_vodka.png?v=1026" alt="Водка">
         <span class="slot-name" id="lbl-vodka">Водка</span>
         <span class="slot-count" id="count-vodka">0</span>
       </div>
-      <div class="hotbar-slot" onclick="useItem('stew')">
+      <div class="hotbar-slot" onclick="useItem('stew')" title="Тушёнка [2]: +65 Выносливости">
         <span class="slot-key">[2]</span>
-        <span class="slot-icon">🥫</span>
+        <img class="slot-img" src="assets/sprites/loot/loot_stew.png?v=1026" alt="Тушенка">
         <span class="slot-name" id="lbl-stew">Тушенка</span>
         <span class="slot-count" id="count-stew">0</span>
       </div>
-      <div class="hotbar-slot" onclick="useItem('bandage')">
+      <div class="hotbar-slot" onclick="useItem('bandage')" title="Бинты [3]: +45 Здоровья">
         <span class="slot-key">[3]</span>
-        <span class="slot-icon">🩹</span>
+        <img class="slot-img" src="assets/sprites/loot/loot_bandage.png?v=1026" alt="Бинты">
         <span class="slot-name" id="lbl-bandage">Бинты</span>
         <span class="slot-count" id="count-bandage">0</span>
       </div>
+
       <div class="hotbar-divider"></div>
-      <div class="hotbar-slot active" id="slot-w-shotgun" onclick="switchWeapon('shotgun')">
+
+      <div class="hotbar-slot active" id="slot-w-bat" onclick="switchWeapon('bat')" title="Бита с гвоздями [4]: тратит 18 выносливости за удар">
         <span class="slot-key">[4]</span>
-        <span class="slot-icon">💥</span>
-        <span class="slot-name" id="lbl-w-shotgun">Обрез</span>
+        <span class="slot-sub" id="sub-w-bat">-18 ВЫН</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_bat.png?v=1026" alt="Бита">
+        <span class="slot-name" id="lbl-w-bat">Бита</span>
       </div>
-      <div class="hotbar-slot" id="slot-w-drill" onclick="switchWeapon('drill')">
+
+      <div class="hotbar-slot locked-weapon" id="slot-w-makarov" onclick="switchWeapon('makarov')" title="Пистолет Макарова ПМ [5]: магазин 8 патр. 9х18, R — перезарядка">
         <span class="slot-key">[5]</span>
-        <span class="slot-icon">🔩</span>
+        <span class="slot-ammo" id="ammo-w-makarov">🔒</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_makarov.png?v=1026" alt="ПМ">
+        <div class="slot-bar-wrap" id="wrap-w-makarov"><div class="slot-bar-fill" id="bar-w-makarov"></div></div>
+        <span class="slot-name" id="lbl-w-makarov">ПМ 9×18</span>
+      </div>
+
+      <div class="hotbar-slot locked-weapon" id="slot-w-drill" onclick="switchWeapon('drill')" title="Ударная дрель ИЭ-1035 [6]: бурит броню, тратит выносливость">
+        <span class="slot-key">[6]</span>
+        <span class="slot-sub" id="sub-w-drill">🔒</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_drill.png?v=1026" alt="Дрель">
         <span class="slot-name" id="lbl-w-drill">Дрель</span>
       </div>
-      <div class="hotbar-slot" id="slot-w-plasma" onclick="switchWeapon('plasma')">
-        <span class="slot-key">[6]</span>
-        <span class="slot-icon">⚡</span>
+
+      <div class="hotbar-slot locked-weapon" id="slot-w-shotgun" onclick="switchWeapon('shotgun')" title="Дедовский Обрез 12к [7]: 2 ствола картечи, R — перезарядка">
+        <span class="slot-key">[7]</span>
+        <span class="slot-ammo" id="ammo-w-shotgun">🔒</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_shotgun.png?v=1026" alt="Обрез">
+        <div class="slot-bar-wrap" id="wrap-w-shotgun"><div class="slot-bar-fill" id="bar-w-shotgun"></div></div>
+        <span class="slot-name" id="lbl-w-shotgun">Обрез</span>
+      </div>
+
+      <div class="hotbar-slot locked-weapon" id="slot-w-plasma" onclick="switchWeapon('plasma')" title="Трофейный Плазмаган [8]: бесконечный боезапас, перегревается при 100%">
+        <span class="slot-key">[8]</span>
+        <span class="slot-ammo" id="ammo-w-plasma">🔒</span>
+        <img class="slot-img" src="assets/sprites/weapons/weapon_plasma.png?v=1026" alt="Плазма">
+        <div class="slot-bar-wrap" id="wrap-w-plasma"><div class="slot-bar-fill heat-fill" id="bar-w-plasma"></div></div>
         <span class="slot-name" id="lbl-w-plasma">Плазма</span>
       </div>
     </div>
@@ -574,30 +796,44 @@
     <div id="shop-modal" class="shop-modal">
       <div class="shop-content">
         <div class="shop-header">
-          <div class="shop-title" id="shop-title">ЛАВКА И ВЕРСТАК «У МИХАЛЫЧА»</div>
-          <div class="shop-sub" id="shop-sub">Сдавай вторсырье, закупай расходники и прокачивай Василия!</div>
+          <div>
+            <div class="shop-title" id="shop-title">ЛАВКА И ВЕРСТАК «У МИХАЛЫЧА»</div>
+            <div class="shop-sub" id="shop-sub">Покупай оружие, патроны, припасы и собирай армейские/инопланетные модификации!</div>
+          </div>
+          <div class="shop-wallet">
+            <div class="resource-item"><img class="res-icon" src="assets/sprites/loot/loot_bottle.png?v=1026"><span id="shop-res-bottles">0</span></div>
+            <div class="resource-item"><img class="res-icon" src="assets/sprites/loot/loot_scrap.png?v=1026"><span id="shop-res-scrap">0</span></div>
+            <div class="resource-item"><img class="res-icon" src="assets/sprites/loot/loot_mil_parts.png?v=1026"><span id="shop-res-mil" style="color:#f87171;">0</span></div>
+            <div class="resource-item"><img class="res-icon" src="assets/sprites/loot/loot_alien_core.png?v=1026"><span id="shop-res-core" style="color:#c084fc;">0</span></div>
+          </div>
         </div>
 
         <div class="shop-tabs">
-          <button class="tab-btn active" id="tab-btn-supplies" onclick="switchShopTab('supplies')">🥫 Припасы</button>
-          <button class="tab-btn" id="tab-btn-upgrades" onclick="switchShopTab('upgrades')">🧬 Ветки прокачки</button>
+          <button class="tab-btn active" id="tab-btn-weapons" onclick="switchShopTab('weapons')">
+            <img class="inline-res-icon" src="assets/sprites/weapons/weapon_makarov.png?v=1026">
+            <span id="lbl-tab-weapons">Арсенал и Патроны</span>
+          </button>
+          <button class="tab-btn" id="tab-btn-supplies" onclick="switchShopTab('supplies')">
+            <img class="inline-res-icon" src="assets/sprites/loot/loot_stew.png?v=1026">
+            <span id="lbl-tab-supplies">Припасы</span>
+          </button>
+          <button class="tab-btn" id="tab-btn-upgrades" onclick="switchShopTab('upgrades')">
+            <img class="inline-res-icon" src="assets/sprites/loot/loot_alien_core.png?v=1026">
+            <span id="lbl-tab-upgrades">Ветки прокачки</span>
+          </button>
+        </div>
+
+        <!-- Weapons & Ammo Tab -->
+        <div id="shop-view-weapons">
+          <div class="arsenal-grid" id="arsenal-container">
+            <!-- Dynamically populated with PNG weapon & ammo cards -->
+          </div>
         </div>
 
         <!-- Supplies Tab -->
-        <div id="shop-view-supplies">
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            <button class="tab-btn" style="display:flex; justify-content:space-between; padding:12px;" id="btn-buy-bandage" onclick="buyItem('bandage', 3)">
-              <span>🩹 <span id="shop-txt-bandage">Бинты (+45 HP)</span></span>
-              <span>3 🍾</span>
-            </button>
-            <button class="tab-btn" style="display:flex; justify-content:space-between; padding:12px;" id="btn-buy-stew" onclick="buyItem('stew', 4)">
-              <span>🥫 <span id="shop-txt-stew">Тушенка (+60 Вынослив.)</span></span>
-              <span>4 🍾</span>
-            </button>
-            <button class="tab-btn" style="display:flex; justify-content:space-between; padding:12px;" id="btn-buy-vodka" onclick="buyItem('vodka', 5)">
-              <span>🍾 <span id="shop-txt-vodka">Водка (+Урон берсерка)</span></span>
-              <span>5 🍾</span>
-            </button>
+        <div id="shop-view-supplies" style="display:none;">
+          <div class="arsenal-grid" id="supplies-container">
+            <!-- Dynamically populated with PNG supply cards -->
           </div>
         </div>
 
@@ -621,20 +857,20 @@
       <div class="controls-hint">
         <strong id="menu-ctrl-title">УПРАВЛЕНИЕ:</strong><br>
         <span id="menu-ctrl-move">WASD — Передвижение по городу</span> | 
-        <span id="menu-ctrl-aim">Мышь — Прицеливание и Огонь</span><br>
+        <span id="menu-ctrl-aim">ЛКМ — Удар битой / Стрельба | R — Перезарядка</span><br>
         <span id="menu-ctrl-roll">ПРОБЕЛ — Перекат (тратит выносливость)</span> | 
-        <span id="menu-ctrl-interact">E — Обыскать ящик / Лавка Михалыча</span><br>
-        <span id="menu-ctrl-items">1, 2, 3 — Расходники | Q / 4, 5, 6 — Смена оружия (Обрез / Дрель / Плазма)</span>
+        <span id="menu-ctrl-interact">E — Обыскать тайник / Лавка Михалыча</span><br>
+        <span id="menu-ctrl-items">1, 2, 3 — Расходники | Q / 4, 5, 6, 7, 8 — Оружие (Бита / ПМ / Дрель / Обрез / Плазма)</span>
       </div>
     </div>
   </div>
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1025"></script>
-  <script src="src/three_character.js?v=1025"></script>
-  <script src="src/three_enemies.js?v=1025"></script>
-  <script src="src/three_props.js?v=1025"></script>
-  <script src="src/game.js?v=1025"></script>
+  <script src="src/environment.js?v=1026"></script>
+  <script src="src/three_character.js?v=1026"></script>
+  <script src="src/three_enemies.js?v=1026"></script>
+  <script src="src/three_props.js?v=1026"></script>
+  <script src="src/game.js?v=1026"></script>
 </body>
 </html>
