@@ -1010,8 +1010,12 @@ let enemies = [];
 let bullets = [];
 let enemyBullets = [];
 let particles = [];
+let muzzleFlashes = [];
+let shellCasings = [];
 let floatingTexts = [];
 let lootItems = [];
+let cameraKickX = 0;
+let cameraKickY = 0;
 
 // --- СИСТЕМА РАЙОНОВ НОВОХМУРИНСКА И МАТРИЦА ЗАВИСИМОСТЕЙ (TIER 0 -> TIER 4) ---
 const DISTRICTS = {
@@ -1115,8 +1119,12 @@ function generateWorld() {
   bullets = [];
   enemyBullets = [];
   particles = [];
+  muzzleFlashes = [];
+  shellCasings = [];
   floatingTexts = [];
   lootItems = [];
+  cameraKickX = 0;
+  cameraKickY = 0;
 
   roads.push({ x: 0, y: 1900, w: WORLD_WIDTH, h: 200 });
   roads.push({ x: 1900, y: 0, w: 200, h: WORLD_HEIGHT });
@@ -1855,11 +1863,186 @@ window.togglePerkDebug = function(perkId) {
   updateHUD();
 };
 
+// --- ПРОЦЕДУРНЫЙ АУДИО-СИНТЕЗАТОР ВЫСТРЕЛОВ (WebAudio API, 0 внешних файлов) ---
+const SoundFX = {
+  ctx: null,
+  noiseBuf: null,
+  ensure() {
+    if (!this.ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      this.ctx = new AC();
+      const sr = this.ctx.sampleRate;
+      const buf = this.ctx.createBuffer(1, sr * 0.5, sr);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+      this.noiseBuf = buf;
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().catch(() => {});
+    }
+    return this.ctx;
+  },
+  shotgun() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+
+    // 1. Тяжелый пороховой хлопок (White Noise -> Bandpass/Lowpass)
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2200, now);
+    filter.frequency.exponentialRampToValueAtTime(160, now + 0.24);
+    const nGain = ac.createGain();
+    nGain.gain.setValueAtTime(0.42, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    nSrc.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ac.destination);
+    nSrc.start(now);
+    nSrc.stop(now + 0.26);
+
+    // 2. Низкочастотный удар в грудь (Sub-bass punch)
+    const osc = ac.createOscillator();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(145, now);
+    osc.frequency.exponentialRampToValueAtTime(34, now + 0.16);
+    const oGain = ac.createGain();
+    oGain.gain.setValueAtTime(0.45, now);
+    oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    osc.connect(oGain);
+    oGain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  },
+  plasma() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+
+    // Высоковольтный импульс Тесла-коллайдера
+    const osc = ac.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(980, now);
+    osc.frequency.exponentialRampToValueAtTime(190, now + 0.13);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.14);
+  },
+  drill() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+
+    // Рёв промышленного перфоратора и скрежет металла
+    const osc = ac.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(95, now);
+    osc.frequency.linearRampToValueAtTime(140, now + 0.08);
+    osc.frequency.linearRampToValueAtTime(80, now + 0.16);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.20, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.18);
+  },
+  ricochet() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    const startFreq = 1800 + Math.random() * 900;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(420, now + 0.06);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + 0.07);
+  }
+};
+
+function spawnDirectionalSparks(x, y, baseAngle, spread, count, color, speedMin = 6, speedMax = 14, life = 14) {
+  for (let i = 0; i < count; i++) {
+    const a = baseAngle + (Math.random() - 0.5) * spread;
+    const spd = speedMin + Math.random() * (speedMax - speedMin);
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd,
+      radius: 1.5 + Math.random() * 1.5,
+      color: Math.random() < 0.35 ? '#ffffff' : color,
+      type: 'spark',
+      drag: 0.88,
+      life: Math.floor(life * (0.7 + Math.random() * 0.5)),
+      maxLife: life
+    });
+  }
+}
+
+function spawnGunpowderSmoke(x, y, baseAngle, count = 5) {
+  for (let i = 0; i < count; i++) {
+    const a = baseAngle + (Math.random() - 0.5) * 0.55;
+    const spd = 1.2 + Math.random() * 3.4;
+    const maxL = 22 + Math.floor(Math.random() * 14);
+    particles.push({
+      x: x + Math.cos(a) * (4 + i * 3),
+      y: y + Math.sin(a) * (4 + i * 3),
+      vx: Math.cos(a) * spd,
+      vy: Math.sin(a) * spd - 0.25,
+      radius: 5 + Math.random() * 4,
+      color: i % 2 === 0 ? '#cbd5e1' : '#94a3b8',
+      type: 'smoke',
+      drag: 0.92,
+      life: maxL,
+      maxLife: maxL
+    });
+  }
+}
+
+function spawnShellCasing(x, y, weaponAngle, shellType = 'shotgun') {
+  // Выброс гильзы вправо-назад от казённика
+  const ejectAngle = weaponAngle + Math.PI * (0.55 + (Math.random() - 0.5) * 0.22);
+  const spd = 2.4 + Math.random() * 2.0;
+  shellCasings.push({
+    x: x - Math.cos(weaponAngle) * 16,
+    y: y - Math.sin(weaponAngle) * 16,
+    vx: Math.cos(ejectAngle) * spd,
+    vy: Math.sin(ejectAngle) * spd,
+    z: 14,
+    vz: 2.2 + Math.random() * 1.4,
+    rot: weaponAngle + Math.random() * Math.PI,
+    vRot: (Math.random() - 0.5) * 0.45,
+    type: shellType,
+    life: 210,
+    maxLife: 210
+  });
+  if (shellCasings.length > 45) {
+    shellCasings.shift();
+  }
+}
+
 function shootPlayerWeapon() {
   if (shootCooldown > 0) return;
-  if (window.threeCharacter) window.threeCharacter.triggerRecoil();
 
   const wKey = player.currentWeapon || 'shotgun';
+  if (window.threeCharacter) {
+    window.threeCharacter.triggerRecoil(wKey === 'shotgun' ? 1.25 : (wKey === 'plasma' ? 0.7 : 0.45));
+  }
 
   // Exact 2.5D Muzzle Position projected from 3D weapon model
   let muzzle = null;
@@ -1875,13 +2058,27 @@ function shootPlayerWeapon() {
   }
 
   if (wKey === 'drill') {
-    // 1. Рука-перфоратор: ближний секторный удар шнеком
-    shootCooldown = 18;
-    const drillReach = 85;
+    // 1. Рука-перфоратор: ближний секторный удар вращающимся шнеком + сноп искр болгарки
+    shootCooldown = 16;
+    const drillReach = 88;
+    SoundFX.drill();
 
-    createParticles(muzzle.x, muzzle.y, '#eab308', 14);
+    cameraKickX += (Math.random() - 0.5) * 3.0;
+    cameraKickY += (Math.random() - 0.5) * 3.0;
 
-    let hitCount = 0;
+    muzzleFlashes.push({
+      x: muzzle.x,
+      y: muzzle.y,
+      angle: player.angle,
+      type: 'drill',
+      life: 6,
+      maxLife: 6,
+      scale: 1.0
+    });
+
+    // Сноп тангенциальных раскаленных искр от бура
+    spawnDirectionalSparks(muzzle.x, muzzle.y, player.angle, 1.35, 14, '#fbbf24', 5, 13, 13);
+
     enemies.forEach(e => {
       const dist = Math.hypot(e.x - player.x, e.y - (player.y - 20));
       if (dist < drillReach + e.radius) {
@@ -1890,12 +2087,13 @@ function shootPlayerWeapon() {
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         angleDiff = Math.abs(angleDiff);
 
-        if (angleDiff < 1.0) { // В конусе удара
+        if (angleDiff < 1.05) { // В конусе удара шнека
           const dmg = (player.baseDamage + 25) * (player.isDrunk ? 1.8 : 1.0);
           e.hp -= dmg;
           e.isAggroed = true;
-          hitCount++;
-          createParticles(e.x, e.y, '#f59e0b', 8);
+          e.hitFlash = 6;
+          spawnDirectionalSparks(e.x, e.y - 8, toEnemyAngle, 1.1, 10, '#f97316', 5, 12, 12);
+          createParticles(e.x, e.y, '#22c55e', 6);
           addFloatingText(e.x, e.y - 20, `-${Math.round(dmg)} 💥 БУР`, '#eab308');
         }
       }
@@ -1904,54 +2102,136 @@ function shootPlayerWeapon() {
   }
 
   if (wKey === 'plasma') {
-    // 2. Кустарный плазмомёт: высокоскоростной сгусток плазмы из дульных электродов
+    // 2. Кустарный плазмомёт «Тесла-Коллайдер»: продольный плазменный разряд с электро-дугой
     shootCooldown = 9;
-    let dmg = (player.baseDamage * 0.9);
+    SoundFX.plasma();
+
+    let dmg = (player.baseDamage * 0.92);
     let isCrit = Math.random() < player.critChance;
     if (isCrit) dmg *= player.critMult;
 
-    const angle = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.2 : 0.02);
+    const angle = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.18 : 0.025);
+    const speed = 22;
+
+    cameraKickX -= Math.cos(angle) * 1.8;
+    cameraKickY -= Math.sin(angle) * 1.8;
+
+    muzzleFlashes.push({
+      x: muzzle.x,
+      y: muzzle.y,
+      angle: angle,
+      type: 'plasma',
+      life: 3,
+      maxLife: 3,
+      scale: 1.0 + Math.random() * 0.2
+    });
 
     bullets.push({
       x: muzzle.x,
       y: muzzle.y,
-      vx: Math.cos(angle) * 16,
-      vy: Math.sin(angle) * 16,
-      radius: 5,
+      prevX: muzzle.x,
+      prevY: muzzle.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      angle: angle,
+      speed: speed,
+      drag: 1.0,
+      radius: 5.5,
       damage: dmg,
       isCrit: isCrit,
-      color: '#38bdf8'
+      weaponType: 'plasma',
+      trailLen: 34,
+      life: 44,
+      maxLife: 44,
+      color: isCrit ? '#f43f5e' : '#38bdf8'
     });
 
-    createParticles(muzzle.x, muzzle.y, '#06b6d4', 8);
+    spawnDirectionalSparks(muzzle.x, muzzle.y, angle, 0.65, 7, '#38bdf8', 5, 11, 10);
+    if (Math.random() < 0.5) {
+      spawnShellCasing(muzzle.x, muzzle.y, player.angle, 'plasma');
+    }
     return;
   }
 
-  // 3. Обрез двустволки: картечный разлет из спаренных стволов
-  shootCooldown = 28;
-  const pellets = 4;
-  const basePelletDmg = (player.baseDamage * 0.65) * (player.isDrunk ? 2.0 : 1.0);
+  // 3. Обрез двустволки 12-го калибра: мощная дульная вспышка, сноп картечи с трассерами, вылет пыжа, пороховой дым и гильзы
+  shootCooldown = 27;
+  SoundFX.shotgun();
+
+  cameraKickX -= Math.cos(player.angle) * 4.5;
+  cameraKickY -= Math.sin(player.angle) * 4.5;
+
+  // Направленная дульная вспышка пламени из спаренных стволов
+  muzzleFlashes.push({
+    x: muzzle.x,
+    y: muzzle.y,
+    angle: player.angle,
+    type: 'shotgun',
+    life: 4,
+    maxLife: 4,
+    scale: 1.05 + Math.random() * 0.25
+  });
+
+  // Сноп из 7 высокоскоростных картечин с баллистическими трассерами
+  const pellets = 7;
+  const basePelletDmg = (player.baseDamage * 0.42) * (player.isDrunk ? 2.0 : 1.0);
 
   for (let p = 0; p < pellets; p++) {
-    const spread = (Math.random() - 0.5) * (player.isDrunk ? 0.45 : 0.22);
-    const pelletAngle = player.angle + spread;
-    const speed = 11 + Math.random() * 3;
+    // Веерный разлёт с гарантированной центральной кучностью
+    const conePos = (p / (pellets - 1)) - 0.5;
+    const jitter = (Math.random() - 0.5) * 0.08;
+    const spreadSpan = player.isDrunk ? 0.42 : 0.24;
+    const pelletAngle = player.angle + conePos * spreadSpan + jitter;
+    const speed = 23 + Math.random() * 5.5;
     let isCrit = Math.random() < player.critChance;
     let dmg = basePelletDmg * (isCrit ? player.critMult : 1.0);
 
     bullets.push({
-      x: muzzle.x,
-      y: muzzle.y,
+      x: muzzle.x + Math.cos(pelletAngle) * 4,
+      y: muzzle.y + Math.sin(pelletAngle) * 4,
+      prevX: muzzle.x,
+      prevY: muzzle.y,
       vx: Math.cos(pelletAngle) * speed,
       vy: Math.sin(pelletAngle) * speed,
-      radius: 3.5,
+      angle: pelletAngle,
+      speed: speed,
+      drag: 0.965,
+      radius: 3.2,
       damage: dmg,
       isCrit: isCrit,
-      color: isCrit ? '#ef4444' : (player.isDrunk ? '#f59e0b' : '#fbbf24')
+      weaponType: 'shotgun',
+      trailLen: 32 + Math.random() * 14,
+      life: 24,
+      maxLife: 24,
+      color: isCrit ? '#ef4444' : (player.isDrunk ? '#f97316' : '#fde047')
     });
   }
 
-  createParticles(muzzle.x, muzzle.y, '#fbbf24', 12);
+  // Вылетающий войлочный пыж (летит медленнее картечи и дымит)
+  const wadAngle = player.angle + (Math.random() - 0.5) * 0.12;
+  bullets.push({
+    x: muzzle.x,
+    y: muzzle.y,
+    prevX: muzzle.x,
+    prevY: muzzle.y,
+    vx: Math.cos(wadAngle) * 11.5,
+    vy: Math.sin(wadAngle) * 11.5,
+    angle: wadAngle,
+    speed: 11.5,
+    drag: 0.90,
+    radius: 2.5,
+    damage: 2,
+    isCrit: false,
+    weaponType: 'wad',
+    trailLen: 10,
+    life: 15,
+    maxLife: 15,
+    color: '#a8a29e'
+  });
+
+  // Искры несгоревшего пороха из ствола вперед по конусу + клубы порохового дыма + выброс гильзы 12 калибра
+  spawnDirectionalSparks(muzzle.x, muzzle.y, player.angle, 0.52, 9, '#fb923c', 7, 16, 12);
+  spawnGunpowderSmoke(muzzle.x, muzzle.y, player.angle, 5);
+  spawnShellCasing(muzzle.x, muzzle.y, player.angle, 'shotgun');
 }
 
 function checkBuildingCollision(x, y, radius) {
@@ -2064,14 +2344,17 @@ function updateHUD() {
 function createParticles(x, y, color, count = 6) {
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 3 + 1;
+    const speed = Math.random() * 3.5 + 1.2;
+    const maxL = 18 + Math.floor(Math.random() * 10);
     particles.push({
       x, y,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
-      radius: Math.random() * 3 + 2,
+      radius: Math.random() * 2.8 + 1.6,
       color,
-      life: 25
+      drag: 0.92,
+      life: maxL,
+      maxLife: maxL
     });
   }
 }
@@ -2199,8 +2482,14 @@ function update() {
   player.x = Math.max(player.radius, Math.min(WORLD_WIDTH - player.radius, player.x));
   player.y = Math.max(player.radius, Math.min(WORLD_HEIGHT - player.radius, player.y));
 
-  camera.x = player.x - canvas.width / 2;
-  camera.y = player.y - canvas.height / 2;
+  // Плавный возврат отдачи камеры после выстрела
+  cameraKickX *= 0.72;
+  cameraKickY *= 0.72;
+  if (Math.abs(cameraKickX) < 0.05) cameraKickX = 0;
+  if (Math.abs(cameraKickY) < 0.05) cameraKickY = 0;
+
+  camera.x = player.x - canvas.width / 2 + cameraKickX;
+  camera.y = player.y - canvas.height / 2 + cameraKickY;
   player.angle = Math.atan2(mouseWorld.y - player.y, mouseWorld.x - player.x);
 
   // Direction and aiming: follows mouse cursor (Twin-Stick / Top-Down Shooter)
@@ -2265,32 +2554,89 @@ function update() {
 
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
+    b.prevX = b.x;
+    b.prevY = b.y;
     b.x += b.vx;
     b.y += b.vy;
+
+    if (b.drag) {
+      b.vx *= b.drag;
+      b.vy *= b.drag;
+    }
+    if (b.life !== undefined) {
+      b.life--;
+      if (b.life <= 0) {
+        bullets.splice(i, 1);
+        continue;
+      }
+    }
+
+    // Ионный след за плазменным сгустком
+    if (b.weaponType === 'plasma' && (b.life % 2 === 0)) {
+      particles.push({
+        x: b.x - b.vx * 0.4 + (Math.random() - 0.5) * 4,
+        y: b.y - b.vy * 0.4 + (Math.random() - 0.5) * 4,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: (Math.random() - 0.5) * 1.2,
+        radius: 2.2,
+        color: '#38bdf8',
+        drag: 0.85,
+        life: 8,
+        maxLife: 8
+      });
+    }
     
     if (checkBuildingCollision(b.x, b.y, b.radius)) {
-      createParticles(b.x, b.y, '#94a3b8', 4);
+      if (b.weaponType !== 'wad') {
+        const bounceAngle = (b.angle || 0) + Math.PI + (Math.random() - 0.5) * 1.1;
+        const sparkColor = b.weaponType === 'plasma' ? '#38bdf8' : '#fde047';
+        spawnDirectionalSparks(b.prevX || b.x, b.prevY || b.y, bounceAngle, 1.2, 5, sparkColor, 4, 10, 10);
+        createParticles(b.prevX || b.x, b.prevY || b.y, '#94a3b8', 2);
+        if (Math.random() < 0.35) SoundFX.ricochet();
+      }
       bullets.splice(i, 1);
       continue;
     }
 
+    if (b.weaponType === 'wad') continue;
+
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
-      if (Math.abs(b.x - e.x) > b.radius + e.radius || Math.abs(b.y - e.y) > b.radius + e.radius) continue;
+      if (Math.abs(b.x - e.x) > b.radius + e.radius + 10 || Math.abs(b.y - e.y) > b.radius + e.radius + 10) continue;
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
         e.hp -= b.damage;
         e.isAggroed = true;
-        e.hitFlash = 6;
-        createParticles(b.x, b.y, '#22c55e', 5);
-        addFloatingText(e.x, e.y - 15, `${b.isCrit ? 'CRIT! ' : ''}-${Math.round(b.damage)}`, b.isCrit ? '#ef4444' : '#f87171');
+        e.hitFlash = 5;
+
+        // Направленные брызги ихора и искры при пробитии брони жабы
+        const hitAngle = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
+        const bloodColor = e.type === 'brute' ? '#a855f7' : '#22c55e';
+        spawnDirectionalSparks(b.x, b.y, hitAngle, 0.85, 5, b.weaponType === 'plasma' ? '#38bdf8' : '#fde047', 4, 10, 9);
+        for (let k = 0; k < 4; k++) {
+          const spA = hitAngle + (Math.random() - 0.5) * 0.9;
+          const spV = 2.5 + Math.random() * 4.5;
+          particles.push({
+            x: b.x,
+            y: b.y,
+            vx: Math.cos(spA) * spV,
+            vy: Math.sin(spA) * spV,
+            radius: 2.2 + Math.random() * 2.2,
+            color: bloodColor,
+            drag: 0.88,
+            life: 16,
+            maxLife: 16
+          });
+        }
+
+        addFloatingText(e.x + (Math.random() - 0.5) * 14, e.y - 16, `${b.isCrit ? 'CRIT! ' : ''}-${Math.round(b.damage)}`, b.isCrit ? '#ef4444' : '#f87171');
         
         if (player.hasPerk('car_battery')) {
           enemies.forEach(otherE => {
             if (otherE !== e && Math.hypot(e.x - otherE.x, e.y - otherE.y) < 140) {
               otherE.hp -= 20;
               otherE.isAggroed = true;
-              otherE.hitFlash = 6;
+              otherE.hitFlash = 5;
               addFloatingText(otherE.x, otherE.y - 15, '-20 ⚡', '#38bdf8');
             }
           });
@@ -2391,15 +2737,28 @@ function update() {
         e.shootCooldown--;
         if (e.shootCooldown <= 0) {
           e.shootCooldown = 110;
+          const muzX = e.x + Math.cos(angle) * 26;
+          const muzY = e.y + Math.sin(angle) * 26 - 8;
+          const ebSpeed = 9.5;
           enemyBullets.push({
-            x: e.x + Math.cos(angle) * 22,
-            y: e.y + Math.sin(angle) * 22 - 6,
-            vx: Math.cos(angle) * 5.5,
-            vy: Math.sin(angle) * 5.5,
+            x: muzX,
+            y: muzY,
+            vx: Math.cos(angle) * ebSpeed,
+            vy: Math.sin(angle) * ebSpeed,
+            angle: angle,
             radius: 5,
             damage: 20
           });
-          createParticles(e.x + Math.cos(angle) * 22, e.y + Math.sin(angle) * 22 - 6, '#22c55e', 6);
+          muzzleFlashes.push({
+            x: muzX,
+            y: muzY,
+            angle: angle,
+            type: 'sniper',
+            life: 4,
+            maxLife: 4,
+            scale: 0.9
+          });
+          spawnDirectionalSparks(muzX, muzY, angle, 0.45, 6, '#a3e635', 4, 9, 10);
         }
       }
     } else {
@@ -2421,6 +2780,7 @@ function update() {
     const eb = enemyBullets[i];
     eb.x += eb.vx; eb.y += eb.vy;
     if (checkBuildingCollision(eb.x, eb.y, eb.radius)) {
+      spawnDirectionalSparks(eb.x, eb.y, (eb.angle || 0) + Math.PI, 1.0, 5, '#84cc16', 3, 7, 9);
       enemyBullets.splice(i, 1);
       continue;
     }
@@ -2462,8 +2822,53 @@ function update() {
     }
   }
 
+  // Обновление дульных вспышек
+  for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
+    muzzleFlashes[i].life--;
+    if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
+  }
+
+  // Обновление гильз (падение на асфальт с отскоком)
+  for (let i = shellCasings.length - 1; i >= 0; i--) {
+    const sc = shellCasings[i];
+    if (sc.z > 0 || sc.vz !== 0) {
+      sc.x += sc.vx;
+      sc.y += sc.vy;
+      sc.rot += sc.vRot;
+      sc.z += sc.vz;
+      sc.vz -= 0.45;
+      if (sc.z <= 0) {
+        sc.z = 0;
+        if (Math.abs(sc.vz) > 1.0) {
+          sc.vz = -sc.vz * 0.42;
+          sc.vx *= 0.55;
+          sc.vy *= 0.55;
+          sc.vRot *= 0.5;
+        } else {
+          sc.vz = 0;
+          sc.vx = 0;
+          sc.vy = 0;
+          sc.vRot = 0;
+        }
+      }
+    }
+    sc.life--;
+    if (sc.life <= 0) shellCasings.splice(i, 1);
+  }
+
+  // Обновление частиц (искры, пороховой дым, брызги)
   for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i]; p.x += p.vx; p.y += p.vy; p.life--;
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.drag) {
+      p.vx *= p.drag;
+      p.vy *= p.drag;
+    }
+    if (p.type === 'smoke') {
+      p.radius += 0.32;
+    }
+    p.life--;
     if (p.life <= 0) particles.splice(i, 1);
   }
   for (let i = floatingTexts.length - 1; i >= 0; i--) {
@@ -2472,6 +2877,115 @@ function update() {
   }
 
   updateHUD();
+}
+
+function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  for (let i = 0; i < muzzleFlashes.length; i++) {
+    const mf = muzzleFlashes[i];
+    if (mf.x < viewMinX || mf.x > viewMaxX || mf.y < viewMinY || mf.y > viewMaxY) continue;
+    const t = mf.life / mf.maxLife;
+    const s = (mf.scale || 1.0) * (0.75 + t * 0.35);
+
+    ctx.save();
+    ctx.translate(mf.x, mf.y);
+    ctx.rotate(mf.angle);
+
+    if (mf.type === 'shotgun') {
+      // 1. Отсвет выстрела на асфальте под дулом
+      ctx.fillStyle = `rgba(251, 146, 60, ${0.22 * t})`;
+      ctx.beginPath();
+      ctx.ellipse(16 * s, 0, 34 * s, 22 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 2. Боковые пороховые выбросы газов
+      ctx.fillStyle = `rgba(234, 88, 12, ${0.82 * t})`;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(14 * s, -15 * s);
+      ctx.lineTo(6 * s, -4 * s);
+      ctx.lineTo(14 * s, 15 * s);
+      ctx.closePath();
+      ctx.fill();
+
+      // 3. Внешний длинный конус пламени из двустволки
+      ctx.fillStyle = `rgba(249, 115, 22, ${0.92 * t})`;
+      ctx.beginPath();
+      ctx.moveTo(-2, -4 * s);
+      ctx.lineTo(22 * s, -11 * s);
+      ctx.lineTo(16 * s, -4 * s);
+      ctx.lineTo(42 * s, 0);
+      ctx.lineTo(16 * s, 4 * s);
+      ctx.lineTo(22 * s, 11 * s);
+      ctx.lineTo(-2, 4 * s);
+      ctx.closePath();
+      ctx.fill();
+
+      // 4. Яркое раскалённое бело-желтое ядро вспышки
+      ctx.fillStyle = `rgba(254, 240, 138, ${0.98 * t})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -2.5 * s);
+      ctx.lineTo(14 * s, -5.5 * s);
+      ctx.lineTo(26 * s, 0);
+      ctx.lineTo(14 * s, 5.5 * s);
+      ctx.lineTo(0, 2.5 * s);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(4 * s, 0, 4.2 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (mf.type === 'plasma') {
+      // Электрическая дуговая вспышка Тесла-Коллайдера
+      ctx.fillStyle = `rgba(6, 182, 212, ${0.32 * t})`;
+      ctx.beginPath();
+      ctx.arc(8 * s, 0, 22 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(10 * s, -7 * s);
+      ctx.lineTo(22 * s, -2 * s);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(12 * s, 8 * s);
+      ctx.lineTo(24 * s, 3 * s);
+      ctx.stroke();
+
+      ctx.fillStyle = '#e0f2fe';
+      ctx.beginPath();
+      ctx.arc(4 * s, 0, 5.5 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (mf.type === 'drill') {
+      // Вращающиеся стальные дуги бура при бурении
+      ctx.strokeStyle = `rgba(250, 204, 21, ${0.85 * t})`;
+      ctx.lineWidth = 3.0;
+      ctx.beginPath();
+      ctx.arc(10, 0, 24 * s, -0.75, 0.75);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.75 * t})`;
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(16, 0, 32 * s, -0.55, 0.55);
+      ctx.stroke();
+
+    } else if (mf.type === 'sniper') {
+      // Токсичная вспышка снайперской винтовки жабы
+      ctx.fillStyle = `rgba(132, 204, 22, ${0.88 * t})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -3 * s);
+      ctx.lineTo(24 * s, 0);
+      ctx.lineTo(0, 3 * s);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
 }
 
 function render() {
@@ -2503,6 +3017,36 @@ function render() {
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   }
 
+  // 5.5. Стреляные гильзы 12-го калибра и энергоячейки на асфальте
+  for (let i = 0; i < shellCasings.length; i++) {
+    const sc = shellCasings[i];
+    if (sc.x < viewMinX || sc.x > viewMaxX || sc.y < viewMinY || sc.y > viewMaxY) continue;
+    const alpha = sc.life < 40 ? (sc.life / 40) : 1.0;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    if (sc.z > 0) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(sc.x - 3, sc.y + 2, 6, 2);
+    }
+    ctx.translate(sc.x, sc.y - sc.z);
+    ctx.rotate(sc.rot);
+
+    if (sc.type === 'plasma') {
+      ctx.fillStyle = '#0284c7';
+      ctx.fillRect(-4, -1.6, 5.5, 3.2);
+      ctx.fillStyle = '#eab308';
+      ctx.fillRect(1.5, -1.6, 2.5, 3.2);
+    } else {
+      // Классическая красная папковая/пластиковая гильза 12 калибра с латунным донцем
+      ctx.fillStyle = '#dc2626';
+      ctx.fillRect(-4.5, -1.8, 6.2, 3.6);
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(1.7, -1.9, 2.6, 3.8);
+    }
+    ctx.restore();
+  }
+
   // 6. Выпавший 3D лут (шестеренки, бутылки, консервы) — только в пределах экрана!
   for (let i = 0; i < lootItems.length; i++) {
     const l = lootItems[i];
@@ -2515,10 +3059,26 @@ function render() {
     }
   }
 
-  // 7. Враги через ThreeEnemyManager (3D WebGL) — только в пределах экрана!
+  // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
+
+    // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела
+    if (e.type === 'sniper' && e.isAggroed && e.shootCooldown > 0 && e.shootCooldown < 32) {
+      const aimA = e.angle || 0;
+      const sx = e.x + Math.cos(aimA) * 24;
+      const sy = e.y + Math.sin(aimA) * 24 - 8;
+      ctx.save();
+      ctx.strokeStyle = e.shootCooldown < 12 ? 'rgba(239, 68, 68, 0.75)' : 'rgba(239, 68, 68, 0.35)';
+      ctx.lineWidth = e.shootCooldown < 12 ? 1.8 : 1.0;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(player.x, player.y - 12);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (window.threeEnemies && window.threeEnemies.draw(ctx, e)) {
       continue;
     }
@@ -2532,39 +3092,159 @@ function render() {
     }
   }
 
-  // 8. Пули — только в пределах экрана
-  if (enemyBullets.length > 0) {
-    ctx.fillStyle = '#a3e635';
+  // 8. Выстрелы и баллистические трассеры — только в пределах экрана
+  // 8A. Инопланетные кислотно-плазменные иглы снайперов
+  for (let i = 0; i < enemyBullets.length; i++) {
+    const eb = enemyBullets[i];
+    if (eb.x < viewMinX || eb.x > viewMaxX || eb.y < viewMinY || eb.y > viewMaxY) continue;
+    const a = eb.angle !== undefined ? eb.angle : Math.atan2(eb.vy, eb.vx);
+    const cosA = Math.cos(a);
+    const sinA = Math.sin(a);
+
+    // Кислотный шлейф
+    ctx.strokeStyle = 'rgba(132, 204, 22, 0.45)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
     ctx.beginPath();
-    for (let i = 0; i < enemyBullets.length; i++) {
-      const eb = enemyBullets[i];
-      if (eb.x < viewMinX || eb.x > viewMaxX || eb.y < viewMinY || eb.y > viewMaxY) continue;
-      ctx.moveTo(eb.x + eb.radius, eb.y);
-      ctx.arc(eb.x, eb.y, eb.radius, 0, Math.PI * 2);
-    }
-    ctx.fill();
+    ctx.moveTo(eb.x - cosA * 22, eb.y - sinA * 22);
+    ctx.lineTo(eb.x, eb.y);
+    ctx.stroke();
+
+    // Яркое ядро снайперской иглы
+    ctx.strokeStyle = '#ecfccb';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(eb.x - cosA * 12, eb.y - sinA * 12);
+    ctx.lineTo(eb.x + cosA * 3, eb.y + sinA * 3);
+    ctx.stroke();
   }
 
+  // 8B. Выстрелы Василия (баллистические трассеры картечи, пыжи, плазменные разряды)
+  ctx.lineCap = 'round';
   for (let i = 0; i < bullets.length; i++) {
     const b = bullets[i];
     if (b.x < viewMinX || b.x > viewMaxX || b.y < viewMinY || b.y > viewMaxY) continue;
-    ctx.fillStyle = b.color;
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-    ctx.fill();
+    const a = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
+    const cosA = Math.cos(a);
+    const sinA = Math.sin(a);
+
+    if (b.weaponType === 'plasma') {
+      // Высокоэнергетический плазменный болт с электрическим ореолом
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(a);
+
+      // Внешняя ионная оболочка
+      ctx.fillStyle = b.isCrit ? 'rgba(244, 63, 94, 0.35)' : 'rgba(6, 182, 212, 0.36)';
+      ctx.beginPath();
+      ctx.ellipse(-6, 0, 20, 6.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Основное тело плазменного снаряда
+      ctx.fillStyle = b.isCrit ? '#fb7185' : '#38bdf8';
+      ctx.beginPath();
+      ctx.roundRect(-22, -3.0, 28, 6.0, 3);
+      ctx.fill();
+
+      // Ослепительно-белое ядро
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(-14, -1.5, 18, 3.0, 1.5);
+      ctx.fill();
+
+      ctx.restore();
+
+    } else if (b.weaponType === 'wad') {
+      // Дымящийся войлочный пыж из ствола двустволки
+      ctx.fillStyle = 'rgba(168, 162, 158, 0.75)';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else {
+      // Сверхзвуковой баллистический трассер картечины 12-го калибра
+      const lifeRatio = b.life !== undefined ? (b.life / b.maxLife) : 1.0;
+      const tLen = (b.trailLen || 32) * (0.45 + 0.55 * lifeRatio);
+      const tailX = b.x - cosA * tLen;
+      const tailY = b.y - sinA * tLen;
+      const midX = b.x - cosA * (tLen * 0.48);
+      const midY = b.y - sinA * (tLen * 0.48);
+
+      // 1. Внешний горячий оранжево-золотой след раскалённого воздуха
+      ctx.strokeStyle = b.isCrit
+        ? `rgba(239, 68, 68, ${0.52 * lifeRatio})`
+        : `rgba(249, 115, 22, ${0.48 * lifeRatio})`;
+      ctx.lineWidth = 4.2;
+      ctx.beginPath();
+      ctx.moveTo(tailX, tailY);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+
+      // 2. Яркий огненно-желтый сердечник трассера
+      ctx.strokeStyle = b.isCrit ? '#fca5a5' : '#fde047';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(midX, midY);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+
+      // 3. Раскалённая свинцовая головка картечины на острие
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 2.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
-  // 9. Василий с экипировкой
+  // 9. Василий с экипировкой + Лазерный целеуказатель (если взят перк laser_eye)
+  if (player.hasPerk && player.hasPerk('laser_eye') && !player.isRolling) {
+    const muz = (window.threeCharacter && window.threeCharacter.getMuzzlePosition)
+      ? window.threeCharacter.getMuzzlePosition(player)
+      : { x: player.x + Math.cos(player.angle) * 44, y: player.y - 18 + Math.sin(player.angle) * 44 };
+    ctx.save();
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(muz.x, muz.y);
+    ctx.lineTo(muz.x + Math.cos(player.angle) * 480, muz.y + Math.sin(player.angle) * 480);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   SpriteRenderer.drawVasiliy(ctx, player);
 
-  // 10. Частицы и текст — только в пределах экрана
+  // 9.5. Направленные дульные вспышки поверх среза ствола
+  drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+
+  // 10. Частицы (искры, пороховой дым, брызги) и текст — только в пределах экрана
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     if (p.x < viewMinX || p.x > viewMaxX || p.y < viewMinY || p.y > viewMaxY) continue;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-    ctx.fill();
+
+    if (p.type === 'spark') {
+      // Огненная искра в виде росчерка по вектору скорости
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.radius;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.vx * 2.1, p.y - p.vy * 2.1);
+      ctx.stroke();
+    } else if (p.type === 'smoke') {
+      // Полупрозрачный клуб порохового дыма
+      const alpha = Math.max(0, (p.life / (p.maxLife || 25)) * 0.36);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   if (floatingTexts.length > 0) {

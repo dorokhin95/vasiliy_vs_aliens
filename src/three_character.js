@@ -277,10 +277,13 @@ class ThreeCharacterManager {
       }
     }
 
-    // 3. Weapon Recoil (applied along local Z of rollPivot)
+    // 3. Weapon Recoil (kickback along local Z + realistic barrel rise pitch)
     if (this.recoil > 0) {
-      this.recoil = Math.max(0, this.recoil - 0.14);
-      this.rollPivot.position.z = -this.recoil * 0.06;
+      this.recoil = Math.max(0, this.recoil - 0.12);
+      this.rollPivot.position.z = -this.recoil * 0.085;
+      if (!player.isRolling) {
+        this.rollPivot.rotation.x = -this.recoil * 0.13;
+      }
     } else {
       this.rollPivot.position.z = 0;
     }
@@ -294,8 +297,8 @@ class ThreeCharacterManager {
     this.renderer.render(this.scene, this.camera);
   }
 
-  triggerRecoil() {
-    this.recoil = 1.0;
+  triggerRecoil(strength = 1.0) {
+    this.recoil = Math.min(1.4, strength);
   }
 
   /**
