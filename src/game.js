@@ -129,6 +129,13 @@ class VasiliyAnimator {
     this.weapons = {};
     this.gear = {};
     this.loaded = false;
+    this.assetsRequested = false;
+  }
+
+  // 2D-спрайты (~3.8 МБ) нужны только как запасной вариант, если 3D-модель не загрузилась
+  ensureAssets() {
+    if (this.assetsRequested) return;
+    this.assetsRequested = true;
     this.loadAssets();
   }
 
@@ -367,6 +374,10 @@ const SpriteRenderer = {
     if (window.threeCharacter && window.threeCharacter.draw(ctx, p)) {
       return;
     }
+    if (window.threeCharacter && !window.threeCharacter.loadFailed) {
+      return; // 3D-модель ещё грузится
+    }
+    vasiliyAnimator.ensureAssets();
     vasiliyAnimator.draw(ctx, p);
   },
 
@@ -2943,6 +2954,24 @@ const _hudCache = {
   weapon: null
 };
 
+// Пишем в DOM только изменившиеся значения: каждая запись innerText в кадре
+// пересоздаёт текстовый узел и заставляет браузер заново считать стили и раскладку хотбара
+function setHudText(el, text) {
+  if (el && el._hudText !== text) {
+    el._hudText = text;
+    el.innerText = text;
+  }
+}
+
+function setHudStyle(el, prop, value) {
+  if (!el) return;
+  const key = '_hudStyle_' + prop;
+  if (el[key] !== value) {
+    el[key] = value;
+    el.style[prop] = value;
+  }
+}
+
 function updateHUD(forceWeaponRefresh = false) {
   const hpPct = Math.round(Math.max(0, (player.hp / player.maxHp) * 100));
   if (_hudCache.hpPct !== hpPct) {
@@ -3027,32 +3056,29 @@ function updateHUD(forceWeaponRefresh = false) {
     if (!slotEl) return;
 
     const unlocked = !!player.unlockedWeapons[w];
-    slotEl.style.display = unlocked ? 'flex' : 'none';
+    setHudStyle(slotEl, 'display', unlocked ? 'flex' : 'none');
     if (!unlocked) return;
 
     slotEl.classList.toggle('active', player.currentWeapon === w);
 
     if (w === 'drill') {
-      const subEl = document.getElementById('sub-w-drill');
-      if (subEl) subEl.innerText = '-4.5 ВЫН';
+      setHudText(document.getElementById('sub-w-drill'), '-4.5 ВЫН');
     } else if (w === 'makarov' || w === 'shotgun') {
       const ammoEl = document.getElementById(`ammo-w-${w}`);
       const wrapEl = document.getElementById(`wrap-w-${w}`);
       const barEl = document.getElementById(`bar-w-${w}`);
-      if (ammoEl) {
-        if (player.reloadingWeapon === w) {
-          ammoEl.innerText = 'R...';
-        } else {
-          ammoEl.innerText = `${player.ammo[w].clip}/${player.ammo[w].reserve}`;
-        }
+      if (player.reloadingWeapon === w) {
+        setHudText(ammoEl, 'R...');
+      } else {
+        setHudText(ammoEl, `${player.ammo[w].clip}/${player.ammo[w].reserve}`);
       }
       if (wrapEl && barEl) {
         if (player.reloadingWeapon === w && player.reloadMaxTimer > 0) {
-          wrapEl.style.display = 'block';
+          setHudStyle(wrapEl, 'display', 'block');
           const pct = Math.round((1 - player.reloadTimer / player.reloadMaxTimer) * 100);
-          barEl.style.width = `${pct}%`;
+          setHudStyle(barEl, 'width', `${pct}%`);
         } else {
-          wrapEl.style.display = 'none';
+          setHudStyle(wrapEl, 'display', 'none');
         }
       }
     } else if (w === 'plasma') {
@@ -3060,21 +3086,19 @@ function updateHUD(forceWeaponRefresh = false) {
       const wrapEl = document.getElementById('wrap-w-plasma');
       const barEl = document.getElementById('bar-w-plasma');
       slotEl.classList.toggle('overheated', !!player.plasmaOverheated);
-      if (ammoEl) {
-        if (player.plasmaOverheated) {
-          ammoEl.innerText = 'КЛИН!';
-          ammoEl.style.color = '#ef4444';
-        } else {
-          ammoEl.innerText = `${Math.round(player.plasmaHeat)}%`;
-          ammoEl.style.color = player.plasmaHeat > 70 ? '#fb923c' : '#38bdf8';
-        }
+      if (player.plasmaOverheated) {
+        setHudText(ammoEl, 'КЛИН!');
+        setHudStyle(ammoEl, 'color', '#ef4444');
+      } else {
+        setHudText(ammoEl, `${Math.round(player.plasmaHeat)}%`);
+        setHudStyle(ammoEl, 'color', player.plasmaHeat > 70 ? '#fb923c' : '#38bdf8');
       }
       if (wrapEl && barEl) {
         if (player.plasmaHeat > 0 || player.plasmaOverheated) {
-          wrapEl.style.display = 'block';
-          barEl.style.width = `${Math.round(player.plasmaHeat)}%`;
+          setHudStyle(wrapEl, 'display', 'block');
+          setHudStyle(barEl, 'width', `${Math.round(player.plasmaHeat)}%`);
         } else {
-          wrapEl.style.display = 'none';
+          setHudStyle(wrapEl, 'display', 'none');
         }
       }
     }
@@ -4076,9 +4100,75 @@ function render() {
   ctx.restore();
 }
 
-function loop() {
-  update();
-  render();
+// --- ОВЕРЛЕЙ ПРОИЗВОДИТЕЛЬНОСТИ (F3 или ?perf в адресе) ---
+const perfStats = {
+  visible: /[?&]perf\b/.test(location.search),
+  frameMs: 16.7,
+  updateMs: 0,
+  renderMs: 0
+};
+
+function drawPerfOverlay() {
+  if (!perfStats.visible) return;
+  const lines = [
+    `FPS ${Math.round(1000 / perfStats.frameMs)}  (${perfStats.frameMs.toFixed(1)} мс/кадр)`,
+    `CPU: update ${perfStats.updateMs.toFixed(2)} мс, render ${perfStats.renderMs.toFixed(2)} мс`,
+    `Враги ${enemies.length}  Частицы ${particles.length}  Пули ${bullets.length + enemyBullets.length}`
+  ];
+  ctx.save();
+  ctx.fillStyle = 'rgba(8, 10, 14, 0.78)';
+  ctx.fillRect(10, canvas.height - 76, 330, 66);
+  ctx.font = '12px Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = perfStats.frameMs > 18 ? '#f87171' : '#4ade80';
+  lines.forEach((line, i) => ctx.fillText(line, 18, canvas.height - 68 + i * 19));
+  ctx.restore();
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'F3') {
+    e.preventDefault();
+    perfStats.visible = !perfStats.visible;
+  }
+});
+
+// Фиксированный шаг симуляции 60 Гц: все таймеры и скорости в update() рассчитаны «на кадр при 60 FPS»,
+// поэтому на мониторах 120/144 Гц игра раньше ускорялась в 2–2.4 раза, а при просадках FPS — замедлялась
+const SIM_STEP_MS = 1000 / 60;
+const MAX_SIM_STEPS_PER_FRAME = 4;
+let simAccumulator = 0;
+let lastLoopTime = performance.now();
+let lastRenderTime = 0;
+
+function loop(now = performance.now()) {
+  simAccumulator += Math.min(now - lastLoopTime, 100);
+  lastLoopTime = now;
+
+  // Порог в полшага: при 60 Гц ровно один update() на кадр даже при дрожании vsync
+  const t0 = performance.now();
+  let steps = 0;
+  while (simAccumulator > SIM_STEP_MS * 0.5 && steps < MAX_SIM_STEPS_PER_FRAME) {
+    update();
+    simAccumulator -= SIM_STEP_MS;
+    steps++;
+  }
+  if (steps === MAX_SIM_STEPS_PER_FRAME) simAccumulator = 0;
+
+  // Без нового шага симуляции кадр совпадает с предыдущим — не тратим на него GPU
+  if (steps > 0) {
+    const t1 = performance.now();
+    render();
+    drawPerfOverlay();
+    const t2 = performance.now();
+
+    if (lastRenderTime > 0) {
+      perfStats.frameMs += (Math.min(now - lastRenderTime, 250) - perfStats.frameMs) * 0.05;
+    }
+    lastRenderTime = now;
+    perfStats.updateMs += ((t1 - t0) / steps - perfStats.updateMs) * 0.05;
+    perfStats.renderMs += ((t2 - t1) - perfStats.renderMs) * 0.05;
+  }
   requestAnimationFrame(loop);
 }
 

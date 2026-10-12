@@ -132,6 +132,9 @@ class ThreePropsManager {
     }
 
     this.numDirections = 16;
+    // Allowed hash-based orientations for containers without explicit dirIdx (see drawContainer)
+    this.carDirections = [0, 1, 15, 7, 8, 9];
+    this.propDirections = [0, 1, 15, 2, 14];
     this.loadAllModels();
   }
 
@@ -161,6 +164,11 @@ class ThreePropsManager {
       { key: 'loot_vodka',     file: 'assets/models/loot_vodka.glb',     targetSpan: 1.75, colorScale: 0.95 },
       { key: 'loot_bandage',   file: 'assets/models/loot_bandage.glb',   targetSpan: 1.55, colorScale: 0.92 }
     ];
+
+    let pending = configs.length;
+    const onSettled = () => {
+      if (--pending === 0) this.schedulePrewarm();
+    };
 
     configs.forEach(cfg => {
       loader.load(
@@ -211,11 +219,36 @@ class ThreePropsManager {
           this.roots[cfg.key].add(model);
           this.isLoaded[cfg.key] = true;
           console.log(`[ThreePropsManager] 3D Model loaded: ${cfg.key}`);
+          onSettled();
         },
         undefined,
-        (err) => console.warn(`[ThreePropsManager] 3D Model not yet available (${cfg.file}):`, err)
+        (err) => {
+          console.warn(`[ThreePropsManager] 3D Model not yet available (${cfg.file}):`, err);
+          onSettled();
+        }
       );
     });
+  }
+
+  /**
+   * Background cache warm-up of every frame the game can request (buildings, containers, loot),
+   * so first-time shader compilation and WebGL renders happen in idle time instead of mid-game.
+   */
+  schedulePrewarm() {
+    const frames = [];
+    ['building_khrushchevka', 'building_brezhnevka', 'building_boiler_house', 'building_military_hq',
+      'mikhalyh_shop', 'garage_block', 'fence_po2', 'heating_pipes'].forEach(key => frames.push([key, 0]));
+    ['car_zhiguli', 'car_uaz'].forEach(key => this.carDirections.forEach(dir => frames.push([key, dir])));
+    ['trash_dumpster', 'military_crate'].forEach(key => this.propDirections.forEach(dir => frames.push([key, dir])));
+    // Loot cycles through even direction indices (see drawLootItem)
+    ['loot_scrap', 'loot_bottle', 'loot_stew', 'loot_vodka', 'loot_bandage'].forEach(key => {
+      for (let dir = 0; dir < this.numDirections; dir += 2) frames.push([key, dir]);
+    });
+
+    const tasks = frames
+      .filter(([key]) => this.isLoaded[key])
+      .map(([key, dir]) => () => this.getFrameCanvas(key, dir));
+    runIdleTasks(tasks);
   }
 
   getFrameCanvas(propKey, dirIdx) {
@@ -514,9 +547,7 @@ class ThreePropsManager {
       dirIdx = ((c.dirIdx % this.numDirections) + this.numDirections) % this.numDirections;
     } else {
       const hash = Math.abs(Math.floor(c.x * 17 + c.y * 31));
-      const carAngles = [0, 1, 15, 7, 8, 9];
-      const propAngles = [0, 1, 15, 2, 14];
-      const allowed = c.type === 'car' ? carAngles : propAngles;
+      const allowed = c.type === 'car' ? this.carDirections : this.propDirections;
       dirIdx = allowed[hash % allowed.length];
     }
     const rotAngle = (dirIdx / this.numDirections) * Math.PI * 2;

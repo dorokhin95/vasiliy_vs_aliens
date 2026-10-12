@@ -11,6 +11,24 @@
  * to guarantee locked 60 FPS even when dozens of enemies are on screen.
  */
 
+/**
+ * Runs small tasks in browser idle time without blocking frames (also used by three_props.js).
+ * At least one task runs per callback so the queue still drains when the main thread is never idle.
+ */
+function runIdleTasks(tasks) {
+  const requestIdle = window.requestIdleCallback
+    ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+    : (cb) => setTimeout(() => cb({ timeRemaining: () => 4 }), 50);
+
+  const step = (deadline) => {
+    do {
+      tasks.shift()();
+    } while (tasks.length > 0 && deadline.timeRemaining() > 3);
+    if (tasks.length > 0) requestIdle(step);
+  };
+  if (tasks.length > 0) requestIdle(step);
+}
+
 class ThreeEnemyManager {
   constructor() {
     this.models = {
@@ -119,6 +137,11 @@ class ThreeEnemyManager {
       { type: 'brute',  file: 'assets/models/toad_brute.glb' }
     ];
 
+    let pending = configs.length;
+    const onSettled = () => {
+      if (--pending === 0) this.schedulePrewarm();
+    };
+
     configs.forEach(cfg => {
       loader.load(
         cfg.file + '?v=1022',
@@ -159,11 +182,33 @@ class ThreeEnemyManager {
           this.roots[cfg.type].add(model);
           this.isLoaded[cfg.type] = true;
           console.log(`[ThreeEnemyManager] 3D Model loaded: ${cfg.type}`);
+          onSettled();
         },
         undefined,
-        (err) => console.error(`[ThreeEnemyManager] Failed to load ${cfg.file}:`, err)
+        (err) => {
+          console.error(`[ThreeEnemyManager] Failed to load ${cfg.file}:`, err);
+          onSettled();
+        }
       );
     });
+  }
+
+  /**
+   * Background cache warm-up: renders every pose (type × 16 directions × 6 frames) during browser idle time,
+   * so shader compilation (~25–55 ms on first render of a type) and new-pose WebGL renders
+   * don't cause frame hitches mid-fight.
+   */
+  schedulePrewarm() {
+    const tasks = [];
+    for (const type of ['grunt', 'sniper', 'brute']) {
+      if (!this.isLoaded[type]) continue;
+      for (let dirIdx = 0; dirIdx < this.numDirections; dirIdx++) {
+        for (let frameIdx = 0; frameIdx < this.numFrames; frameIdx++) {
+          tasks.push(() => this.getFrameCanvas(type, dirIdx, frameIdx));
+        }
+      }
+    }
+    runIdleTasks(tasks);
   }
 
   /**

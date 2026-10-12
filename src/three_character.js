@@ -12,6 +12,7 @@
 class ThreeCharacterManager {
   constructor() {
     this.isLoaded = false;
+    this.loadFailed = false;
     this.width = 160;
     this.height = 160;
 
@@ -199,7 +200,10 @@ class ThreeCharacterManager {
         console.log('[ThreeCharacter] Vasily Master loaded with one-handed Bat/Makarov & two-handed Rifle postures!');
       },
       undefined,
-      (err) => console.error('[ThreeCharacter] Failed to load vasiliy.glb:', err)
+      (err) => {
+        this.loadFailed = true;
+        console.error('[ThreeCharacter] Failed to load vasiliy.glb:', err);
+      }
     );
   }
 
