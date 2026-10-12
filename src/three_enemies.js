@@ -101,7 +101,7 @@ class ThreeEnemyManager {
 
     // Number of quantized directions and walk animation frames
     this.numDirections = 16;
-    this.numFrames = 8;
+    this.numFrames = 6;
 
     this.loadAllModels();
   }
@@ -121,7 +121,7 @@ class ThreeEnemyManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=' + Date.now(),
+        cfg.file + '?v=1022',
         (gltf) => {
           const model = gltf.scene;
           this.models[cfg.type] = model;
@@ -245,7 +245,7 @@ class ThreeEnemyManager {
 
     // Quantize animation frame (walk stride)
     const animTimer = e.animTimer || 0;
-    const frameIdx = Math.floor(animTimer * 1.5) % this.numFrames;
+    const frameIdx = Math.floor(animTimer * 1.2) % this.numFrames;
 
     const frameCanvas = this.getFrameCanvas(type, dirIdx, frameIdx);
     if (!frameCanvas) return false;
@@ -274,11 +274,7 @@ class ThreeEnemyManager {
     ctx.ellipse(0, 10, e.radius * 1.1, e.radius * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Draw 3D Model Canvas
-    if (e.hitFlash && e.hitFlash > 0) {
-      ctx.filter = 'brightness(2.2) saturate(0.5)';
-    }
-
+    // 2. Draw 3D Model Canvas (without slow CPU ctx.filter)
     ctx.drawImage(
       frameCanvas,
       -renderW / 2,
@@ -287,17 +283,19 @@ class ThreeEnemyManager {
       renderH
     );
 
-    ctx.filter = 'none';
+    if (e.hitFlash && e.hitFlash > 0) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.36)';
+      ctx.beginPath();
+      ctx.arc(0, anchorOffsetY * 0.5, e.radius * 0.92, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-    // 3. Aggro Indicator
+    // 3. Aggro Indicator (no shadowBlur to keep GPU batching fast)
     if (e.isAggroed) {
       ctx.fillStyle = '#ef4444';
       ctx.font = 'bold 16px Arial';
       ctx.textAlign = 'center';
-      ctx.shadowColor = '#ef4444';
-      ctx.shadowBlur = 6;
       ctx.fillText('!', 0, -e.radius - 16);
-      ctx.shadowBlur = 0;
     }
 
     // 4. Health Bar (when damaged)

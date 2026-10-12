@@ -27,8 +27,7 @@ class ThreePropsManager {
       mikhalyh_shop: null,
       garage_block: null,
       fence_po2: null,
-      heating_pipes: null,
-      weapon_shotgun: null
+      heating_pipes: null
     };
 
     this.isLoaded = {
@@ -44,8 +43,7 @@ class ThreePropsManager {
       mikhalyh_shop: false,
       garage_block: false,
       fence_po2: false,
-      heating_pipes: false,
-      weapon_shotgun: false
+      heating_pipes: false
     };
 
     this.modelHeights = {};
@@ -63,7 +61,7 @@ class ThreePropsManager {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
-      antialias: true,
+      antialias: false,
       preserveDrawingBuffer: true
     });
     this.renderer.setSize(this.width, this.height, false);
@@ -113,8 +111,7 @@ class ThreePropsManager {
       mikhalyh_shop: new THREE.Group(),
       garage_block: new THREE.Group(),
       fence_po2: new THREE.Group(),
-      heating_pipes: new THREE.Group(),
-      weapon_shotgun: new THREE.Group()
+      heating_pipes: new THREE.Group()
     };
 
     for (const key in this.roots) {
@@ -134,25 +131,24 @@ class ThreePropsManager {
 
     const loader = new THREE.GLTFLoader();
     const configs = [
+      { key: 'mikhalyh_shop',  file: 'assets/models/mikhalyh_shop.glb',  targetSpan: 1.95, colorScale: 0.84 },
       { key: 'car_zhiguli',    file: 'assets/models/car_zhiguli.glb',    targetSpan: 1.95, colorScale: 0.92 },
       { key: 'car_uaz',        file: 'assets/models/car_uaz.glb',        targetSpan: 1.95, colorScale: 0.92 },
       { key: 'trash_dumpster', file: 'assets/models/trash_dumpster.glb', targetSpan: 1.55, colorScale: 0.90 },
       { key: 'military_crate', file: 'assets/models/military_crate.glb', targetSpan: 1.55, colorScale: 0.90 },
+      { key: 'fence_po2',      file: 'assets/models/fence_po2.glb',      targetSpan: 2.05, colorScale: 0.72 },
+      { key: 'heating_pipes',  file: 'assets/models/heating_pipes.glb',  targetSpan: 2.05, colorScale: 0.78 },
+      { key: 'garage_block',   file: 'assets/models/garage_block.glb',   targetSpan: 1.90, colorScale: 0.80 },
       { key: 'loot_scrap',     file: 'assets/models/loot_scrap.glb',     targetSpan: 1.65, colorScale: 0.95 },
       { key: 'loot_bottle',    file: 'assets/models/loot_bottle.glb',    targetSpan: 1.75, colorScale: 0.95 },
       { key: 'loot_stew',      file: 'assets/models/loot_stew.glb',      targetSpan: 1.60, colorScale: 0.95 },
       { key: 'loot_vodka',     file: 'assets/models/loot_vodka.glb',     targetSpan: 1.75, colorScale: 0.95 },
-      { key: 'loot_bandage',   file: 'assets/models/loot_bandage.glb',   targetSpan: 1.55, colorScale: 0.92 },
-      { key: 'mikhalyh_shop',  file: 'assets/models/mikhalyh_shop.glb',  targetSpan: 1.95, colorScale: 0.84 },
-      { key: 'garage_block',   file: 'assets/models/garage_block.glb',   targetSpan: 1.90, colorScale: 0.80 },
-      { key: 'fence_po2',      file: 'assets/models/fence_po2.glb',      targetSpan: 2.05, colorScale: 0.72 },
-      { key: 'heating_pipes',  file: 'assets/models/heating_pipes.glb',  targetSpan: 2.05, colorScale: 0.78 },
-      { key: 'weapon_shotgun', file: 'assets/models/weapon_shotgun.glb', targetSpan: 1.85, colorScale: 0.95 }
+      { key: 'loot_bandage',   file: 'assets/models/loot_bandage.glb',   targetSpan: 1.55, colorScale: 0.92 }
     ];
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=' + Date.now(),
+        cfg.file + '?v=1022',
         (gltf) => {
           const model = gltf.scene;
           const cScale = cfg.colorScale || 0.90;
@@ -198,7 +194,6 @@ class ThreePropsManager {
           this.models[cfg.key] = model;
           this.roots[cfg.key].add(model);
           this.isLoaded[cfg.key] = true;
-          this.cache.clear();
           console.log(`[ThreePropsManager] 3D Model loaded: ${cfg.key}`);
         },
         undefined,
@@ -482,10 +477,7 @@ class ThreePropsManager {
       ctx.font = 'bold 12px Arial';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      ctx.shadowBlur = 4;
       ctx.fillText('▼', 0, indicatorY);
-      ctx.shadowBlur = 0;
     }
 
     ctx.restore();
@@ -505,8 +497,9 @@ class ThreePropsManager {
     const hoverTime = now * 0.005;
     const hoverY = Math.sin(hoverTime + l.x) * 3;
 
-    // Smoothly cycle through 16 3D angles (1 full turn every ~6.4 seconds)
-    const dirIdx = Math.floor(((now * 0.0025 + l.x * 0.07 + l.y * 0.05) % 1.0) * this.numDirections) % this.numDirections;
+    // Cycle through 8 cached 3D angles (even indices 0, 2, 4..14)
+    const stepIdx = Math.floor(((now * 0.0018 + l.x * 0.07 + l.y * 0.05) % 1.0) * 8) % 8;
+    const dirIdx = (stepIdx * 2) % this.numDirections;
     const frameCanvas = this.getFrameCanvas(propKey, dirIdx);
     if (!frameCanvas) return false;
 

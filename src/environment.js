@@ -172,7 +172,7 @@ class EnvironmentRenderer {
     this.drawRoadProps(ctx, camera, screenW, screenH);
 
     // 4. БЕЗОПАСНАЯ ЗОНА (Магазин Михалыча на бетонной площади, защитный купол)
-    this.drawSafeZone(ctx, safeZone);
+    this.drawSafeZone(ctx, camera, screenW, screenH, safeZone);
 
     // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (Панельки, 3D Гаражи, Секционные заборы ПО-2, Теплотрассы с камерами и паром)
     this.drawBuildings(ctx, camera, screenW, screenH, buildings);
@@ -187,32 +187,31 @@ class EnvironmentRenderer {
     // A. Текстурное и цветовое тонирование кварталов по специализации
     const zones = [
       // Tier 2A: Гаражный кооператив «Восток» (Западные кварталы — темный гравий и мазут)
-      { x: 0, y: 940, w: 800, h: 960, color: 'rgba(15, 23, 42, 0.34)', border: 'rgba(249, 115, 22, 0.22)', type: 'garages' },
-      { x: 0, y: 2100, w: 800, h: 1000, color: 'rgba(15, 23, 42, 0.34)', border: 'rgba(249, 115, 22, 0.22)', type: 'garages' },
+      { x: 0, y: 940, w: 800, h: 960, color: 'rgba(15, 23, 42, 0.34)', type: 'garages' },
+      { x: 0, y: 2100, w: 800, h: 1000, color: 'rgba(15, 23, 42, 0.34)', type: 'garages' },
       // Tier 2B: Магистраль Теплотрассы (Восточные кварталы — оттаявший грунт и конденсат)
-      { x: 3240, y: 940, w: 760, h: 960, color: 'rgba(14, 36, 52, 0.26)', border: 'rgba(56, 189, 248, 0.22)', type: 'heating' },
-      { x: 3240, y: 2100, w: 760, h: 1000, color: 'rgba(14, 36, 52, 0.26)', border: 'rgba(56, 189, 248, 0.22)', type: 'heating' },
+      { x: 3240, y: 940, w: 760, h: 960, color: 'rgba(14, 36, 52, 0.26)', type: 'heating' },
+      { x: 3240, y: 2100, w: 760, h: 1000, color: 'rgba(14, 36, 52, 0.26)', type: 'heating' },
       // Tier 3: Военный Кордон (Север и Юг — выжженная земля и следы боев)
-      { x: 940, y: 0, w: 960, h: 800, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
-      { x: 2100, y: 0, w: 1000, h: 800, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
-      { x: 940, y: 3240, w: 960, h: 760, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
-      { x: 2100, y: 3240, w: 1000, h: 760, color: 'rgba(38, 18, 18, 0.26)', border: 'rgba(239, 68, 68, 0.22)', type: 'cordon' },
+      { x: 940, y: 0, w: 960, h: 800, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
+      { x: 2100, y: 0, w: 1000, h: 800, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
+      { x: 940, y: 3240, w: 960, h: 760, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
+      { x: 2100, y: 3240, w: 1000, h: 760, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
       // Tier 4: Квако-Гнездо (4 дальних угла — био-заражение пришельцев)
-      { x: 0, y: 0, w: 800, h: 800, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' },
-      { x: 3240, y: 0, w: 760, h: 800, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' },
-      { x: 0, y: 3240, w: 800, h: 760, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' },
-      { x: 3240, y: 3240, w: 760, h: 760, color: 'rgba(16, 48, 28, 0.34)', border: 'rgba(168, 85, 247, 0.32)', type: 'nest' }
+      { x: 0, y: 0, w: 800, h: 800, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' },
+      { x: 3240, y: 0, w: 760, h: 800, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' },
+      { x: 0, y: 3240, w: 800, h: 760, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' },
+      { x: 3240, y: 3240, w: 760, h: 760, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' }
     ];
 
-    zones.forEach(z => {
-      if (!this.isVisible(z.x, z.y, z.w, z.h, camera, screenW, screenH)) return;
-      ctx.save();
+    for (let zIdx = 0; zIdx < zones.length; zIdx++) {
+      const z = zones[zIdx];
+      if (!this.isVisible(z.x, z.y, z.w, z.h, camera, screenW, screenH)) continue;
       ctx.fillStyle = z.color;
       ctx.fillRect(z.x, z.y, z.w, z.h);
 
-      // Детали поверхности по типу района
+      // Детали поверхности по типу района (без аллокаций градиентов каждый кадр)
       if (z.type === 'garages') {
-        // Масляные лужи и следы протекторов перед гаражами
         ctx.fillStyle = 'rgba(8, 10, 14, 0.55)';
         for (let i = 0; i < 5; i++) {
           const ox = z.x + 160 + ((i * 137) % (z.w - 280));
@@ -222,37 +221,34 @@ class EnvironmentRenderer {
           ctx.fill();
         }
       } else if (z.type === 'cordon') {
-        // Воронки от взрывов и следы обстрела на Военном кордоне
         for (let i = 0; i < 4; i++) {
           const cx = z.x + 200 + ((i * 211) % (z.w - 360));
           const cy = z.y + 180 + ((i * 163) % (z.h - 320));
-          const grad = ctx.createRadialGradient(cx, cy, 6, cx, cy, 42);
-          grad.addColorStop(0, 'rgba(10, 10, 12, 0.75)');
-          grad.addColorStop(0.6, 'rgba(30, 24, 22, 0.45)');
-          grad.addColorStop(1, 'rgba(30, 24, 22, 0)');
-          ctx.fillStyle = grad;
+          ctx.fillStyle = 'rgba(30, 24, 22, 0.38)';
           ctx.beginPath();
-          ctx.arc(cx, cy, 42, 0, Math.PI * 2);
+          ctx.arc(cx, cy, 40, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(10, 10, 12, 0.65)';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 18, 0, Math.PI * 2);
           ctx.fill();
         }
       } else if (z.type === 'nest') {
-        // Токсичные био-лужи и пульсирующие споры амфибий в Квако-Гнездах
         for (let i = 0; i < 5; i++) {
           const bx = z.x + 160 + ((i * 149) % (z.w - 300));
           const by = z.y + 160 + ((i * 179) % (z.h - 300));
-          const pulseR = 38 + Math.sin(time + i * 1.4) * 5;
-          const bioGrad = ctx.createRadialGradient(bx, by, 5, bx, by, pulseR);
-          bioGrad.addColorStop(0, 'rgba(74, 222, 128, 0.48)');
-          bioGrad.addColorStop(0.55, 'rgba(34, 197, 94, 0.24)');
-          bioGrad.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
-          ctx.fillStyle = bioGrad;
+          const pulseR = 36 + Math.sin(time + i * 1.4) * 4;
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.18)';
           ctx.beginPath();
           ctx.arc(bx, by, pulseR, 0, Math.PI * 2);
           ctx.fill();
+          ctx.fillStyle = 'rgba(74, 222, 128, 0.38)';
+          ctx.beginPath();
+          ctx.arc(bx, by, pulseR * 0.45, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
-      ctx.restore();
-    });
+    }
   }
 
   drawRoadNetwork(ctx, camera, screenW, screenH, roads) {
@@ -410,7 +406,12 @@ class EnvironmentRenderer {
     ctx.restore();
   }
 
-  drawSafeZone(ctx, safeZone) {
+  drawSafeZone(ctx, camera, screenW, screenH, safeZone) {
+    const rBound = safeZone.radius + 40;
+    if (!this.isVisible(safeZone.x - rBound, safeZone.y - rBound, rBound * 2, rBound * 2, camera, screenW, screenH)) {
+      return;
+    }
+
     ctx.save();
     const time = Date.now() * 0.002;
     const pulse = Math.sin(time) * 6;
@@ -430,12 +431,8 @@ class EnvironmentRenderer {
     ctx.fill();
     ctx.stroke();
 
-    // 2. Мягкое свечение периметра базы
-    const grad = ctx.createRadialGradient(safeZone.x, safeZone.y, safeZone.radius - 60, safeZone.x, safeZone.y, safeZone.radius + pulse);
-    grad.addColorStop(0, 'rgba(16, 185, 129, 0.0)');
-    grad.addColorStop(0.7, 'rgba(16, 185, 129, 0.06)');
-    grad.addColorStop(1, 'rgba(16, 185, 129, 0.22)');
-    ctx.fillStyle = grad;
+    // 2. Мягкое свечение периметра базы (без аллокации createRadialGradient)
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.06)';
     ctx.beginPath();
     ctx.arc(safeZone.x, safeZone.y, safeZone.radius + pulse, 0, Math.PI * 2);
     ctx.fill();
@@ -462,14 +459,20 @@ class EnvironmentRenderer {
       }
     }
 
-    // 5. Неоновая вывеска "У МИХАЛЫЧА" над киоском
-    ctx.font = 'bold 15px "Segoe UI", Arial, sans-serif';
+    // 5. Неоновая вывеска "У МИХАЛЫЧА" над киоском (без тяжелого shadowBlur)
+    ctx.fillStyle = 'rgba(6, 78, 59, 0.78)';
+    ctx.beginPath();
+    ctx.roundRect(safeZone.shopX - 118, safeZone.shopY - 134, 236, 24, 6);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(52, 211, 153, 0.65)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.font = 'bold 14px "Segoe UI", Arial, sans-serif';
     ctx.textAlign = 'center';
-    ctx.shadowColor = '#34d399';
-    ctx.shadowBlur = 12;
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = '#6ee7b7';
-    ctx.fillText('КИОСК "У МИХАЛЫЧА" 24/7', safeZone.shopX, safeZone.shopY - 118);
-    ctx.shadowBlur = 0;
+    ctx.fillText('КИОСК "У МИХАЛЫЧА" 24/7', safeZone.shopX, safeZone.shopY - 122);
 
     ctx.restore();
   }

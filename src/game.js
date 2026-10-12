@@ -1964,31 +1964,81 @@ function checkBuildingCollision(x, y, radius) {
   return false;
 }
 
+const _hudCache = {
+  hpPct: -1,
+  stamPct: -1,
+  vodka: -1,
+  stew: -1,
+  bandage: -1,
+  scrap: -1,
+  bottles: -1,
+  isDrunk: null,
+  inSafeZone: null,
+  districtId: null,
+  lang: null,
+  weapon: null
+};
+
 function updateHUD() {
-  document.getElementById('hp-bar').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
-  document.getElementById('stamina-bar').style.width = `${Math.max(0, (player.stamina / player.maxStamina) * 100)}%`;
-  document.getElementById('count-vodka').innerText = player.items.vodka;
-  document.getElementById('count-stew').innerText = player.items.stew;
-  document.getElementById('count-bandage').innerText = player.items.bandage;
-  document.getElementById('res-scrap').innerText = player.resources.scrap;
-  document.getElementById('res-bottles').innerText = player.resources.bottles;
-  
-  const statusBadge = document.getElementById('status-badge');
-  statusBadge.style.display = player.isDrunk ? 'block' : 'none';
+  const hpPct = Math.round(Math.max(0, (player.hp / player.maxHp) * 100));
+  if (_hudCache.hpPct !== hpPct) {
+    _hudCache.hpPct = hpPct;
+    document.getElementById('hp-bar').style.width = `${hpPct}%`;
+  }
+
+  const stamPct = Math.round(Math.max(0, (player.stamina / player.maxStamina) * 100));
+  if (_hudCache.stamPct !== stamPct) {
+    _hudCache.stamPct = stamPct;
+    document.getElementById('stamina-bar').style.width = `${stamPct}%`;
+  }
+
+  if (_hudCache.vodka !== player.items.vodka) {
+    _hudCache.vodka = player.items.vodka;
+    document.getElementById('count-vodka').innerText = player.items.vodka;
+  }
+  if (_hudCache.stew !== player.items.stew) {
+    _hudCache.stew = player.items.stew;
+    document.getElementById('count-stew').innerText = player.items.stew;
+  }
+  if (_hudCache.bandage !== player.items.bandage) {
+    _hudCache.bandage = player.items.bandage;
+    document.getElementById('count-bandage').innerText = player.items.bandage;
+  }
+  if (_hudCache.scrap !== player.resources.scrap) {
+    _hudCache.scrap = player.resources.scrap;
+    document.getElementById('res-scrap').innerText = player.resources.scrap;
+  }
+  if (_hudCache.bottles !== player.resources.bottles) {
+    _hudCache.bottles = player.resources.bottles;
+    document.getElementById('res-bottles').innerText = player.resources.bottles;
+  }
+
+  if (_hudCache.isDrunk !== player.isDrunk) {
+    _hudCache.isDrunk = player.isDrunk;
+    const statusBadge = document.getElementById('status-badge');
+    statusBadge.style.display = player.isDrunk ? 'block' : 'none';
+  }
 
   const inSafeZone = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
-  document.getElementById('safe-zone-tag').style.display = inSafeZone ? 'block' : 'none';
+  if (_hudCache.inSafeZone !== inSafeZone) {
+    _hudCache.inSafeZone = inSafeZone;
+    document.getElementById('safe-zone-tag').style.display = inSafeZone ? 'block' : 'none';
+  }
 
-  // Обновление индикатора текущего района и уровня угрозы
+  // Обновление индикатора текущего района и уровня угрозы (только при смене района или языка)
   const dist = getDistrictAt(player.x, player.y);
-  const badgeEl = document.getElementById('district-badge');
-  const titleEl = document.getElementById('district-title');
-  const metaEl = document.getElementById('district-meta');
-  if (badgeEl && titleEl && metaEl && dist) {
-    titleEl.innerText = currentLang === 'ru' ? dist.name_ru : dist.name_en;
-    titleEl.style.color = dist.color;
-    metaEl.innerText = currentLang === 'ru' ? dist.meta_ru : dist.meta_en;
-    badgeEl.style.borderColor = dist.color;
+  if (dist && (_hudCache.districtId !== dist.id || _hudCache.lang !== currentLang)) {
+    _hudCache.districtId = dist.id;
+    _hudCache.lang = currentLang;
+    const badgeEl = document.getElementById('district-badge');
+    const titleEl = document.getElementById('district-title');
+    const metaEl = document.getElementById('district-meta');
+    if (badgeEl && titleEl && metaEl) {
+      titleEl.innerText = currentLang === 'ru' ? dist.name_ru : dist.name_en;
+      titleEl.style.color = dist.color;
+      metaEl.innerText = currentLang === 'ru' ? dist.meta_ru : dist.meta_en;
+      badgeEl.style.borderColor = dist.color;
+    }
   }
 
   // Всплывающее оповещение при переходе в другой район
@@ -1999,13 +2049,16 @@ function updateHUD() {
   }
 
   // Подсветка активного оружия в хотбаре
-  ['shotgun', 'drill', 'plasma'].forEach(w => {
-    const el = document.getElementById(`slot-w-${w}`);
-    if (el) {
-      if (player.currentWeapon === w) el.classList.add('active');
-      else el.classList.remove('active');
-    }
-  });
+  if (_hudCache.weapon !== player.currentWeapon) {
+    _hudCache.weapon = player.currentWeapon;
+    ['shotgun', 'drill', 'plasma'].forEach(w => {
+      const el = document.getElementById(`slot-w-${w}`);
+      if (el) {
+        if (player.currentWeapon === w) el.classList.add('active');
+        else el.classList.remove('active');
+      }
+    });
+  }
 }
 
 function createParticles(x, y, color, count = 6) {
@@ -2082,6 +2135,8 @@ function handleEnemyKilled(index) {
   enemies.splice(index, 1);
   setTimeout(() => spawnPatrolEnemy(dead), 12000);
 }
+
+let _lastPromptKey = '';
 
 function update() {
   if (gameState !== 'PLAYING') return;
@@ -2170,33 +2225,43 @@ function update() {
   if (distToShop < safeZone.shopRadius + player.radius + 20) {
     nearbyInteractable = { type: 'shop' };
   } else {
-    for (let c of containers) {
-      if (!c.searched && Math.hypot(player.x - c.x, player.y - c.y) < c.radius + player.radius + 20) {
-        nearbyInteractable = { type: 'container', target: c };
-        break;
+    for (let i = 0; i < containers.length; i++) {
+      const c = containers[i];
+      if (!c.searched && Math.abs(player.x - c.x) < 80 && Math.abs(player.y - c.y) < 80) {
+        if (Math.hypot(player.x - c.x, player.y - c.y) < c.radius + player.radius + 20) {
+          nearbyInteractable = { type: 'container', target: c };
+          break;
+        }
       }
     }
   }
 
-  const promptEl = document.getElementById('interact-prompt');
-  if (nearbyInteractable) {
-    promptEl.style.display = 'block';
-    promptEl.innerText = nearbyInteractable.type === 'shop' ? t('prompt_shop') : t('prompt_search');
-  } else {
-    promptEl.style.display = 'none';
+  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}` : '';
+  if (_lastPromptKey !== nextPromptKey) {
+    _lastPromptKey = nextPromptKey;
+    const promptEl = document.getElementById('interact-prompt');
+    if (nearbyInteractable) {
+      promptEl.style.display = 'block';
+      promptEl.innerText = nearbyInteractable.type === 'shop' ? t('prompt_shop') : t('prompt_search');
+    } else {
+      promptEl.style.display = 'none';
+    }
   }
 
   // Магнитное притяжение 3D-лута (базовый радиус 58px, с Жабьим Языком — 185px)
   const pullRadius = player.hasPerk('tentacle_arm') ? 185 : 58;
   const pullSpeed = player.hasPerk('tentacle_arm') ? 5.5 : 3.2;
-  lootItems.forEach(item => {
-    const dist = Math.hypot(player.x - item.x, player.y - item.y);
-    if (dist < pullRadius) {
-      const pullAngle = Math.atan2(player.y - item.y, player.x - item.x);
-      item.x += Math.cos(pullAngle) * pullSpeed;
-      item.y += Math.sin(pullAngle) * pullSpeed;
+  for (let i = 0; i < lootItems.length; i++) {
+    const item = lootItems[i];
+    if (Math.abs(player.x - item.x) < pullRadius && Math.abs(player.y - item.y) < pullRadius) {
+      const dist = Math.hypot(player.x - item.x, player.y - item.y);
+      if (dist < pullRadius) {
+        const pullAngle = Math.atan2(player.y - item.y, player.x - item.x);
+        item.x += Math.cos(pullAngle) * pullSpeed;
+        item.y += Math.sin(pullAngle) * pullSpeed;
+      }
     }
-  });
+  }
 
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
@@ -2211,6 +2276,7 @@ function update() {
 
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
+      if (Math.abs(b.x - e.x) > b.radius + e.radius || Math.abs(b.y - e.y) > b.radius + e.radius) continue;
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
         e.hp -= b.damage;
@@ -2243,9 +2309,24 @@ function update() {
     }
   }
 
+  const hasFumeAura = player.hasPerk('fume_aura');
+  const activeSimRadius = Math.max(canvas.width, canvas.height) * 0.72 + 220;
+
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    const distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
+    const dxP = player.x - e.x;
+    const dyP = player.y - e.y;
+
+    // Спящий режим для далеких неагрессивных врагов за пределами экрана (экономит 90% CPU и кэша WebGL)
+    if (!e.isAggroed && Math.abs(dxP) > activeSimRadius && Math.abs(dyP) > activeSimRadius) {
+      continue;
+    }
+
+    const distToPlayer = Math.hypot(dxP, dyP);
+    if (!e.isAggroed && distToPlayer > activeSimRadius) {
+      continue;
+    }
+
     const distToSafe = Math.hypot(e.x - safeZone.x, e.y - safeZone.y);
 
     if (distToSafe < safeZone.radius) {
@@ -2267,7 +2348,7 @@ function update() {
     }
 
     let eSpeed = e.speed;
-    if (player.hasPerk('fume_aura') && distToPlayer < 140) {
+    if (hasFumeAura && distToPlayer < 140) {
       eSpeed *= 0.55;
     }
 
@@ -2355,26 +2436,29 @@ function update() {
   }
 
   // Подбор всех 5 типов 360° 3D-лута (scrap, bottle, stew, vodka, bandage)
+  const pickupRadius = player.radius + 22;
   for (let i = lootItems.length - 1; i >= 0; i--) {
     const item = lootItems[i];
-    if (Math.hypot(item.x - player.x, item.y - player.y) < player.radius + 22) {
-      if (item.type === 'scrap') {
-        player.resources.scrap += item.val;
-        addFloatingText(item.x, item.y - 16, `+${item.val} ⚙️`, '#38bdf8');
-      } else if (item.type === 'bottle') {
-        player.resources.bottles += item.val;
-        addFloatingText(item.x, item.y - 16, `+${item.val} 🍾`, '#22c55e');
-      } else if (item.type === 'stew') {
-        player.items.stew += item.val;
-        addFloatingText(item.x, item.y - 20, `+${item.val} 🥫 ТУШЁНКА`, '#fbbf24');
-      } else if (item.type === 'vodka') {
-        player.items.vodka += item.val;
-        addFloatingText(item.x, item.y - 20, `+${item.val} 🍾 ВОДКА`, '#f59e0b');
-      } else if (item.type === 'bandage') {
-        player.items.bandage += item.val;
-        addFloatingText(item.x, item.y - 20, `+${item.val} 🩹 БИНТЫ`, '#4ade80');
+    if (Math.abs(item.x - player.x) < pickupRadius && Math.abs(item.y - player.y) < pickupRadius) {
+      if (Math.hypot(item.x - player.x, item.y - player.y) < pickupRadius) {
+        if (item.type === 'scrap') {
+          player.resources.scrap += item.val;
+          addFloatingText(item.x, item.y - 16, `+${item.val} ⚙️`, '#38bdf8');
+        } else if (item.type === 'bottle') {
+          player.resources.bottles += item.val;
+          addFloatingText(item.x, item.y - 16, `+${item.val} 🍾`, '#22c55e');
+        } else if (item.type === 'stew') {
+          player.items.stew += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} 🥫 ТУШЁНКА`, '#fbbf24');
+        } else if (item.type === 'vodka') {
+          player.items.vodka += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} 🍾 ВОДКА`, '#f59e0b');
+        } else if (item.type === 'bandage') {
+          player.items.bandage += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} 🩹 БИНТЫ`, '#4ade80');
+        }
+        lootItems.splice(i, 1);
       }
-      lootItems.splice(i, 1);
     }
   }
 
@@ -2404,6 +2488,12 @@ function render() {
     ctx.translate(wobbleX, wobbleY);
   }
 
+  // Границы видимой области экрана (Frustum Culling) с запасом 120px под крупные 3D-модели
+  const viewMinX = camera.x - 120;
+  const viewMaxX = camera.x + canvas.width + 120;
+  const viewMinY = camera.y - 120;
+  const viewMaxY = camera.y + canvas.height + 120;
+
   // 1-5. Высокодетализированный 2.5D мир Новохмуринска (асфальт, дворы, тротуары, разметка, здания, пропсы, магазин)
   if (window.environmentRenderer) {
     window.environmentRenderer.draw(ctx, camera, canvas.width, canvas.height, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
@@ -2413,20 +2503,24 @@ function render() {
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
   }
 
-  // 6. Выпавший 3D лут (шестеренки, бутылки, консервы)
-  lootItems.forEach(l => {
+  // 6. Выпавший 3D лут (шестеренки, бутылки, консервы) — только в пределах экрана!
+  for (let i = 0; i < lootItems.length; i++) {
+    const l = lootItems[i];
+    if (l.x < viewMinX || l.x > viewMaxX || l.y < viewMinY || l.y > viewMaxY) continue;
     if (window.environmentRenderer && window.environmentRenderer.drawLootItem) {
       window.environmentRenderer.drawLootItem(ctx, l);
     } else {
       ctx.font = '18px Arial';
       ctx.fillText(l.icon, l.x, l.y);
     }
-  });
+  }
 
-  // 7. Враги через ThreeEnemyManager (3D WebGL) / SpriteRenderer
-  enemies.forEach(e => {
+  // 7. Враги через ThreeEnemyManager (3D WebGL) — только в пределах экрана!
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
     if (window.threeEnemies && window.threeEnemies.draw(ctx, e)) {
-      return;
+      continue;
     }
     if (e.type === 'grunt') {
       SpriteRenderer.drawToadGrunt(ctx, e);
@@ -2436,39 +2530,52 @@ function render() {
     } else {
       SpriteRenderer.drawToadSniper(ctx, e);
     }
-  });
+  }
 
-  // 8. Пули
-  enemyBullets.forEach(eb => {
+  // 8. Пули — только в пределах экрана
+  if (enemyBullets.length > 0) {
     ctx.fillStyle = '#a3e635';
     ctx.beginPath();
-    ctx.arc(eb.x, eb.y, eb.radius, 0, Math.PI * 2);
+    for (let i = 0; i < enemyBullets.length; i++) {
+      const eb = enemyBullets[i];
+      if (eb.x < viewMinX || eb.x > viewMaxX || eb.y < viewMinY || eb.y > viewMaxY) continue;
+      ctx.moveTo(eb.x + eb.radius, eb.y);
+      ctx.arc(eb.x, eb.y, eb.radius, 0, Math.PI * 2);
+    }
     ctx.fill();
-  });
+  }
 
-  bullets.forEach(b => {
+  for (let i = 0; i < bullets.length; i++) {
+    const b = bullets[i];
+    if (b.x < viewMinX || b.x > viewMaxX || b.y < viewMinY || b.y > viewMaxY) continue;
     ctx.fillStyle = b.color;
     ctx.beginPath();
     ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
     ctx.fill();
-  });
+  }
 
   // 9. Василий с экипировкой
   SpriteRenderer.drawVasiliy(ctx, player);
 
-  // 10. Частицы и текст
-  particles.forEach(p => {
+  // 10. Частицы и текст — только в пределах экрана
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    if (p.x < viewMinX || p.x > viewMaxX || p.y < viewMinY || p.y > viewMaxY) continue;
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
     ctx.fill();
-  });
+  }
 
-  floatingTexts.forEach(ft => {
-    ctx.fillStyle = ft.color;
+  if (floatingTexts.length > 0) {
     ctx.font = 'bold 14px "Segoe UI", sans-serif';
-    ctx.fillText(ft.text, ft.x, ft.y);
-  });
+    for (let i = 0; i < floatingTexts.length; i++) {
+      const ft = floatingTexts[i];
+      if (ft.x < viewMinX || ft.x > viewMaxX || ft.y < viewMinY || ft.y > viewMaxY) continue;
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, ft.x, ft.y);
+    }
+  }
 
   ctx.restore();
   ctx.restore();

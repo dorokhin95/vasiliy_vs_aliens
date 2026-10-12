@@ -12,8 +12,8 @@
 class ThreeCharacterManager {
   constructor() {
     this.isLoaded = false;
-    this.width = 192;
-    this.height = 192;
+    this.width = 160;
+    this.height = 160;
 
     // Offscreen Canvas and WebGL Renderer
     this.canvas = document.createElement('canvas');
@@ -23,7 +23,7 @@ class ThreeCharacterManager {
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       alpha: true,
-      antialias: true,
+      antialias: false,
       preserveDrawingBuffer: true
     });
     this.renderer.setSize(this.width, this.height, false);
@@ -83,6 +83,7 @@ class ThreeCharacterManager {
     this.lastX = null;
     this.lastY = null;
     this.lastTime = performance.now();
+    this.lastRenderState = '';
 
     // Weapon Objects loaded from glTF
     this.shotgunObj = null;
@@ -100,7 +101,7 @@ class ThreeCharacterManager {
     }
 
     const loader = new THREE.GLTFLoader();
-    const modelUrl = 'assets/models/vasiliy.glb?v=' + Date.now();
+    const modelUrl = 'assets/models/vasiliy.glb?v=1022';
     loader.load(
       modelUrl,
       (gltf) => {
@@ -114,18 +115,14 @@ class ThreeCharacterManager {
         this.drillObj = this.model.getObjectByName('Vasiliy_Drill');
         this.plasmaObj = this.model.getObjectByName('Vasiliy_Plasma');
 
-        // Texture filtering and shadow setup
+        // Texture filtering
         this.model.traverse((child) => {
-          if (child.isMesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
-            if (child.material) {
-              const mat = child.material;
-              if (mat.map) {
-                mat.map.minFilter = THREE.LinearFilter;
-                mat.map.magFilter = THREE.LinearFilter;
-                mat.map.needsUpdate = true;
-              }
+          if (child.isMesh && child.material) {
+            const mat = child.material;
+            if (mat.map) {
+              mat.map.minFilter = THREE.LinearFilter;
+              mat.map.magFilter = THREE.LinearFilter;
+              mat.map.needsUpdate = true;
             }
           }
         });
