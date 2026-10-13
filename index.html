@@ -745,7 +745,15 @@
       font-weight: 800;
       font-size: 12px;
       min-width: 135px;
+      /* Длинная цена (Плазмаган: шесть ресурсов) переносится на вторую строку, а не вылезает */
+      max-width: 168px;
+      flex-shrink: 0;
+      line-height: 1.7;
       text-align: center;
+      white-space: normal;
+    }
+    .shop-buy-btn span {
+      display: inline-block;
       white-space: nowrap;
     }
     .shop-buy-btn:hover:not(:disabled) {
@@ -1530,14 +1538,14 @@
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1074"></script>
-  <script src="src/three_character.js?v=1074"></script>
-  <script src="src/three_enemies.js?v=1074"></script>
-  <script src="src/three_props.js?v=1074"></script>
-  <script src="src/three_boss.js?v=1074"></script>
-  <script src="src/game.js?v=1074"></script>
-  <script src="src/menu.js?v=1074"></script>
-  <script src="src/comic.js?v=1074"></script>
-  <script src="src/cards.js?v=1074"></script>
+  <script src="src/environment.js?v=1082"></script>
+  <script src="src/three_character.js?v=1082"></script>
+  <script src="src/three_enemies.js?v=1082"></script>
+  <script src="src/three_props.js?v=1082"></script>
+  <script src="src/three_boss.js?v=1082"></script>
+  <script src="src/game.js?v=1082"></script>
+  <script src="src/menu.js?v=1082"></script>
+  <script src="src/comic.js?v=1082"></script>
+  <script src="src/cards.js?v=1082"></script>
 </body>
 </html>

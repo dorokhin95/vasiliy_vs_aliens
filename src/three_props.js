@@ -40,6 +40,10 @@ class ThreePropsManager {
       car_uaz: false,
       trash_dumpster: false,
       military_crate: false,
+      car_zhiguli_open: false,
+      car_uaz_open: false,
+      trash_dumpster_open: false,
+      military_crate_open: false,
       loot_scrap: false,
       loot_bottle: false,
       loot_stew: false,
@@ -57,6 +61,9 @@ class ThreePropsManager {
     };
 
     this.modelHeights = {};
+    this.frameSizes = {}; // свой размер кадра у крупных моделей (дома), см. getFrameCanvas
+    this.silhouettes = {}; // где модель непрозрачна на кадре — для коллизий (silhouette)
+    this.yaws = {};        // доворот модели, чтобы она смотрела как парная (открытые тайники)
 
     // Cache: Map<`${propKey}_${dirIdx}`, HTMLCanvasElement → HTMLImageElement once decoded (see promoteFrameToImage)>
     this.cache = new Map();
@@ -113,6 +120,10 @@ class ThreePropsManager {
       car_uaz: new THREE.Group(),
       trash_dumpster: new THREE.Group(),
       military_crate: new THREE.Group(),
+      car_zhiguli_open: new THREE.Group(),
+      car_uaz_open: new THREE.Group(),
+      trash_dumpster_open: new THREE.Group(),
+      military_crate_open: new THREE.Group(),
       loot_scrap: new THREE.Group(),
       loot_bottle: new THREE.Group(),
       loot_stew: new THREE.Group(),
@@ -149,15 +160,22 @@ class ThreePropsManager {
 
     const loader = new THREE.GLTFLoader();
     const configs = [
-      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88 },
-      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.88 },
-      { key: 'building_boiler_house', file: 'assets/models/building_boiler_house.glb', targetSpan: 2.15, colorScale: 0.88 },
-      { key: 'building_military_hq',  file: 'assets/models/building_military_hq.glb',  targetSpan: 2.15, colorScale: 0.88 },
+      // Дома рисуются крупно (до ~640 px) — их кадр рендерится в высоком разрешении (frameSize)
+      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 640 },
+      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.88, frameSize: 640 },
+      { key: 'building_boiler_house', file: 'assets/models/building_boiler_house.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 640 },
+      { key: 'building_military_hq',  file: 'assets/models/building_military_hq.glb',  targetSpan: 2.15, colorScale: 0.88, frameSize: 640 },
       { key: 'mikhalyh_shop',  file: 'assets/models/mikhalyh_shop.glb',  targetSpan: 1.95, colorScale: 0.84 },
       { key: 'car_zhiguli',    file: 'assets/models/car_zhiguli.glb',    targetSpan: 1.95, colorScale: 0.92 },
       { key: 'car_uaz',        file: 'assets/models/car_uaz.glb',        targetSpan: 1.95, colorScale: 0.92 },
       { key: 'trash_dumpster', file: 'assets/models/trash_dumpster.glb', targetSpan: 1.55, colorScale: 0.90 },
       { key: 'military_crate', file: 'assets/models/military_crate.glb', targetSpan: 1.55, colorScale: 0.90 },
+      // Обысканные тайники — открытые двери и крышки вместо полупрозрачной модели. yaw — поворот,
+      // чтобы открытая модель смотрела туда же, что и закрытая (Rodin кладёт их по-разному)
+      { key: 'car_zhiguli_open',    file: 'assets/models/car_zhiguli_open.glb',    targetSpan: 1.95, colorScale: 0.92, yaw: -Math.PI / 2 },
+      { key: 'car_uaz_open',        file: 'assets/models/car_uaz_open.glb',        targetSpan: 1.95, colorScale: 0.92, yaw: -Math.PI / 2 },
+      { key: 'trash_dumpster_open', file: 'assets/models/trash_dumpster_open.glb', targetSpan: 1.75, colorScale: 0.90, yaw: 0 },
+      { key: 'military_crate_open', file: 'assets/models/military_crate_open.glb', targetSpan: 1.55, colorScale: 0.90, yaw: 0 },
       { key: 'fence_po2',      file: 'assets/models/fence_po2.glb',      targetSpan: 2.05, colorScale: 0.72 },
       { key: 'fence_po2_b',    file: 'assets/models/fence_po2_b.glb',    targetSpan: 2.05, colorScale: 0.72 },
       { key: 'heating_pipes',  file: 'assets/models/heating_pipes.glb',  targetSpan: 2.05, colorScale: 0.78 },
@@ -219,6 +237,8 @@ class ThreePropsManager {
           model.position.y -= scaledBox.min.y;
 
           this.modelHeights[cfg.key] = Math.max(0.2, scaledBox.max.y - scaledBox.min.y);
+          if (cfg.frameSize) this.frameSizes[cfg.key] = cfg.frameSize;
+          if (cfg.yaw) this.yaws[cfg.key] = cfg.yaw;
           this.models[cfg.key] = model;
           this.roots[cfg.key].add(model);
           this.isLoaded[cfg.key] = true;
@@ -244,8 +264,10 @@ class ThreePropsManager {
       'mikhalyh_shop', 'garage_block', 'fence_po2', 'fence_po2_b', 'heating_pipes'].forEach(key => frames.push([key, 0]));
     // Пограничный забор вдоль боковых границ стоит торцом
     ['fence_po2', 'fence_po2_b'].forEach(key => frames.push([key, 4]));
-    ['car_zhiguli', 'car_uaz'].forEach(key => this.carDirections.forEach(dir => frames.push([key, dir])));
-    ['trash_dumpster', 'military_crate'].forEach(key => this.propDirections.forEach(dir => frames.push([key, dir])));
+    ['car_zhiguli', 'car_uaz', 'car_zhiguli_open', 'car_uaz_open']
+      .forEach(key => this.carDirections.forEach(dir => frames.push([key, dir])));
+    ['trash_dumpster', 'military_crate', 'trash_dumpster_open', 'military_crate_open']
+      .forEach(key => this.propDirections.forEach(dir => frames.push([key, dir])));
     // Loot cycles through even direction indices (see drawLootItem)
     ['loot_scrap', 'loot_bottle', 'loot_stew', 'loot_vodka', 'loot_bandage'].forEach(key => {
       for (let dir = 0; dir < this.numDirections; dir += 2) frames.push([key, dir]);
@@ -272,20 +294,24 @@ class ThreePropsManager {
     }
 
     const angle = (dirIdx / this.numDirections) * Math.PI * 2;
-    this.roots[propKey].rotation.y = angle;
+    this.roots[propKey].rotation.y = angle + (this.yaws[propKey] || 0);
 
     // Look at vertical center of the normalized model
     const h = this.modelHeights[propKey] || 0.8;
     this.camera.lookAt(0, h * 0.48, 0);
     this.camera.updateProjectionMatrix();
 
+    // Крупные модели (дома) — в высоком разрешении: тот же кадр, больше пикселей
+    const size = this.frameSizes[propKey] || this.width;
+    if (size !== this.width) this.renderer.setSize(size, size, false);
     this.renderer.render(this.scene, this.camera);
 
     const cachedCanvas = document.createElement('canvas');
-    cachedCanvas.width = this.width;
-    cachedCanvas.height = this.height;
+    cachedCanvas.width = size;
+    cachedCanvas.height = size;
     const cctx = cachedCanvas.getContext('2d');
     cctx.drawImage(this.canvas, 0, 0);
+    if (size !== this.width) this.renderer.setSize(this.width, this.height, false);
 
     this.cache.set(cacheKey, cachedCanvas);
     promoteFrameToImage(this.cache, cacheKey, cachedCanvas);
@@ -326,6 +352,11 @@ class ThreePropsManager {
    * Renders a 3D Soviet metal garage box (.glb) onto the main 2D game canvas,
    * oriented with its double steel doors facing forward (dirIdx = 0).
    */
+  // Где на карте лежит кадр гаража: от его центра, 195×195
+  garageFrame(b) {
+    return { propKey: 'garage_block', x: b.x + b.w / 2 - 97.5, y: b.y + b.h / 2 - 97.5, w: 195, h: 195 };
+  }
+
   drawGarage(ctx, b) {
     if (!this.isLoaded['garage_block']) {
       return false;
@@ -362,26 +393,126 @@ class ThreePropsManager {
    * - building_boiler_house (320x160 red-brick district heating boiler plant / ТЭЦ)
    * - building_military_hq (320x160 fortified military command bunker & barracks)
    */
+  // Где на карте лежит кадр дома (по типу и масштабу): { propKey, x, y, w, h } или null
+  majorBuildingFrame(b) {
+    let propKey = null;
+    let renderW = 376;
+    let renderH = 315;
+    let offsetY = -12;
+    const kind = houseKind(b);
+    if (kind === 'boiler_house') propKey = 'building_boiler_house';
+    else if (kind === 'military_hq') propKey = 'building_military_hq';
+    else if (kind === 'khrushchevka') propKey = 'building_khrushchevka';
+    else if (kind === 'brezhnevka') {
+      propKey = 'building_brezhnevka';
+      renderW = 300;
+      renderH = 325;
+      offsetY = -10;
+    }
+    if (!propKey) return null;
+    const k = houseScale(b);
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2 + offsetY * k;
+    return { propKey, x: cx - renderW * k / 2, y: cy - renderH * k / 2, w: renderW * k, h: renderH * k };
+  }
+
+  /**
+   * Силуэт модели на кадре — для коллизий: «врезаешься» только там, где здание нарисовано.
+   * Кадр режется на полосы по высоте; в каждой полосе берутся участки столбцов, где модель занимает
+   * хотя бы четверть строк (антенны, тонкие трубы и перила отсекаются), близкие участки сливаются.
+   * Возвращает прямоугольники в долях кадра.
+   */
+  silhouette(propKey, strips = 7) {
+    if (this.silhouettes[propKey]) return this.silhouettes[propKey];
+    const frame = this.getFrameCanvas(propKey, 0);
+    if (!frame) return null;
+    const size = this.frameSizes[propKey] || this.width;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const g = c.getContext('2d');
+    g.drawImage(frame, 0, 0, size, size);
+    const a = g.getImageData(0, 0, size, size).data;
+    const solid = new Uint8Array(size * size);
+    const rowCount = new Uint32Array(size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (a[(y * size + x) * 4 + 3] > 90) {
+          solid[y * size + x] = 1;
+          rowCount[y]++;
+        }
+      }
+    }
+    let top = -1, bottom = -1;
+    for (let y = 0; y < size; y++) {
+      if (rowCount[y] > size * 0.03) {
+        if (top < 0) top = y;
+        bottom = y;
+      }
+    }
+    if (top < 0) return null;
+    const rects = [];
+    const stripH = (bottom - top + 1) / strips;
+    const minGap = Math.round(size * 0.04);
+    for (let s = 0; s < strips; s++) {
+      const y0 = Math.round(top + s * stripH), y1 = Math.round(top + (s + 1) * stripH);
+      const need = Math.max(1, (y1 - y0) * 0.25);
+      let runStart = -1, lastEnd = -1;
+      const runs = [];
+      for (let x = 0; x <= size; x++) {
+        let n = 0;
+        if (x < size) for (let y = y0; y < y1; y++) n += solid[y * size + x];
+        if (x < size && n >= need) {
+          if (runStart < 0) runStart = x;
+          lastEnd = x;
+        } else if (runStart >= 0) {
+          // Близкий участок продолжает предыдущий — щель меньше 4% кадра не в счёт
+          const prev = runs[runs.length - 1];
+          if (prev && runStart - prev[1] < minGap) prev[1] = lastEnd;
+          else runs.push([runStart, lastEnd]);
+          runStart = -1;
+        }
+      }
+      runs.forEach(([x0, x1]) => {
+        if (x1 - x0 < size * 0.02) return;
+        rects.push({ x: x0 / size, y: y0 / size, w: (x1 - x0 + 1) / size, h: (y1 - y0) / size });
+      });
+    }
+    this.silhouettes[propKey] = rects;
+    return rects;
+  }
+
+  // Коллизия здания или гаража по силуэту его модели, в координатах карты; null — модель ещё грузится
+  silhouetteRects(b) {
+    const f = b.type === 'garage' ? this.garageFrame(b) : this.majorBuildingFrame(b);
+    if (!f || !this.isLoaded[f.propKey]) return null;
+    const sil = this.silhouette(f.propKey);
+    if (!sil) return null;
+    return sil.map(r => ({ x: f.x + r.x * f.w, y: f.y + r.y * f.h, w: r.w * f.w, h: r.h * f.h }));
+  }
+
   drawMajorBuilding(ctx, b) {
     let propKey = null;
     let renderW = 376;
     let renderH = 315;
     let offsetY = -12;
 
-    if (b.type === 'boiler_house') {
+    const kind = houseKind(b);
+    if (kind === 'boiler_house') {
       propKey = 'building_boiler_house';
-    } else if (b.type === 'military_hq') {
+    } else if (kind === 'military_hq') {
       propKey = 'building_military_hq';
-    } else if (b.type === 'panel') {
-      if (b.w >= 300) {
-        propKey = 'building_khrushchevka';
-      } else if (b.h >= 240) {
-        propKey = 'building_brezhnevka';
-        renderW = 300;
-        renderH = 325;
-        offsetY = -10;
-      }
+    } else if (kind === 'khrushchevka') {
+      propKey = 'building_khrushchevka';
+    } else if (kind === 'brezhnevka') {
+      propKey = 'building_brezhnevka';
+      renderW = 300;
+      renderH = 325;
+      offsetY = -10;
     }
+    // Размеры спрайта замерены на исходном доме; крупный дом — пропорционально крупнее
+    const k = houseScale(b);
+    renderW *= k;
+    renderH *= k;
+    offsetY *= k;
 
     if (!propKey || !this.isLoaded[propKey]) {
       return false;
@@ -572,6 +703,9 @@ class ThreePropsManager {
     if (!this.isLoaded[propKey]) {
       return false;
     }
+    // Обысканный тайник — открытый: распахнутые двери и багажник, откинутая крышка, вывороченный мусор
+    const opened = c.searched && this.isLoaded[propKey + '_open'];
+    if (opened) propKey += '_open';
 
     // Natural 3D orientation per container (uses explicit c.dirIdx if placed along a road/wall, else deterministic hash)
     let dirIdx;
@@ -599,21 +733,23 @@ class ThreePropsManager {
       ctx.fill();
     }
 
-    // 2. Render 3D WebGL model
-    if (c.searched) {
+    // 2. Render 3D WebGL model (пока открытая модель грузится — обысканный полупрозрачный, как раньше)
+    if (c.searched && !opened) {
       ctx.globalAlpha = 0.55;
     }
     ctx.drawImage(frameCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
     ctx.globalAlpha = 1.0;
 
-    // 3. Interaction status indicator
+    // 3. Interaction status indicator: необысканный — жёлтая стрелка; обысканный и так видно, что открыт
     const indicatorY = c.type === 'car' ? -64 : -34;
     if (c.searched) {
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
-      ctx.font = '13px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('✓', 0, indicatorY);
+      if (!opened) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+        ctx.font = '13px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✓', 0, indicatorY);
+      }
     } else {
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 12px Arial';

@@ -1018,14 +1018,15 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-const WORLD_WIDTH = 4000;
-const WORLD_HEIGHT = 4000;
+// Раскладка карты — MAP в environment.js
+const WORLD_WIDTH = MAP.SIZE;
+const WORLD_HEIGHT = MAP.SIZE;
 const camera = { x: 0, y: 0 };
 let gameState = 'MENU';
 
 const player = {
-  x: 2000,
-  y: 2000,
+  x: MAP.CENTER,
+  y: MAP.CENTER,
   radius: 20,
   speed: 4.2,
   maxHp: 100,
@@ -1090,11 +1091,11 @@ const player = {
 };
 
 const safeZone = {
-  x: 2000,
-  y: 2000,
+  x: MAP.CENTER,
+  y: MAP.CENTER,
   radius: 280,
-  shopX: 2000,
-  shopY: 1940,
+  shopX: MAP.CENTER,
+  shopY: MAP.CENTER - 60,
   shopRadius: 55
 };
 
@@ -1191,19 +1192,19 @@ function getDistrictAt(x, y) {
   if (Math.hypot(x - safeZone.x, y - safeZone.y) < 420) {
     return DISTRICTS.hub;
   }
-  const isOuterX = (x < 870 || x > 3170);
-  const isOuterY = (y < 870 || y > 3170);
+  const isOuterX = (x < MAP.RING_A || x > MAP.RING_B);
+  const isOuterY = (y < MAP.RING_A || y > MAP.RING_B);
 
   // 4 дальних угла карты — Квако-Гнезда (Tier 4)
   if (isOuterX && isOuterY) {
     return DISTRICTS.nest;
   }
   // Западный сектор — Гаражный кооператив «Восток» (Tier 2A)
-  if (x < 870) {
+  if (x < MAP.RING_A) {
     return DISTRICTS.garages;
   }
   // Восточный сектор — Магистраль Теплотрассы (Tier 2B)
-  if (x > 3170) {
+  if (x > MAP.RING_B) {
     return DISTRICTS.heating;
   }
   // Северный и Южный сектора — Военный Кордон (Tier 3)
@@ -1233,12 +1234,11 @@ function generateWorld() {
   cameraKickX = 0;
   cameraKickY = 0;
 
-  roads.push({ x: 0, y: 1900, w: WORLD_WIDTH, h: 200 });
-  roads.push({ x: 1900, y: 0, w: 200, h: WORLD_HEIGHT });
-  roads.push({ x: 0, y: 800, w: WORLD_WIDTH, h: 140 });
-  roads.push({ x: 0, y: 3100, w: WORLD_WIDTH, h: 140 });
-  roads.push({ x: 800, y: 0, w: 140, h: WORLD_HEIGHT });
-  roads.push({ x: 3100, y: 0, w: 140, h: WORLD_HEIGHT });
+  // Дороги — MAP.ROADS: проспект через центр и две кольцевые, по каждой оси
+  MAP.ROADS.forEach(r => {
+    roads.push({ x: 0, y: r.pos, w: WORLD_WIDTH, h: r.size });
+    roads.push({ x: r.pos, y: 0, w: r.size, h: WORLD_HEIGHT });
+  });
 
   const isNearRoad = (rx, ry, rw, rh, pad = 32) => {
     return roads.some(r =>
@@ -1307,27 +1307,21 @@ function generateWorld() {
     return true;
   };
 
-  // Сетка 16 городских кварталов, образованных дорогами (800, 1900, 3100)
-  const colRanges = [
-    [110, 740],
-    [990, 1840],
-    [2150, 3040],
-    [3290, 3890]
-  ];
-  const rowRanges = [
-    [110, 740],
-    [990, 1840],
-    [2150, 3040],
-    [3290, 3890]
-  ];
+  // Сетка 16 городских кварталов между дорогами (MAP.BLOCKS). Расстояния внутри квартала — ×MAP.SPACE
+  // к прежней карте, дома — ×MAP.HOUSE; гаражи, заборы, трубы и машины — прежнего размера
+  const colRanges = MAP.BLOCKS;
+  const rowRanges = MAP.BLOCKS;
+  const S = v => Math.round(v * MAP.SPACE);
+  const H = v => Math.round(v * MAP.HOUSE);
 
   // Враги появляются после того, как расставлены все препятствия, иначе жаба может родиться внутри машины
   const pendingSpawns = [];
 
-  // 0. Стартовые мусорные баки вокруг площади Михалыча (Tier 0 -> Tier 1 переход)
-  tryAddContainer(1660, 1845, 'trash', null, 0);
-  tryAddContainer(2340, 1845, 'trash', null, 0);
-  tryAddContainer(1660, 2155, 'trash', null, 0);
+  // 0. Стартовые мусорные баки у площади Михалыча, по краям главного проспекта (Tier 0 -> Tier 1 переход)
+  const C = MAP.CENTER, main = MAP.MAIN;
+  tryAddContainer(C - 340, main.pos - 55, 'trash', null, 0);
+  tryAddContainer(C + 340, main.pos - 55, 'trash', null, 0);
+  tryAddContainer(C - 340, main.pos + main.size + 55, 'trash', null, 0);
 
   // 1. Генерация архитектуры, контейнеров и патрулей по каждому из 16 кварталов согласно правилам района
   colRanges.forEach(([x1, x2], cIdx) => {
@@ -1339,9 +1333,9 @@ function generateWorld() {
 
       if (dist.id === 'courtyards') {
         // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из 5-этажных Хрущёвок и 9-этажных Брежневок
-        const b1 = tryAddBuilding(x1 + 60, y1 + 70, 320, 160, 'panel', { subType: 'khrushchevka' });
-        const b2 = tryAddBuilding(x2 - 290, y2 - 320, 220, 260, 'panel', { subType: 'brezhnevka' });
-        const b3 = tryAddBuilding(x1 + 90, y2 - 240, 320, 160, 'panel', { subType: 'khrushchevka' });
+        const b1 = tryAddBuilding(x1 + S(60), y1 + S(70), H(320), H(160), 'panel', { subType: 'khrushchevka' });
+        const b2 = tryAddBuilding(x2 - S(70) - H(220), y2 - S(60) - H(260), H(220), H(260), 'panel', { subType: 'brezhnevka' });
+        const b3 = tryAddBuilding(x1 + S(90), y2 - S(80) - H(160), H(320), H(160), 'panel', { subType: 'khrushchevka' });
         [b1, b2, b3].forEach(b => { if (b) blockBuildings.push(b); });
 
         // Примыкающий забор ПО-2 или короткий ввод теплотрассы к одному из домов
@@ -1355,7 +1349,7 @@ function generateWorld() {
         // Контейнеры: мусорные баки ЖЭК-4 рядом со стенами панелек + редкие Жигули у дороги
         blockBuildings.forEach(b => {
           tryAddContainer(b.x - 48, b.y + b.h - 24, 'trash', null, 0);
-          tryAddContainer(b.x + 80, b.y + b.h + 48, 'trash', null, 1);
+          tryAddContainer(b.x + H(80), b.y + b.h + 48, 'trash', null, 1);
         });
         tryAddContainer(bcx, y1 + 25, 'car', 'zhiguli', 0);
 
@@ -1366,25 +1360,26 @@ function generateWorld() {
 
       } else if (dist.id === 'garages') {
         // 🟠 TIER 2A: ГАРАЖНЫЙ КООПЕРАТИВ «ВОСТОК» — ряды 3D гаражных боксов №74, заборы ПО-2, много машин и чермета
-        const g1 = tryAddBuilding(x1 + 40, y1 + 80, 140, 100, 'garage');
-        const g2 = tryAddBuilding(x1 + 220, y1 + 80, 140, 100, 'garage');
-        const g3 = tryAddBuilding(x1 + 40, y1 + 360, 140, 100, 'garage');
-        const g4 = tryAddBuilding(x1 + 220, y1 + 360, 140, 100, 'garage');
-        const g5 = tryAddBuilding(x1 + 80, y2 - 190, 140, 100, 'garage');
-        [g1, g2, g3, g4, g5].forEach(g => { if (g) blockBuildings.push(g); });
+        const g1 = tryAddBuilding(x1 + S(40), y1 + S(80), 140, 100, 'garage');
+        const g2 = tryAddBuilding(x1 + S(220), y1 + S(80), 140, 100, 'garage');
+        const g3 = tryAddBuilding(x1 + S(40), y1 + S(360), 140, 100, 'garage');
+        const g4 = tryAddBuilding(x1 + S(220), y1 + S(360), 140, 100, 'garage');
+        const g5 = tryAddBuilding(x1 + S(80), y2 - S(190), 140, 100, 'garage');
+        const g6 = tryAddBuilding(x1 + S(260), y2 - S(190), 140, 100, 'garage');
+        [g1, g2, g3, g4, g5, g6].forEach(g => { if (g) blockBuildings.push(g); });
 
         // Бетонные заборы ПО-2 продолжают линии гаражного кооператива
         if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
         if (g4) tryAddBuilding(g4.x + g4.w + 4, g4.y + g4.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-        if (g5) tryAddBuilding(g5.x + g5.w + 4, g5.y + g5.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+        if (g6) tryAddBuilding(g6.x + g6.w + 4, g6.y + g6.h - 32, 220, 30, 'fence_wall', { segments: 2 });
 
         // Контейнеры: Жигули и УАЗы перед гаражами + мусорные баки + армейский ящик с инструментами в глубине
         if (g1) tryAddContainer(g1.x + 70, g1.y + g1.h + 72, 'car', 'zhiguli', 0);
         if (g3) tryAddContainer(g3.x + 70, g3.y + g3.h + 72, 'car', 'uaz', 8);
-        tryAddContainer(x2 - 90, bcy - 120, 'car', 'zhiguli', 1);
-        tryAddContainer(x1 + 420, y1 + 230, 'box', null, 0);
-        tryAddContainer(x1 + 60, y2 - 50, 'trash', null, 0);
-        tryAddContainer(x2 - 110, y2 - 110, 'box', null, 1);
+        tryAddContainer(x2 - S(90), bcy - S(120), 'car', 'zhiguli', 1);
+        tryAddContainer(x1 + S(420), y1 + S(230), 'box', null, 0);
+        tryAddContainer(x1 + S(60), y2 - S(50), 'trash', null, 0);
+        tryAddContainer(x2 - S(110), y2 - S(110), 'box', null, 1);
 
         // Враги: Пехотинцы + Снайперы в засадах между гаражами
         for (let i = 0; i < 4; i++) {
@@ -1393,9 +1388,9 @@ function generateWorld() {
 
       } else if (dist.id === 'heating') {
         // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — Кирпичные Котельные ТЭЦ, Брежневки и длинные линии труб теплотрассы
-        const p1 = tryAddBuilding(x1 + 45, y1 + 90, 220, 260, 'panel', { subType: 'brezhnevka' });
-        const g1 = tryAddBuilding(x1 + 55, y1 + 440, 140, 100, 'garage');
-        const p2 = tryAddBuilding(x1 + 45, y2 - 230, 320, 160, 'boiler_house');
+        const p1 = tryAddBuilding(x1 + S(45), y1 + S(90), H(220), H(260), 'panel', { subType: 'brezhnevka' });
+        const g1 = tryAddBuilding(x1 + S(55), y1 + S(90) + H(260) + S(60), 140, 100, 'garage');
+        const p2 = tryAddBuilding(x1 + S(45), y2 - S(70) - H(160), H(320), H(160), 'boiler_house');
 
         // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен Котельной и домов
         if (p1) {
@@ -1409,12 +1404,12 @@ function generateWorld() {
         }
 
         // Контейнеры: тайники с водкой и тушенкой у тепловых камер + машины
-        tryAddContainer(x1 + 330, y1 + 290, 'trash', null, 0);
-        tryAddContainer(x1 + 420, y1 + 380, 'box', null, 0);
-        tryAddContainer(x1 + 260, y1 + 575, 'trash', null, 1);
-        tryAddContainer(x1 + 480, y2 - 280, 'box', null, 0);
-        tryAddContainer(x1 + 160, y1 + 38, 'car', 'uaz', 0);
-        tryAddContainer(x2 - 110, bcy + 40, 'car', 'zhiguli', 8);
+        tryAddContainer(x1 + S(330), y1 + S(290), 'trash', null, 0);
+        tryAddContainer(x1 + S(420), y1 + S(380), 'box', null, 0);
+        tryAddContainer(x1 + S(260), y1 + S(575), 'trash', null, 1);
+        tryAddContainer(x1 + S(480), y2 - S(280), 'box', null, 0);
+        tryAddContainer(x1 + S(160), y1 + 38, 'car', 'uaz', 0);
+        tryAddContainer(x2 - S(110), bcy + S(40), 'car', 'zhiguli', 8);
 
         // Враги: Снайперы и Штурмовики вдоль труб
         for (let i = 0; i < 4; i++) {
@@ -1423,9 +1418,9 @@ function generateWorld() {
 
       } else if (dist.id === 'cordon') {
         // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — Командный Бункер/Казарма с РЛС, блокпосты из плит ПО-2, санитарные УАЗы, склады
-        const b1 = tryAddBuilding(x1 + 70, y1 + 90, 320, 160, 'military_hq');
-        const g1 = tryAddBuilding(x1 + 120, y2 - 220, 140, 100, 'garage');
-        const g2 = tryAddBuilding(x2 - 360, y1 + 120, 140, 100, 'garage');
+        const b1 = tryAddBuilding(x1 + S(70), y1 + S(90), H(320), H(160), 'military_hq');
+        const g1 = tryAddBuilding(x1 + S(120), y2 - S(220), 140, 100, 'garage');
+        const g2 = tryAddBuilding(x2 - S(360), y1 + S(120), 140, 100, 'garage');
 
         // Длинные защитные рубежи из бетонных заборов ПО-2
         if (b1) tryAddBuilding(b1.x + b1.w + 4, b1.y + b1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
@@ -1433,12 +1428,12 @@ function generateWorld() {
         if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
 
         // Контейнеры: преобладают Армейские ящики (55%) и УАЗ-Буханки (35%)
-        tryAddContainer(bcx - 90, bcy - 20, 'box', null, 0);
-        tryAddContainer(bcx + 40, bcy + 30, 'box', null, 1);
-        tryAddContainer(x2 - 180, y2 - 140, 'box', null, 0);
-        tryAddContainer(x1 + 220, bcy + 60, 'car', 'uaz', 0);
-        tryAddContainer(x2 - 210, y1 + 60, 'car', 'uaz', 8);
-        tryAddContainer(x1 + 60, y2 - 70, 'trash', null, 0);
+        tryAddContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
+        tryAddContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
+        tryAddContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
+        tryAddContainer(x1 + S(220), bcy + S(60), 'car', 'uaz', 0);
+        tryAddContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
+        tryAddContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
 
         // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
         for (let i = 0; i < 5; i++) {
@@ -1447,9 +1442,9 @@ function generateWorld() {
 
       } else if (dist.id === 'nest') {
         // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — захваченные командные бункеры и котельные, элитные склады спецхрана (лут ×2.5)
-        const g1 = tryAddBuilding(x1 + 50, y1 + 70, 140, 100, 'garage');
+        const g1 = tryAddBuilding(x1 + S(50), y1 + S(70), 140, 100, 'garage');
         const pType = ((cIdx + rIdx) % 2 === 0) ? 'military_hq' : 'boiler_house';
-        const p1 = tryAddBuilding(x1 + 50, y2 - 230, 320, 160, pType);
+        const p1 = tryAddBuilding(x1 + S(50), y2 - S(70) - H(160), H(320), H(160), pType);
 
         if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
         if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
@@ -1457,17 +1452,17 @@ function generateWorld() {
         // СВ угол — логово босса: вместо центрального склада открытая арена, ящики-трофеи по краям
         const isBossLair = (cIdx === 3 && rIdx === 0);
         if (isBossLair) {
-          tryAddContainer(x2 - 40, y1 + 40, 'box', null, 1);
-          tryAddContainer(x2 - 40, y2 - 260, 'box', null, 2);
+          tryAddContainer(x2 - S(40), y1 + S(40), 'box', null, 1);
+          tryAddContainer(x2 - S(40), y2 - S(260), 'box', null, 2);
         } else {
           // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
-          tryAddContainer(bcx - 65, bcy - 45, 'box', null, 0);
-          tryAddContainer(bcx + 55, bcy - 40, 'box', null, 1);
-          tryAddContainer(bcx - 50, bcy + 55, 'box', null, 2);
-          tryAddContainer(bcx + 65, bcy + 60, 'box', null, 0);
-          tryAddContainer(x2 - 140, y1 + 140, 'car', 'uaz', 8);
+          tryAddContainer(bcx - S(65), bcy - S(45), 'box', null, 0);
+          tryAddContainer(bcx + S(55), bcy - S(40), 'box', null, 1);
+          tryAddContainer(bcx - S(50), bcy + S(55), 'box', null, 2);
+          tryAddContainer(bcx + S(65), bcy + S(60), 'box', null, 0);
+          tryAddContainer(x2 - S(140), y1 + S(140), 'car', 'uaz', 8);
         }
-        tryAddContainer(x1 + 150, bcy + 10, 'car', 'uaz', 0);
+        tryAddContainer(x1 + S(150), bcy + S(10), 'car', 'uaz', 0);
 
         // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы);
         // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
@@ -3376,15 +3371,37 @@ const BUILDING_ROOF_OVERHANG = {
 };
 
 function buildingCollisionRect(b) {
-  const key = b.type === 'panel' ? (b.w >= 300 ? 'khrushchevka' : 'brezhnevka') : b.type;
-  const o = BUILDING_ROOF_OVERHANG[key] || { top: 0, side: 0 };
-  return { x: b.x - o.side, y: b.y - o.top, w: b.w + o.side * 2, h: b.h + o.top };
+  const o = BUILDING_ROOF_OVERHANG[houseKind(b)] || { top: 0, side: 0 };
+  const k = houseScale(b);
+  return { x: b.x - o.side * k, y: b.y - o.top * k, w: b.w + o.side * 2 * k, h: b.h + o.top * k };
+}
+
+// Дома и гаражи сталкиваются по силуэту своей 3D-модели (threeProps.silhouetteRects): прямоугольник
+// «пятна» с выступом крыши был шире модели у котельной и гаражей — врезались в пустоту рядом.
+// Пока модель грузится — по пятну (b.col)
+const SILHOUETTE_TYPES = new Set(['panel', 'boiler_house', 'military_hq', 'garage']);
+function buildingShape(b) {
+  if (!SILHOUETTE_TYPES.has(b.type) || !window.threeProps || !window.threeProps.silhouetteRects) return null;
+  return window.threeProps.silhouetteRects(b);
 }
 
 // Здания (с крышей): блокируют и персонажей, и пули. Возвращает прямоугольник здания или null
 function checkBuildingCollision(x, y, radius) {
   for (let i = 0; i < buildings.length; i++) {
-    const r = buildings[i].col || buildings[i];
+    const b = buildings[i];
+    if (b.cols === undefined) {
+      const shape = buildingShape(b);
+      if (shape) b.cols = shape;
+      else if (!SILHOUETTE_TYPES.has(b.type)) b.cols = null;
+    }
+    if (b.cols) {
+      for (let j = 0; j < b.cols.length; j++) {
+        const r = b.cols[j];
+        if (x + radius > r.x && x - radius < r.x + r.w && y + radius > r.y && y - radius < r.y + r.h) return r;
+      }
+      continue;
+    }
+    const r = b.col || b;
     if (x + radius > r.x && x - radius < r.x + r.w &&
         y + radius > r.y && y - radius < r.y + r.h) {
       return r;
@@ -3565,13 +3582,13 @@ const BIO_PUDDLE_RY = 38;
 const BIO_PUDDLE_SLOW = 0.6;          // скорость Василия в слизи
 const BIO_PUDDLE_DPS = 6;             // кислота, HP в секунду
 const BIO_PUDDLE_HEAL = 0.015;        // жабы лечатся: доля здоровья в секунду
-const BIO_PUDDLES_PER_NEST = 5;
-const BIO_NESTS = [
-  { x: 0, y: 0, w: 800, h: 800 },
-  { x: 3240, y: 0, w: 760, h: 800 },
-  { x: 0, y: 3240, w: 800, h: 760 },
-  { x: 3240, y: 3240, w: 760, h: 760 }
-];
+const BIO_PUDDLES_PER_NEST = 7;
+// Угловые полосы карты между краем и кольцевыми дорогами (MAP.BANDS)
+const BIO_NESTS = (() => {
+  const [a, , , d] = MAP.BANDS;
+  const r = (bx, by) => ({ x: bx[0], y: by[0], w: bx[1] - bx[0], h: by[1] - by[0] });
+  return [r(a, a), r(d, a), r(a, d), r(d, d)];
+})();
 let bioPuddles = [];
 
 function generateBioPuddles() {
@@ -3599,7 +3616,8 @@ function generateBioPuddles() {
 
 // (x, y) — точка ступней
 function inBioPuddle(x, y) {
-  if (!((x < 870 || x > 3130) && (y < 870 || y > 3130))) return false; // лужи только в угловых гнёздах
+  const out = v => v < MAP.RING_A || v > MAP.RING_B;
+  if (!(out(x) && out(y))) return false; // лужи только в угловых гнёздах
   for (let i = 0; i < bioPuddles.length; i++) {
     const dx = (x - bioPuddles[i].x) / BIO_PUDDLE_RX;
     const dy = (y - bioPuddles[i].y) / BIO_PUDDLE_RY;
@@ -3918,7 +3936,8 @@ function applyBossCard(id) {
 // Удары берсерка-Мясника по земле трескают пролёт бетонного забора прямо за его логовом. Когда
 // локация зачищена, Василий проламывает треснувший пролёт — за ним путь в Промзону (локация 2,
 // пока заглушка). Состояние: intact → cracked → open. Рисует пролом EnvironmentRenderer
-const fenceBreach = { x: 3685, halfW: 55, state: 'intact', cracks: 0 };
+// x — плита верхнего забора (сегменты через 110 px от 55) прямо над логовом BOSS_HOME
+const fenceBreach = { x: 5555, halfW: 55, state: 'intact', cracks: 0 };
 window.fenceBreach = fenceBreach;
 
 function crackFence() {
@@ -5078,8 +5097,8 @@ function handleEnemyKilled(index) {
 }
 
 // --- БОСС «ЗОЛОТОЙ МЯСНИК» (логово в СВ Квако-гнезде, появляется один раз за забег) ---
-const BOSS_HOME = { x: 3680, y: 330 };
-const BOSS_LEASH_RADIUS = 720;
+const BOSS_HOME = { x: 5520, y: 495 };
+const BOSS_LEASH_RADIUS = 1080;
 const BOSS_MAX_HP = 4800;
 // Золотая кожа: спереди гасит почти половину урона; со спины — только во время его ударов,
 // пока он не доворачивается. Числа брони — в damageBoss

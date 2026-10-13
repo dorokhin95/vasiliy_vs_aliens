@@ -19,8 +19,11 @@ window.Menu = (() => {
   const SETTINGS_KEY = 'vasiliy.settings';
   // Меняя состав сохранения, увеличьте номер и научите applyRun() читать старые форматы.
   // 1 — без врагов (тогда враги расставляются заново), 2 — с живыми врагами,
-  // 3 — тайники по номеру (громилы их переставляют), броня врагов, здоровье Мясника
-  const SAVE_FORMAT = 3;
+  // 3 — тайники по номеру (громилы их переставляют), броня врагов, здоровье Мясника,
+  // 4 — карта 6000×6000 с крупными домами: мир из форматов 1–3 к ней не подходит, из них берётся
+  //     только прогресс Василия, а город расставляется заново
+  const SAVE_FORMAT = 4;
+  const WORLD_FORMAT = 4;
   const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute']);
   const CODE_PREFIX = 'VVA1';
   const AUTOSAVE_INTERVAL_MS = 30000;
@@ -352,7 +355,8 @@ window.Menu = (() => {
     }
     player.pendingCards = !!p.pendingCards;
 
-    const w = s.world || {};
+    // Сохранение со старой карты: прогресс Василия перенесён, мир остаётся свежим
+    const w = s.format >= WORLD_FORMAT ? (s.world || {}) : {};
     if (Array.isArray(w.containers)) {
       // Формат 3: по номеру тайника
       w.containers.forEach(d => {

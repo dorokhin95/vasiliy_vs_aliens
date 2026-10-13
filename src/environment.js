@@ -10,8 +10,60 @@
  * - Гаражные кооперативы с металлическими воротами
  * - 3D-моделированные контейнеры: разбитые Жигули, УАЗ-буханка скорой, скошенные мусорные баки, армейские ящики
  * - Безопасная зона: магазин Михалыча с неоновой вывеской, решетками и мешками с песком
- * - Фрустум-клиппинг (viewport culling) для стабильных 60 FPS на карте 4000x4000
+ * - Фрустум-клиппинг (viewport culling) для стабильных 60 FPS на карте 6000x6000
  */
+
+// --- РАСКЛАДКА КАРТЫ НОВОХМУРИНСКА (общая для environment.js и game.js: скрипты без модулей) ---
+// Карта 6000×6000. Раньше была 4000, а дома — на 1,7 мельче: Василий рядом с хрущёвкой казался
+// великаном. Три дороги по каждой оси: две кольцевые и проспект через центр, где купол Михалыча.
+// Кварталы, районы, гнёзда и логово Мясника считаются отсюда
+const MAP = (() => {
+  const SIZE = 6000;
+  const ROADS = [{ pos: 1215, size: 180 }, { pos: 2870, size: 260 }, { pos: 4665, size: 180 }];
+  const end = r => r.pos + r.size;
+  const mid = r => r.pos + r.size / 2;
+  return {
+    SIZE,
+    ROADS,
+    MAIN: ROADS[1],
+    CENTER: mid(ROADS[1]),          // 3000 — купол Михалыча на перекрёстке проспектов
+    RING_A: mid(ROADS[0]),          // середины кольцевых дорог — граница внешних районов
+    RING_B: mid(ROADS[2]),
+    // Полосы между дорогами по одной оси — для подсветки районов
+    BANDS: [[0, ROADS[0].pos], [end(ROADS[0]), ROADS[1].pos], [end(ROADS[1]), ROADS[2].pos], [end(ROADS[2]), SIZE]],
+    // Кварталы под застройку: полосы с отступом от дорог и края карты
+    BLOCKS: [[165, ROADS[0].pos - 60], [end(ROADS[0]) + 50, ROADS[1].pos - 60],
+      [end(ROADS[1]) + 50, ROADS[2].pos - 60], [end(ROADS[2]) + 50, SIZE - 165]],
+    SPACE: 1.5,                      // расстояния внутри кварталов — во столько раз больше прежних
+    HOUSE: 1.7                       // дома — во столько раз крупнее прежних
+  };
+})();
+
+// Какой это дом: хрущёвка, брежневка, котельная, штаб — и во сколько раз он крупнее исходного
+// размера модели (на котором замерены подъезды, палисадники и выступ крыши)
+const HOUSE_BASE = { khrushchevka: [320, 160], brezhnevka: [220, 260], boiler_house: [320, 160], military_hq: [320, 160] };
+function houseKind(b) {
+  return b.type === 'panel' ? (b.subType || (b.w > b.h ? 'khrushchevka' : 'brezhnevka')) : b.type;
+}
+function houseScale(b) {
+  const base = HOUSE_BASE[houseKind(b)];
+  return base ? b.w / base[0] : 1;
+}
+
+// Деревья и кусты по вариантам: [спрайт, ширина, высота в мире при scale = 1]
+// (дома стали крупнее — деревья выросли вместе с ними: берёза почти с пятиэтажку)
+const TREE_SPRITES = {
+  1: ['autumn_tree_1', 178, 205],
+  2: ['autumn_tree_2', 195, 183],
+  3: ['birch_tree_1', 205, 272],   // стройная плакучая берёза
+  4: ['birch_tree_2', 222, 290]    // двуствольная берёза с пышной кроной
+};
+const BUSH_SPRITES = {
+  1: ['courtyard_bush', 78, 62],
+  2: ['courtyard_bush_2', 78, 62],
+  3: ['courtyard_bush_lilac', 86, 90],
+  4: ['courtyard_bush_rosehip', 92, 88]
+};
 
 class EnvironmentRenderer {
   constructor() {
@@ -64,6 +116,11 @@ class EnvironmentRenderer {
       { key: 'autumn_tree_2', path: 'assets/sprites/props/autumn_tree_2.png?v=1025', type: 'prop' },
       { key: 'courtyard_bush', path: 'assets/sprites/props/courtyard_bush.png?v=1025', type: 'prop' },
       { key: 'courtyard_bush_2', path: 'assets/sprites/props/courtyard_bush_2.png?v=1025', type: 'prop' },
+      // Берёзы, сирень и шиповник (tools/make_greenery_sprites.py)
+      { key: 'birch_tree_1', path: 'assets/sprites/props/birch_tree_1.png?v=1', type: 'prop' },
+      { key: 'birch_tree_2', path: 'assets/sprites/props/birch_tree_2.png?v=1', type: 'prop' },
+      { key: 'courtyard_bush_lilac', path: 'assets/sprites/props/courtyard_bush_lilac.png?v=1', type: 'prop' },
+      { key: 'courtyard_bush_rosehip', path: 'assets/sprites/props/courtyard_bush_rosehip.png?v=1', type: 'prop' },
       { key: 'bio_puddle_eggs', path: 'assets/sprites/props/bio_puddle_eggs.webp?v=1', type: 'prop' },
       { key: 'bio_puddle_vents', path: 'assets/sprites/props/bio_puddle_vents.webp?v=1', type: 'prop' },
       { key: 'bio_puddle_pod', path: 'assets/sprites/props/bio_puddle_pod.webp?v=1', type: 'prop' },
@@ -123,26 +180,20 @@ class EnvironmentRenderer {
   }
 
   isNearIntersection(coord) {
-    return (
-      (coord > 710 && coord < 1010) ||
-      (coord > 1810 && coord < 2190) ||
-      (coord > 3010 && coord < 3310)
-    );
+    return MAP.ROADS.some(r => coord > r.pos - 90 && coord < r.pos + r.size + 90);
   }
 
   // Площадь у Ларька Михалыча: свои фонари, дорожные сюда не ставим (иначе двоятся и закрывают вывеску)
   isInShopPlaza(x, y) {
-    return Math.hypot(x - 2000, y - 2000) < 300;
+    return Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 300;
   }
 
   generateDecorations() {
     // Статичные лужи, люки, фонарные столбы и уличные урны по всей дорожной сети
-    const roadLinesH = [800, 1900, 3100];
-    const roadLinesV = [800, 1900, 3100];
-
-    roadLinesH.forEach(ry => {
-      const h = (ry === 1900) ? 200 : 140;
-      for (let x = 160; x < 3880; x += 320) {
+    const limit = MAP.SIZE - 120;
+    MAP.ROADS.forEach(road => {
+      const ry = road.pos, h = road.size;
+      for (let x = 160; x < limit; x += 320) {
         if (!this.isNearIntersection(x)) {
           this.staticManholes.push({ x: x + ((x * 17) % 60), y: ry + 32 + ((x * 11) % (h - 64)) });
         }
@@ -157,7 +208,7 @@ class EnvironmentRenderer {
       }
 
       // Уличные фонарные столбы «Кобра» вдоль тротуаров горизонтальных улиц
-      for (let lx = 220; lx < 3820; lx += 340) {
+      for (let lx = 220; lx < limit - 60; lx += 340) {
         if (this.isNearIntersection(lx)) continue;
         // Чередуем верхний и нижний тротуар (а на центральном проспекте — по обе стороны)
         this.staticStreetLamps.push({
@@ -167,7 +218,7 @@ class EnvironmentRenderer {
           lightY: ry + 26,
           flipX: 1
         });
-        if (ry === 1900 || ((lx / 340) % 2 === 0)) {
+        if (road === MAP.MAIN || ((lx / 340) % 2 === 0)) {
           this.staticStreetLamps.push({
             x: lx + 140,
             y: ry + h + 18,
@@ -183,15 +234,15 @@ class EnvironmentRenderer {
       }
     });
 
-    roadLinesV.forEach(rx => {
-      const w = (rx === 1900) ? 200 : 140;
-      for (let y = 160; y < 3880; y += 350) {
+    MAP.ROADS.forEach(road => {
+      const rx = road.pos, w = road.size;
+      for (let y = 160; y < limit; y += 350) {
         if (!this.isNearIntersection(y)) {
           this.staticManholes.push({ x: rx + 32 + ((y * 13) % (w - 64)), y: y + ((y * 19) % 70) });
         }
       }
       // Фонарные столбы вдоль вертикальных улиц
-      for (let ly = 240; ly < 3800; ly += 380) {
+      for (let ly = 240; ly < limit - 80; ly += 380) {
         if (this.isNearIntersection(ly)) continue;
         if (!this.isInShopPlaza(rx - 18, ly)) {
           this.staticStreetLamps.push({
@@ -202,7 +253,7 @@ class EnvironmentRenderer {
             flipX: 1
           });
         }
-        if (rx === 1900 && !this.isInShopPlaza(rx + w + 18, ly + 160)) {
+        if (road === MAP.MAIN && !this.isInShopPlaza(rx + w + 18, ly + 160)) {
           this.staticStreetLamps.push({
             x: rx + w + 18,
             y: ly + 160,
@@ -215,13 +266,14 @@ class EnvironmentRenderer {
     });
 
     // Пара фонарей и урн у передних углов площадки Ларька Михалыча — по бокам от киоска, ниже вывески
+    const C = MAP.CENTER;
     this.staticStreetLamps.push(
-      { x: 1840, y: 2030, lightX: 1868, lightY: 2050, flipX: 1 },
-      { x: 2160, y: 2030, lightX: 2132, lightY: 2050, flipX: -1 }
+      { x: C - 160, y: C + 30, lightX: C - 132, lightY: C + 50, flipX: 1 },
+      { x: C + 160, y: C + 30, lightX: C + 132, lightY: C + 50, flipX: -1 }
     );
     this.staticSidewalkBins.push(
-      { x: 1812, y: 2044 },
-      { x: 2188, y: 2044 }
+      { x: C - 188, y: C + 44 },
+      { x: C + 188, y: C + 44 }
     );
 
     // У каждого фонаря свой ритм «дыхания», примерно каждый седьмой — неисправный и моргает.
@@ -241,16 +293,16 @@ class EnvironmentRenderer {
     if (this.outskirts) return;
     const lots = [];
     const rnd = (i) => { const s = Math.sin(i * 91.7 + 13.1) * 43758.5453; return s - Math.floor(s); };
+    const H = v => Math.round(v * MAP.HOUSE);
     const TYPES = [
-      { type: 'panel', w: 320, h: 160 },  // хрущёвка
-      { type: 'panel', w: 220, h: 260 },  // брежневка
+      { type: 'panel', subType: 'khrushchevka', w: H(320), h: H(160) },
+      { type: 'panel', subType: 'brezhnevka', w: H(220), h: H(260) },
       { type: 'garage', w: 140, h: 100 },
-      { type: 'panel', w: 320, h: 160 },
-      { type: 'boiler_house', w: 320, h: 160 }
+      { type: 'panel', subType: 'khrushchevka', w: H(320), h: H(160) },
+      { type: 'boiler_house', w: H(320), h: H(160) }
     ];
-    const ROADS = [800, 1900, 3100];
     // Не ставим дома на продолжения дорог (с запасом под тротуары)
-    const onRoad = (from, size) => ROADS.some(r => from + size > r - 70 && from < r + (r === 1900 ? 200 : 140) + 70);
+    const onRoad = (from, size) => MAP.ROADS.some(r => from + size > r.pos - 70 && from < r.pos + r.size + 70);
     let n = 0;
     const row = (horizontal, fixed, start, end) => {
       for (let pos = start; pos < end;) {
@@ -258,8 +310,8 @@ class EnvironmentRenderer {
         const span = horizontal ? t.w : t.h;
         if (!onRoad(pos, span)) {
           lots.push(horizontal
-            ? { type: t.type, w: t.w, h: t.h, x: pos, y: fixed(t) }
-            : { type: t.type, w: t.w, h: t.h, x: fixed(t), y: pos });
+            ? { type: t.type, subType: t.subType, w: t.w, h: t.h, x: pos, y: fixed(t) }
+            : { type: t.type, subType: t.subType, w: t.w, h: t.h, x: fixed(t), y: pos });
         }
         pos += span + 90 + Math.floor(rnd(n++) * 120);
       }
@@ -582,6 +634,42 @@ class EnvironmentRenderer {
     ctx.restore();
   }
 
+  // Берёзы, сирень и шиповник по кварталам — кварталы стали просторнее, голыми их не оставляем.
+  // Сколько на квартал по району: [деревьев, кустов]. Места одинаковы при каждой загрузке
+  scatterGreenery(buildings) {
+    const WANT = { courtyards: [7, 7], heating: [4, 5], garages: [2, 4], cordon: [1, 3], nest: [0, 2] };
+    const conts = typeof containers !== 'undefined' ? containers : [];
+    const onRoad = (x, y) => MAP.ROADS.some(r =>
+      (x > r.pos - 70 && x < r.pos + r.size + 70) || (y > r.pos - 70 && y < r.pos + r.size + 70));
+    const blocked = (x, y, pad) =>
+      Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430 || onRoad(x, y) ||
+      buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad + 30) ||
+      conts.some(c => Math.hypot(c.x - x, c.y - y) < pad + 60) ||
+      this.courtyardTrees.some(t => Math.hypot(t.x - x, t.y - y) < 120) ||
+      this.courtyardBushes.some(t => Math.hypot(t.x - x, t.y - y) < 80) ||
+      this.courtyardBenches.some(t => Math.hypot(t.x - x, t.y - y) < 70);
+    let seed = 20261013;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    MAP.BLOCKS.forEach(([x1, x2]) => MAP.BLOCKS.forEach(([y1, y2]) => {
+      const district = window.getDistrictAt ? window.getDistrictAt((x1 + x2) / 2, (y1 + y2) / 2).id : 'courtyards';
+      const [nTrees, nBushes] = WANT[district] || [0, 0];
+      let trees = 0, bushes = 0;
+      for (let k = 0; k < 200 && (trees < nTrees || bushes < nBushes); k++) {
+        const x = Math.round(x1 + 50 + rnd() * (x2 - x1 - 100));
+        const y = Math.round(y1 + 120 + rnd() * (y2 - y1 - 170));
+        if (trees < nTrees) {
+          if (blocked(x, y, 70)) continue;
+          this.courtyardTrees.push({ x, y, variant: 3 + (trees % 2), scale: 0.9 + rnd() * 0.25 });
+          trees++;
+        } else {
+          if (blocked(x, y, 45)) continue;
+          this.courtyardBushes.push({ x, y, variant: 3 + (bushes % 2), scale: 0.85 + rnd() * 0.3 });
+          bushes++;
+        }
+      }
+    }));
+  }
+
   ensureCourtyardLayout(buildings) {
     if (this.courtyardBuilt || !buildings || buildings.length === 0) return;
     this.courtyardBuilt = true;
@@ -600,14 +688,16 @@ class EnvironmentRenderer {
         isMainPath: true
       });
 
-      // Определяем координаты подъездов по типу здания
+      // Определяем координаты подъездов по типу здания (замерены на исходном размере, k — масштаб дома)
+      const kind = houseKind(b);
+      const k = houseScale(b);
       let entrances = [];
-      if (b.type === 'panel' && b.w >= 300) {
-        // Хрущевка 320x160: 2 подъезда
-        entrances = [b.x + 80, b.x + 244];
-      } else if (b.type === 'panel' && b.h >= 240) {
-        // Брежневка 220x260: 1 центральный подъезд
-        entrances = [b.x + 108];
+      if (kind === 'khrushchevka') {
+        // Хрущевка: 2 подъезда
+        entrances = [b.x + 80 * k, b.x + 244 * k];
+      } else if (kind === 'brezhnevka') {
+        // Брежневка: 1 центральный подъезд
+        entrances = [b.x + 108 * k];
       } else {
         // Котельная / Военный штаб: центральный вход
         entrances = [b.x + b.w * 0.5];
@@ -638,38 +728,38 @@ class EnvironmentRenderer {
       });
 
       // 3. Палисадники (газоны с низким побеленным поребриком) вдоль фасада и кусты/деревья
-      if (b.type === 'panel' && b.w >= 300) {
+      if (kind === 'khrushchevka') {
         this.courtyardLawns.push(
-          { x: b.x + 4,   y: b.y + b.h + 2, w: 54, h: 22 },
-          { x: b.x + 104, y: b.y + b.h + 2, w: 116, h: 22 },
-          { x: b.x + 266, y: b.y + b.h + 2, w: 50, h: 22 }
+          { x: b.x + 4 * k,   y: b.y + b.h + 2, w: 54 * k, h: 22 },
+          { x: b.x + 104 * k, y: b.y + b.h + 2, w: 116 * k, h: 22 },
+          { x: b.x + 266 * k, y: b.y + b.h + 2, w: 50 * k, h: 22 }
         );
         // Кусты в палисаднике под окнами первого этажа
         this.courtyardBushes.push(
-          { x: b.x + 26,  y: b.y + b.h + 12, variant: 1, scale: 0.88 },
-          { x: b.x + 162, y: b.y + b.h + 13, variant: 2, scale: 0.94 },
-          { x: b.x + 294, y: b.y + b.h + 12, variant: 1, scale: 0.86 }
+          { x: b.x + 26 * k,  y: b.y + b.h + 12, variant: 1, scale: 0.88 },
+          { x: b.x + 162 * k, y: b.y + b.h + 13, variant: 2, scale: 0.94 },
+          { x: b.x + 294 * k, y: b.y + b.h + 12, variant: 1, scale: 0.86 }
         );
         // Побеленные осенние деревья по углам двора перед домом
         this.courtyardTrees.push(
           { x: b.x - 28,       y: b.y + b.h + 24, variant: (idx % 2) + 1, scale: 0.95 },
           { x: b.x + b.w + 28, y: b.y + b.h + 28, variant: ((idx + 1) % 2) + 1, scale: 0.92 }
         );
-      } else if (b.type === 'panel' && b.h >= 240) {
+      } else if (kind === 'brezhnevka') {
         this.courtyardLawns.push(
-          { x: b.x + 6,   y: b.y + b.h + 2, w: 78, h: 22 },
-          { x: b.x + 132, y: b.y + b.h + 2, w: 82, h: 22 }
+          { x: b.x + 6 * k,   y: b.y + b.h + 2, w: 78 * k, h: 22 },
+          { x: b.x + 132 * k, y: b.y + b.h + 2, w: 82 * k, h: 22 }
         );
         this.courtyardBushes.push(
-          { x: b.x + 36,  y: b.y + b.h + 12, variant: 2, scale: 0.90 },
-          { x: b.x + 182, y: b.y + b.h + 12, variant: 1, scale: 0.90 }
+          { x: b.x + 36 * k,  y: b.y + b.h + 12, variant: 2, scale: 0.90 },
+          { x: b.x + 182 * k, y: b.y + b.h + 12, variant: 1, scale: 0.90 }
         );
         this.courtyardTrees.push(
           { x: b.x - 26,       y: b.y + b.h + 18, variant: ((idx + 1) % 2) + 1, scale: 0.94 },
           { x: b.x + b.w + 26, y: b.y + b.h - 20, variant: (idx % 2) + 1, scale: 0.90 }
         );
       } else {
-        // Озеленение вокруг котельных и штабов
+        // Озеленение вокруг котельных и штабов (k — масштаб дома)
         this.courtyardBushes.push(
           { x: b.x + 34,       y: b.y + b.h + 14, variant: 1, scale: 0.85 },
           { x: b.x + b.w - 34, y: b.y + b.h + 14, variant: 2, scale: 0.85 }
@@ -681,6 +771,7 @@ class EnvironmentRenderer {
         }
       }
     });
+    this.scatterGreenery(buildings);
   }
 
   ensurePatterns(ctx) {
@@ -761,24 +852,23 @@ class EnvironmentRenderer {
   drawDistrictAtmosphere(ctx, camera, screenW, screenH) {
 
     // A. Текстурное и цветовое тонирование кварталов по специализации
-    const zones = [
-      // Tier 2A: Гаражный кооператив «Восток» (Западные кварталы — темный гравий и мазут)
-      { x: 0, y: 940, w: 800, h: 960, color: 'rgba(15, 23, 42, 0.34)', type: 'garages' },
-      { x: 0, y: 2100, w: 800, h: 1000, color: 'rgba(15, 23, 42, 0.34)', type: 'garages' },
-      // Tier 2B: Магистраль Теплотрассы (Восточные кварталы — оттаявший грунт и конденсат)
-      { x: 3240, y: 940, w: 760, h: 960, color: 'rgba(14, 36, 52, 0.26)', type: 'heating' },
-      { x: 3240, y: 2100, w: 760, h: 1000, color: 'rgba(14, 36, 52, 0.26)', type: 'heating' },
-      // Tier 3: Военный Кордон (Север и Юг — выжженная земля и следы боев)
-      { x: 940, y: 0, w: 960, h: 800, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
-      { x: 2100, y: 0, w: 1000, h: 800, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
-      { x: 940, y: 3240, w: 960, h: 760, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
-      { x: 2100, y: 3240, w: 1000, h: 760, color: 'rgba(38, 18, 18, 0.26)', type: 'cordon' },
-      // Tier 4: Квако-Гнездо (4 дальних угла — био-заражение пришельцев)
-      { x: 0, y: 0, w: 800, h: 800, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' },
-      { x: 3240, y: 0, w: 760, h: 800, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' },
-      { x: 0, y: 3240, w: 800, h: 760, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' },
-      { x: 3240, y: 3240, w: 760, h: 760, color: 'rgba(16, 48, 28, 0.34)', type: 'nest' }
-    ];
+    if (!this.districtZones) {
+      const [b0, b1, b2, b3] = MAP.BANDS;
+      const rect = (bx, by, color, type) => ({ x: bx[0], y: by[0], w: bx[1] - bx[0], h: by[1] - by[0], color, type });
+      const GAR = 'rgba(15, 23, 42, 0.34)', HEAT = 'rgba(14, 36, 52, 0.26)';
+      const CORD = 'rgba(38, 18, 18, 0.26)', NEST = 'rgba(16, 48, 28, 0.34)';
+      this.districtZones = [
+        // Tier 2A: Гаражный кооператив «Восток» (западные кварталы — тёмный гравий и мазут)
+        rect(b0, b1, GAR, 'garages'), rect(b0, b2, GAR, 'garages'),
+        // Tier 2B: Магистраль теплотрассы (восточные кварталы — оттаявший грунт и конденсат)
+        rect(b3, b1, HEAT, 'heating'), rect(b3, b2, HEAT, 'heating'),
+        // Tier 3: Военный кордон (север и юг — выжженная земля и следы боёв)
+        rect(b1, b0, CORD, 'cordon'), rect(b2, b0, CORD, 'cordon'), rect(b1, b3, CORD, 'cordon'), rect(b2, b3, CORD, 'cordon'),
+        // Tier 4: Квако-гнёзда (четыре угла — био-заражение пришельцев)
+        rect(b0, b0, NEST, 'nest'), rect(b3, b0, NEST, 'nest'), rect(b0, b3, NEST, 'nest'), rect(b3, b3, NEST, 'nest')
+      ];
+    }
+    const zones = this.districtZones;
 
     for (let zIdx = 0; zIdx < zones.length; zIdx++) {
       const z = zones[zIdx];
@@ -945,11 +1035,7 @@ class EnvironmentRenderer {
   }
 
   drawCrosswalks(ctx, r) {
-    const crossRoads = [
-      { pos: 800,  size: 140 },
-      { pos: 1900, size: 200 },
-      { pos: 3100, size: 140 }
-    ];
+    const crossRoads = MAP.ROADS;
 
     if (r.w > r.h) {
       crossRoads.forEach(cr => {
@@ -1075,7 +1161,8 @@ class EnvironmentRenderer {
     if (tree1Img) {
       for (let i = 0; i < this.courtyardTrees.length; i++) {
         const tr = this.courtyardTrees[i];
-        if (!this.isVisible(tr.x - 95, tr.y - 140, 190, 180, camera, screenW, screenH)) continue;
+        const vr = this.treeRect(tr);
+        if (!this.isVisible(vr.x, vr.y, vr.w, vr.h + 20, camera, screenW, screenH)) continue;
         // Мягкая тень на земле у корней дерева
         ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
         ctx.beginPath();
@@ -1101,14 +1188,15 @@ class EnvironmentRenderer {
   }
 
   treeRect(tr) {
-    const w = (tr.variant === 2 ? 156 : 142) * tr.scale;
-    const h = (tr.variant === 2 ? 146 : 164) * tr.scale;
+    const [, w0, h0] = TREE_SPRITES[tr.variant] || TREE_SPRITES[1];
+    const w = w0 * tr.scale;
+    const h = h0 * tr.scale;
     return { x: tr.x - w * 0.5, y: tr.y - h + 16, w, h };
   }
 
   drawTree(ctx, tr) {
-    const tree1Img = this.props['autumn_tree_1'];
-    const img = (tr.variant === 2 && this.props['autumn_tree_2']) ? this.props['autumn_tree_2'] : tree1Img;
+    const key = (TREE_SPRITES[tr.variant] || TREE_SPRITES[1])[0];
+    const img = this.props[key] || this.props['autumn_tree_1'];
     if (!img) return;
     const r = this.treeRect(tr);
     ctx.drawImage(img, r.x, r.y, r.w, r.h);
@@ -1126,14 +1214,15 @@ class EnvironmentRenderer {
   }
 
   bushRect(b) {
-    const w = 78 * b.scale;
-    const h = 62 * b.scale;
+    const [, w0, h0] = BUSH_SPRITES[b.variant] || BUSH_SPRITES[1];
+    const w = w0 * b.scale;
+    const h = h0 * b.scale;
     return { x: b.x - w * 0.5, y: b.y - h * 0.55, w, h };
   }
 
   drawBush(ctx, b) {
-    const bush1Img = this.props['courtyard_bush'];
-    const img = (b.variant === 2 && this.props['courtyard_bush_2']) ? this.props['courtyard_bush_2'] : bush1Img;
+    const key = (BUSH_SPRITES[b.variant] || BUSH_SPRITES[1])[0];
+    const img = this.props[key] || this.props['courtyard_bush'];
     if (!img) return;
     const r = this.bushRect(b);
     ctx.drawImage(img, r.x, r.y, r.w, r.h);
@@ -1225,7 +1314,8 @@ class EnvironmentRenderer {
     }
     for (let i = 0; i < this.courtyardTrees.length; i++) {
       const tr = this.courtyardTrees[i];
-      if (!this.isVisible(tr.x - 95, tr.y - 140, 190, 180, camera, screenW, screenH)) continue;
+      const vr = this.treeRect(tr);
+      if (!this.isVisible(vr.x, vr.y, vr.w, vr.h + 20, camera, screenW, screenH)) continue;
       if (behind(tr.y, this.treeRect(tr))) items.push({ y: tr.y, draw: () => this.drawTree(ctx, tr) });
     }
     for (let i = 0; i < this.staticStreetLamps.length; i++) {
@@ -1273,15 +1363,19 @@ class EnvironmentRenderer {
     }
 
     // 3. Дорожные трафаретные указатели секторов Новохмуринска на асфальте
+    // На главном проспекте — у кольцевых дорог, гнёзда — на кольцевых у углов карты
+    const C = MAP.CENTER, [rA, , rB] = MAP.ROADS;
+    const nearA = rA.pos + rA.size + 160, nearB = rB.pos - 160;
+    const cornerA = rA.pos - 160, cornerB = rB.pos + rB.size + 160;
     const stencils = [
-      { x: 960,  y: 2000, text: '◄ ГСК «ВОСТОК» [ЧЕРМЕТ]', color: 'rgba(251, 146, 60, 0.72)' },
-      { x: 3040, y: 2000, text: 'ТЕПЛОСЕТЬ [ВОДКА / ТУШЁНКА] ►', color: 'rgba(56, 189, 248, 0.72)' },
-      { x: 2000, y: 1020, text: '▲ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },
-      { x: 2000, y: 2980, text: '▼ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },
-      { x: 640,  y: 870,  text: '⚠ КВАКО-ГНЕЗДО СЗ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
-      { x: 3360, y: 870,  text: '☠ СВ ГНЕЗДО: ЛОГОВО БОССА', color: 'rgba(192, 132, 252, 0.80)' },
-      { x: 640,  y: 3170, text: '⚠ КВАКО-ГНЕЗДО ЮЗ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
-      { x: 3360, y: 3170, text: '⚠ КВАКО-ГНЕЗДО ЮВ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' }
+      { x: nearA, y: C, text: '◄ ГСК «ВОСТОК» [ЧЕРМЕТ]', color: 'rgba(251, 146, 60, 0.72)' },
+      { x: nearB, y: C, text: 'ТЕПЛОСЕТЬ [ВОДКА / ТУШЁНКА] ►', color: 'rgba(56, 189, 248, 0.72)' },
+      { x: C, y: nearA, text: '▲ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },
+      { x: C, y: nearB, text: '▼ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },
+      { x: cornerA, y: MAP.RING_A, text: '⚠ КВАКО-ГНЕЗДО СЗ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: cornerB, y: MAP.RING_A, text: '☠ СВ ГНЕЗДО: ЛОГОВО БОССА', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: cornerA, y: MAP.RING_B, text: '⚠ КВАКО-ГНЕЗДО ЮЗ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: cornerB, y: MAP.RING_B, text: '⚠ КВАКО-ГНЕЗДО ЮВ [ЛУТ ×2.5]', color: 'rgba(192, 132, 252, 0.80)' }
     ];
 
     ctx.save();
@@ -1430,11 +1524,11 @@ class EnvironmentRenderer {
           const img = this.buildings['building_military_hq'];
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;
-        } else if (b.w >= 300 && this.buildings['building_panel_320x160']) {
+        } else if (houseKind(b) === 'khrushchevka' && this.buildings['building_panel_320x160']) {
           const img = this.buildings['building_panel_320x160'];
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;
-        } else if (b.h >= 240 && this.buildings['building_panel_220x260']) {
+        } else if (houseKind(b) === 'brezhnevka' && this.buildings['building_panel_220x260']) {
           const img = this.buildings['building_panel_220x260'];
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;
