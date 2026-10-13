@@ -67,7 +67,9 @@ class ThreeBossManager {
       spin: { clip: 'Attack_Spin', phases: [38, 30, 44] },
       lunge: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
       // Захват: своего клипа нет — тот же рывок вперёд, только на месте и быстрее
-      grab: { clip: 'Attack_Lunge', phases: [40, 14, 36] }
+      grab: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
+      // Землетрясение берсерка: тот же удар сверху, меч уходит в землю
+      quake: { clip: 'Attack_Chop', phases: [52, 6, 50] }
     };
 
     this.loadModel();
@@ -169,6 +171,10 @@ class ThreeBossManager {
     let r = 0, g = 0, b = 0;
     if (e.hitFlash > 0) {
       r = g = b = 0.45;
+    } else if (e.berserk) {
+      // Берсерк: налитый кровью, пульсирует чаще и ярче ярости
+      const pulse = 0.26 + Math.sin(e.animTimer * 0.35) * 0.12;
+      r = pulse; g = pulse * 0.12; b = pulse * 0.08;
     } else if (e.enraged) {
       const pulse = 0.12 + Math.sin(e.animTimer * 0.2) * 0.06;
       r = pulse; g = pulse * 0.35;
@@ -194,8 +200,10 @@ class ThreeBossManager {
     ctx.ellipse(0, 4, 50, 20, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (e.enraged) {
-      ctx.strokeStyle = `rgba(249, 115, 22, ${0.45 + Math.sin(e.animTimer * 0.2) * 0.2})`;
+    if (e.enraged || e.berserk) {
+      ctx.strokeStyle = e.berserk
+        ? `rgba(239, 68, 68, ${0.6 + Math.sin(e.animTimer * 0.35) * 0.3})`
+        : `rgba(249, 115, 22, ${0.45 + Math.sin(e.animTimer * 0.2) * 0.2})`;
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.ellipse(0, 4, 58, 24, 0, 0, Math.PI * 2);

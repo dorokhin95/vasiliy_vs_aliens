@@ -360,6 +360,13 @@ class EnvironmentRenderer {
   }
 
   drawBorderSegment(ctx, s) {
+    // Пролёт за логовом Мясника (window.fenceBreach из game.js): трещит, потом проломлен
+    const fb = window.fenceBreach;
+    const breach = fb && s.side === 'top' && Math.abs(s.x - fb.x) < fb.halfW ? fb.state : null;
+    if (breach === 'open') {
+      this.drawFenceRubble(ctx, s);
+      return;
+    }
     const tp = window.threeProps;
     // Целая и сколотая плиты вперемешку, половина отражена — забор не повторяется
     const drawn = tp && tp.isLoaded['fence_po2'] &&
@@ -369,6 +376,95 @@ class EnvironmentRenderer {
       if (s.dir === 0) ctx.fillRect(s.x - 55, s.y - 30, 110, 45);
       else ctx.fillRect(s.x - 8, s.y - 40, 16, 60);
     }
+    if (breach === 'cracked') this.drawFenceCracks(ctx, s, fb.cracks);
+  }
+
+  // Трещины по плите: чем больше ударов берсерка, тем их больше
+  drawFenceCracks(ctx, s, n) {
+    const paths = [
+      [[-30, -40], [-18, -24], [-22, -8], [-8, 6], [-12, 22]],
+      [[22, -44], [12, -28], [18, -12], [6, 2], [10, 20], [2, 30]],
+      [[-46, -6], [-30, -2], [-16, 10], [2, 8], [20, 18], [40, 14]]
+    ];
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 0; i < Math.min(n, paths.length); i++) {
+      [['rgba(20, 18, 16, 0.85)', 3], ['rgba(203, 213, 225, 0.35)', 1]].forEach(([color, w], k) => {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        paths[i].forEach(([dx, dy], j) => {
+          const x = s.x + dx + k * 1.2, y = s.y + dy + k;
+          if (j) ctx.lineTo(x, y);
+          else ctx.moveTo(x, y);
+        });
+        ctx.stroke();
+      });
+    }
+    ctx.restore();
+  }
+
+  // Проломленный пролёт: обломанные края плиты, торчащая арматура, куски бетона на земле
+  drawFenceRubble(ctx, s) {
+    const x = s.x, base = 44;
+    ctx.save();
+    // Сам проём: за забором темно — пустырь в тумане
+    const hole = ctx.createLinearGradient(0, base - 66, 0, base + 6);
+    hole.addColorStop(0, 'rgba(4, 5, 7, 0.95)');
+    hole.addColorStop(0.75, 'rgba(4, 5, 7, 0.7)');
+    hole.addColorStop(1, 'rgba(4, 5, 7, 0)');
+    ctx.fillStyle = hole;
+    ctx.fillRect(x - 55, base - 66, 110, 72);
+    // Обломанные края соседних плит
+    ctx.fillStyle = '#a3a8ae';
+    ctx.strokeStyle = '#3f4349';
+    ctx.lineWidth = 1.5;
+    [[-1, x - 55], [1, x + 55]].forEach(([side, ex]) => {
+      ctx.beginPath();
+      ctx.moveTo(ex, base);
+      ctx.lineTo(ex, base - 64);
+      ctx.lineTo(ex - side * 12, base - 52);
+      ctx.lineTo(ex - side * 6, base - 38);
+      ctx.lineTo(ex - side * 17, base - 22);
+      ctx.lineTo(ex - side * 8, base);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    });
+    // Арматура
+    ctx.strokeStyle = '#5b3a24';
+    ctx.lineWidth = 2;
+    [[-48, -40, -30, -58], [-46, -18, -24, -26], [48, -44, 28, -60], [47, -14, 30, -6]].forEach(([x1, y1, x2, y2]) => {
+      ctx.beginPath();
+      ctx.moveTo(x + x1, base + y1);
+      ctx.quadraticCurveTo(x + (x1 + x2) / 2, base + Math.min(y1, y2) - 6, x + x2, base + y2);
+      ctx.stroke();
+    });
+    // Куски бетона
+    const chunks = [[-30, 6, 20, 0.3], [-6, 14, 16, -0.4], [18, 8, 22, 0.2], [34, 22, 12, 0.9], [-38, 24, 13, -0.7], [6, 30, 10, 0.5]];
+    chunks.forEach(([dx, dy, r, a]) => {
+      ctx.save();
+      ctx.translate(x + dx, base + dy);
+      ctx.rotate(a);
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+      ctx.fillRect(-r * 0.9, -r * 0.25, r * 1.9, r * 0.8);
+      ctx.fillStyle = '#a3a8ae';
+      ctx.strokeStyle = '#3f4349';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-r, -r * 0.4);
+      ctx.lineTo(r * 0.7, -r * 0.55);
+      ctx.lineTo(r, r * 0.2);
+      ctx.lineTo(-r * 0.6, r * 0.45);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#6b7280';
+      ctx.fillRect(-r * 0.6, r * 0.05, r * 1.4, r * 0.3);
+      ctx.restore();
+    });
+    ctx.restore();
   }
 
   drawBorderFence(ctx, camera, screenW, screenH, worldW, worldH) {

@@ -48,16 +48,18 @@ function promoteFrameToImage(cache, key, canvas) {
 }
 
 // Позы броска громилы (см. applyBrutePose и updateBruteThrow в game.js): lift0…lift3 — предмет
-// поднимается от груди до положения над головой, throw — руки выброшены вперёд после броска
+// поднимается от груди до положения над головой, throw — руки выброшены вперёд после броска,
+// slam — кулаки врезались в землю (удар по земле, updateBruteSlam)
 const BRUTE_LIFT_STEPS = 4;
-const BRUTE_THROW_POSES = ['lift0', 'lift1', 'lift2', 'lift3', 'throw'];
+const BRUTE_THROW_POSES = ['lift0', 'lift1', 'lift2', 'lift3', 'throw', 'slam'];
 // Направления плеча (плечевой сустав → локоть) и предплечья (локоть → кулак) в осях
 // [вверх, вперёд — куда смотрит громила, наружу от позвоночника]. Между chest и overhead —
 // промежуточные шаги подъёма
 const BRUTE_POSE_DIRS = {
   chest: { arm: [-0.35, 1.0, 0.35], fore: [0.35, 1.0, -0.45] },
   overhead: { arm: [0.8, 0.15, 0.6], fore: [0.45, 0.1, -0.9] },
-  throw: { arm: [0.1, 1.0, 0.1], fore: [0.15, 1.0, -0.15] }
+  throw: { arm: [0.1, 1.0, 0.1], fore: [0.15, 1.0, -0.15] },
+  slam: { arm: [-0.55, 0.8, 0.25], fore: [-0.9, 0.35, -0.1] }
 };
 // Обычный кадр громилы: 138 px мира, центр на 16 px выше его точки. Кадр позы выше: поднятые
 // руки торчат над головой и иначе обрезались бы
@@ -67,7 +69,7 @@ const GRUNT_FRAME = { w: 86, anchor: -10 };
 const BRUTE_POSE_FRAME = { w: 170, anchor: -37 };
 
 function brutePoseDirs(pose) {
-  if (pose === 'throw') return BRUTE_POSE_DIRS.throw;
+  if (pose === 'throw' || pose === 'slam') return BRUTE_POSE_DIRS[pose];
   const k = Number(pose.slice(4)) / (BRUTE_LIFT_STEPS - 1);
   const mix = (a, b) => {
     const la = Math.hypot(...a), lb = Math.hypot(...b);

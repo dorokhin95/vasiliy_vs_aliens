@@ -849,6 +849,24 @@ const LANGS = {
     cost_bottles: "бут.",
     boss_name: "ЗОЛОТОЙ МЯСНИК",
     boss_enraged: "ЯРОСТЬ!",
+    boss_berserk: "БЕРСЕРК!",
+    boss_shield_tag: "ЩИТ — берёт только плазма",
+    say_shield_bullets: "Кажется, обычные пули этот щит не возьмут…",
+    say_shield_melee: "Кажется, железкой этот щит не пробить…",
+    say_plasma_armor: "Кажется, плазма плохо пробивает эту броню…",
+    boss_shield_down: "⚡ ЩИТ ПРОБИТ!",
+    status_daze: "ОГЛУШЁН: −40% скорости",
+    prompt_breach: "[E] Проломить треснувший забор",
+    prompt_breach_wait: "Забор треснул. Сначала добей жаб — осталось: ",
+    breach_title: "ПРОЛОМ В ЗАБОРЕ",
+    breach_sub: "За логовом Мясника — путь в Промзону",
+    breach_here: "ПРОЛОМИ ЗАБОР",
+    breach_marker: "ПРОЛОМ",
+    transit_kicker: "ЛОКАЦИЯ 2",
+    transit_title: "ПРОМЗОНА",
+    transit_text: "За карантинным забором — градообразующий завод, на котором когда-то держался весь Новохмуринск: остывшие трубы, цеха, склады, железнодорожные ветки. Что жабы устроили там, Василию ещё предстоит узнать.",
+    transit_wip: "🚧 Локация в разработке. Возвращайся к пролому, когда Промзона откроется.",
+    transit_back: "ВЕРНУТЬСЯ В НОВОХМУРИНСК",
     boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!",
     boss_adds: "🥚 Капсулы лопаются — подмога!",
     toads_left: "Жаб осталось",
@@ -856,7 +874,7 @@ const LANGS = {
     boss_dead: "✓ Мясник повержен",
     cleared_hud: "✅ ЛОКАЦИЯ ЗАЧИЩЕНА",
     level_cleared: "ЛОКАЦИЯ ЗАЧИЩЕНА",
-    level_cleared_sub: "В Новохмуринске не осталось ни одной жабы. Пора искать путь дальше."
+    level_cleared_sub: "Ни одной жабы не осталось. Забор за логовом Мясника треснул — иди и проломи его."
   },
   en: {
     game_title: "Vasiliy vs Aliens",
@@ -896,6 +914,24 @@ const LANGS = {
     cost_bottles: "bot.",
     boss_name: "THE GOLDEN BUTCHER",
     boss_enraged: "ENRAGED!",
+    boss_berserk: "BERSERK!",
+    boss_shield_tag: "SHIELD — plasma only",
+    say_shield_bullets: "Looks like plain bullets won't get through this shield…",
+    say_shield_melee: "Looks like I can't smash through this shield…",
+    say_plasma_armor: "Looks like plasma barely scratches this armor…",
+    boss_shield_down: "⚡ SHIELD DOWN!",
+    status_daze: "DAZED: −40% speed",
+    prompt_breach: "[E] Smash the cracked fence",
+    prompt_breach_wait: "The fence is cracked. Finish off the toads first — left: ",
+    breach_title: "FENCE BREACHED",
+    breach_sub: "Behind the Butcher's lair — the way to the Industrial Zone",
+    breach_here: "SMASH THE FENCE",
+    breach_marker: "BREACH",
+    transit_kicker: "LOCATION 2",
+    transit_title: "INDUSTRIAL ZONE",
+    transit_text: "Beyond the quarantine fence lies the plant that once kept all of Novokhmurinsk alive: cold pipes, workshops, warehouses, railway sidings. What the toads have built there, Vasiliy is yet to find out.",
+    transit_wip: "🚧 This location is under construction. Come back to the breach when the Industrial Zone opens.",
+    transit_back: "BACK TO NOVOKHMURINSK",
     boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!",
     boss_adds: "🥚 The pods burst — reinforcements!",
     toads_left: "Toads left",
@@ -903,7 +939,7 @@ const LANGS = {
     boss_dead: "✓ Butcher down",
     cleared_hud: "✅ AREA CLEARED",
     level_cleared: "AREA CLEARED",
-    level_cleared_sub: "Not a single toad left in Novokhmurinsk. Time to find the way further."
+    level_cleared_sub: "Not a single toad left. The fence behind the Butcher's lair has cracked — go and smash it."
   }
 };
 
@@ -1027,6 +1063,7 @@ const player = {
     toad_leg: 0,
     toad_liver: 0
   },
+  cards: { speed: 0, agility: 0, vitality: 0 }, // карты, выбранные после боссов
   unlockedWeapons: {
     bat: true,
     makarov: false,
@@ -1450,7 +1487,11 @@ function generateWorld() {
     { x: -out, y: WORLD_HEIGHT - 40, w: WORLD_WIDTH + out * 2, h: out + 40 },
     { x: -out, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 },
     { x: WORLD_WIDTH - 32, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 }
-  ].forEach(r => buildings.push(Object.assign({ type: 'border_fence' }, r)));
+  ].forEach((r, i) => buildings.push(Object.assign({ type: 'border_fence', side: ['top', 'bottom', 'left', 'right'][i] }, r)));
+  fenceBreach.state = 'intact';
+  fenceBreach.cracks = 0;
+  lairCracks = [];
+  shockwaves = [];
 
   buildObstacles();
   generateBioPuddles();
@@ -1711,6 +1752,10 @@ function startGame(save = null) {
   player.healLeft = 0;
   player.stunTimer = 0;
   player.knockFrames = 0;
+  player.dazeTimer = 0;
+  player.cards = { speed: 0, agility: 0, vitality: 0 };
+  player.pendingCards = false;
+  cardOfferTimer = 0;
   player.items = { vodka: 0, stew: 1, bandage: 2 };
   player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0, toad_eye: 0, toad_leg: 0, toad_liver: 0 };
   player.unlockedWeapons = {
@@ -1740,6 +1785,7 @@ function startGame(save = null) {
 
   generateWorld();
   if (save && window.Menu) window.Menu.applyRun(save);
+  if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
   if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon);
   applyHotbarOrder();
   updateHUD(true);
@@ -1757,6 +1803,9 @@ function gameOver() {
 function handleInteract() {
   if (!nearbyInteractable) return;
   if (nearbyInteractable.type === 'shop') openShop();
+  else if (nearbyInteractable.type === 'breach') {
+    if (levelCleared) breakFence();
+  }
   else if (nearbyInteractable.type === 'container') scavengeContainer(nearbyInteractable.target);
 }
 
@@ -2317,7 +2366,8 @@ window.useItem = function(itemType) {
     addFloatingText(player.x, player.y - 30, "+65 ВЫНОСЛИВ.", '#38bdf8');
     createParticles(player.x, player.y, '#38bdf8', 10);
   } else if (itemType === 'bandage') {
-    player.healLeft += BANDAGE_HEAL; // лечение идёт в update(), BANDAGE_HEAL за BANDAGE_HEAL_FRAMES
+    // Лечение идёт в update(), BANDAGE_HEAL за BANDAGE_HEAL_FRAMES; карта «Живучесть» — больше
+    player.healLeft += BANDAGE_HEAL * (1 + CARD_EFFECTS.vitalityBandage * (player.cards.vitality || 0));
     addFloatingText(player.x, player.y - 30, currentLang === 'ru' ? `+${BANDAGE_HEAL} HP за 3 с` : `+${BANDAGE_HEAL} HP over 3s`, '#22c55e');
     createParticles(player.x, player.y, '#22c55e', 12);
   }
@@ -2325,7 +2375,9 @@ window.useItem = function(itemType) {
 };
 
 function performRoll() {
-  const stamMult = player.hasPerk('third_frog_eye') ? 0.75 : 1.0;
+  // Карта «Ловкость»: перекат дешевле и чаще
+  const agility = Math.max(0.4, 1 - CARD_EFFECTS.agilityRoll * (player.cards.agility || 0));
+  const stamMult = (player.hasPerk('third_frog_eye') ? 0.75 : 1.0) * agility;
   const rollCost = Math.round(25 * stamMult);
   if (player.isRolling || player.rollCooldown > 0 || player.stamina < rollCost || player.stunTimer > 0) return;
   
@@ -2345,7 +2397,7 @@ function performRoll() {
   
   player.isRolling = true;
   player.rollDuration = 18;
-  player.rollCooldown = 35;
+  player.rollCooldown = Math.round(35 * agility);
   player.rollDx = dx;
   player.rollDy = dy;
   player.stamina -= rollCost;
@@ -2464,6 +2516,7 @@ function armorFactor(armor, weapon) {
 // Единственное место, где враг получает урон. fromX/fromY — откуда пришёл удар.
 // Возвращает фактический урон и как он прошёл, чтобы место вызова показало цифру
 function damageEnemy(e, dmg, weapon, fromX, fromY) {
+  if (e.type === 'boss') return damageBoss(e, dmg, weapon, fromX, fromY);
   const armor = e.armor || 0;
   let fromBehind = false;
   if (armor > 0) {
@@ -2483,8 +2536,63 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
   return { dealt, fromBehind, armored: armor > 0 && !fromBehind };
 }
 
+// Мясник: сначала энергощит — его снимает только плазма. Под щитом золотая кожа: плазма её почти
+// не берёт, а огнестрел, дрель и бита срезают с каждого попадания BOSS_ARMOR_FLAT — чем сильнее
+// одиночный удар, тем больше проходит (но не меньше BOSS_ARMOR_MIN). Со спины кожа не спасает
+function damageBoss(e, dmg, weapon, fromX, fromY) {
+  e.isAggroed = true;
+  const hitAngle = Math.atan2(fromY - e.y, fromX - e.x);
+  if (e.shield > 0) {
+    e.shieldFlash = 8;
+    shieldRipple(e, hitAngle);
+    if (weapon !== 'plasma') {
+      spawnDirectionalSparks(e.x + Math.cos(hitAngle) * 64, e.y - 52 + Math.sin(hitAngle) * 44, hitAngle, 1.2, 5, '#7dd3fc', 3, 9, 8);
+      // Василий догадывается, что так щит не взять (цепная молния и волна переката — не его удары)
+      if (weapon === 'makarov' || weapon === 'shotgun') sayLine('say_shield_bullets');
+      else if (weapon === 'bat' || weapon === 'drill') sayLine('say_shield_melee');
+      return { dealt: 0, shielded: true };
+    }
+    const absorbed = Math.min(e.shield, dmg);
+    e.shield -= absorbed;
+    if (e.shield <= 0) {
+      e.shield = 0;
+      onBossShieldBroken(e);
+    }
+    return { dealt: absorbed, shield: true };
+  }
+  let diff = Math.abs(hitAngle - (e.angle || 0));
+  while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+  const fromBehind = diff > BACK_ARC && weapon !== 'plasma';
+  let dealt;
+  if (weapon === 'plasma') {
+    dealt = dmg * BOSS_PLASMA_VS_SKIN;
+    sayLine('say_plasma_armor');
+  }
+  else if (fromBehind) dealt = dmg * BACKSTAB_MULT;
+  else dealt = Math.max(dmg * BOSS_ARMOR_MIN, dmg - BOSS_ARMOR_FLAT);
+  e.hp -= dealt;
+  const armored = !fromBehind && dealt < dmg * 0.8;
+  if (armored) {
+    spawnDirectionalSparks(e.x, e.y - 40, hitAngle, 1.3, 6, '#fde047', 3, 9, 9);
+    if (Math.random() < 0.25) SoundFX.ricochet();
+  }
+  return { dealt, fromBehind, armored };
+}
+
+function onBossShieldBroken(e) {
+  shatterShield(e);
+  addFloatingText(e.x - 70, e.y - 130, t('boss_shield_down'), '#38bdf8');
+  spawnDirectionalSparks(e.x, e.y - 52, -Math.PI / 2, Math.PI * 2, 30, '#7dd3fc', 4, 13, 18);
+  createParticles(e.x, e.y - 52, '#bae6fd', 20);
+  SoundFX.overheat();
+  cameraKickX += (Math.random() - 0.5) * 14;
+  cameraKickY += (Math.random() - 0.5) * 14;
+}
+
 // Подпись к цифре урона: «БРОНЯ», если броня съела урон, «В СПИНУ», если удар зашёл сзади
 function damageLabel(hit, base) {
+  if (hit.shielded) return currentLang === 'ru' ? 'ЩИТ' : 'SHIELD';
+  if (hit.shield) return base + ' 🛡';
   if (hit.fromBehind) return base + (currentLang === 'ru' ? ' В СПИНУ' : ' BACKSTAB');
   if (hit.armored) return base + (currentLang === 'ru' ? ' БРОНЯ' : ' ARMOR');
   return base;
@@ -3519,6 +3627,458 @@ function spawnBioPuddleBubbles() {
   });
 }
 
+// --- РЕПЛИКИ ВАСИЛИЯ ---
+// Короткая фраза в облачке над головой — подсказка игроку. Одна и та же — не чаще раза в SPEECH_REPEAT
+const SPEECH_FRAMES = 180;     // 3 с на экране
+const SPEECH_REPEAT = 600;     // 10 с
+const speech = { key: null, t: 0, clock: 0, lastAt: {} };
+
+function sayLine(key) {
+  const last = speech.lastAt[key];
+  if (last !== undefined && speech.clock - last < SPEECH_REPEAT) return;
+  speech.lastAt[key] = speech.clock;
+  speech.key = key;
+  speech.t = SPEECH_FRAMES;
+}
+
+function updateSpeech() {
+  speech.clock++;
+  if (speech.t > 0) speech.t--;
+}
+
+// Облачко как в комиксе: светлое, с чёрной обводкой и хвостиком к голове
+function drawSpeech(ctx) {
+  if (!speech.key || speech.t <= 0) return;
+  const text = t(speech.key);
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, speech.t / 15, (SPEECH_FRAMES - speech.t) / 6);
+  ctx.font = 'italic 700 13px Arial';
+  const maxW = 200, lh = 16;
+  const lines = [];
+  text.split(' ').forEach(word => {
+    const last = lines[lines.length - 1];
+    if (last && ctx.measureText(last + ' ' + word).width <= maxW) lines[lines.length - 1] = last + ' ' + word;
+    else lines.push(word);
+  });
+  const w = Math.max(...lines.map(l => ctx.measureText(l).width)) + 22;
+  const h = lines.length * lh + 14;
+  const headX = player.x + 4, headY = player.y - 70;
+  const bx = headX + 14 - w * 0.25, by = headY - 22 - h;
+  ctx.fillStyle = '#fffbeb';
+  ctx.strokeStyle = '#1c1917';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(bx, by, w, h, 10);
+  ctx.fill();
+  ctx.stroke();
+  // Хвостик: перекрывает кромку облачка и смотрит на голову
+  ctx.beginPath();
+  ctx.moveTo(bx + w * 0.22, by + h - 1);
+  ctx.lineTo(headX + 2, headY - 6);
+  ctx.lineTo(bx + w * 0.22 + 14, by + h - 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bx + w * 0.22, by + h);
+  ctx.lineTo(headX + 2, headY - 6);
+  ctx.lineTo(bx + w * 0.22 + 14, by + h);
+  ctx.stroke();
+  ctx.fillStyle = '#1c1917';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  lines.forEach((l, i) => ctx.fillText(l, bx + 11, by + 8 + i * lh));
+  ctx.restore();
+}
+
+// --- ОГЛУШЕНИЕ ВАСИЛИЯ (удар громилы по земле, землетрясение берсерка-Мясника) ---
+// stun — кадры без управления (ни шагу, ни выстрела, ни переката), daze — замедление после него
+function dazePlayer(stunFrames, dazeFrames, speedMult) {
+  player.stunTimer = Math.max(player.stunTimer || 0, stunFrames);
+  player.knockFrames = 0;
+  if (!(player.dazeTimer > 0) || speedMult < player.dazeMult) player.dazeMult = speedMult;
+  player.dazeTimer = Math.max(player.dazeTimer || 0, dazeFrames);
+  addFloatingText(player.x - 30, player.y - 50, currentLang === 'ru' ? '💫 ОГЛУШЁН!' : '💫 DAZED!', '#fbbf24');
+  createParticles(player.x, player.y - 30, '#fde68a', 10);
+}
+
+function drawStar(ctx, x, y, r, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const a = -Math.PI / 2 + k * Math.PI / 5;
+    const rr = k % 2 ? r * 0.45 : r;
+    if (k === 0) ctx.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    else ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Над оглушённым Василием кружат звёздочки
+function drawDazeStars(ctx) {
+  if (!(player.dazeTimer > 0)) return;
+  const t = performance.now() / 1000;
+  ctx.save();
+  for (let k = 0; k < 4; k++) {
+    const a = t * 4 + k * Math.PI / 2;
+    const front = Math.sin(a) > 0;
+    ctx.globalAlpha = front ? 1 : 0.55;
+    drawStar(ctx, player.x + Math.cos(a) * 15, player.y - 70 + Math.sin(a) * 5, front ? 5 : 3.6, '#fde047');
+  }
+  ctx.restore();
+}
+
+// Удары по земле бьют по эллипсу вокруг ступней (как и рисуются): по вертикали он сжат, как лужи
+const GROUND_SQUASH = 0.62;
+function inGroundEllipse(px, py, cx, cy, r) {
+  const dx = (px - cx) / r, dy = (py - cy) / (r * GROUND_SQUASH);
+  return dx * dx + dy * dy < 1;
+}
+
+// Ударные волны по земле: кольцо пыли расходится до radius
+let shockwaves = [];
+function spawnShockwave(x, y, radius, color, frames) {
+  shockwaves.push({ x, y, radius, color, t: 0, life: frames });
+  for (let k = 0; k < 18; k++) {
+    const a = k / 18 * Math.PI * 2;
+    const maxL = 30 + Math.floor(Math.random() * 12);
+    particles.push({
+      x: x + Math.cos(a) * radius * 0.25,
+      y: y + Math.sin(a) * radius * 0.25 * GROUND_SQUASH,
+      vx: Math.cos(a) * (3 + radius / 60),
+      vy: Math.sin(a) * (3 + radius / 60) * GROUND_SQUASH,
+      radius: 6 + Math.random() * 6,
+      color: k % 2 ? '#a8a29e' : '#78716c',
+      type: 'smoke',
+      drag: 0.9,
+      life: maxL,
+      maxLife: maxL
+    });
+  }
+}
+
+function updateShockwaves() {
+  for (let i = shockwaves.length - 1; i >= 0; i--) {
+    if (++shockwaves[i].t >= shockwaves[i].life) shockwaves.splice(i, 1);
+  }
+  if (screenShake.t > 0) {
+    screenShake.t--;
+    const k = screenShake.t / screenShake.life;
+    cameraKickX += (Math.random() - 0.5) * screenShake.amp * k;
+    cameraKickY += (Math.random() - 0.5) * screenShake.amp * k;
+  }
+}
+
+function drawShockwaves(ctx) {
+  for (let i = 0; i < shockwaves.length; i++) {
+    const s = shockwaves[i];
+    const k = s.t / s.life;
+    const r = s.radius * (0.15 + 0.85 * (1 - (1 - k) * (1 - k)));
+    ctx.save();
+    ctx.globalAlpha = (1 - k) * 0.85;
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 3 + 9 * (1 - k);
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, r, r * GROUND_SQUASH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Тряска экрана на несколько кадров (землетрясение берсерка); короткие толчки — cameraKick
+const screenShake = { t: 0, life: 1, amp: 0 };
+function shakeScreen(frames, amp) {
+  screenShake.t = Math.max(screenShake.t, frames);
+  screenShake.life = Math.max(1, screenShake.t);
+  screenShake.amp = Math.max(screenShake.t > 0 ? screenShake.amp : 0, amp);
+}
+
+// --- ГРОМИЛА БЬЁТ ПО ЗЕМЛЕ ---
+// Нечасто, когда Василий рядом: поднимает оба кулака над головой (на земле разгорается круг)
+// и бьёт по асфальту. Кто в круге и не в перекате — оглушён и на пару секунд замедлен
+const SLAM_RADIUS = 170;
+const SLAM_TRIGGER = 160;      // начинает замах, если Василий ближе
+const SLAM_WINDUP = 48;
+const SLAM_RECOVER = 30;
+const SLAM_FIRST = 240;        // первый удар — не раньше 4 с после того, как заметил
+const SLAM_COOLDOWN = 720;     // + до 240 случайно: 12–16 с между ударами
+const SLAM_STUN = 24;          // 0,4 с без управления
+const SLAM_DAZE = 150;         // 2,5 с замедления
+const SLAM_DAZE_SPEED = 0.6;
+
+// true — громила занят ударом по земле и никуда не идёт
+function updateBruteSlam(e, distToPlayer) {
+  if (e.slamCooldown === undefined) e.slamCooldown = SLAM_FIRST + Math.floor(Math.random() * 300);
+  if (e.slamCooldown > 0) e.slamCooldown--;
+  const S = e.slam;
+  if (!S) {
+    if (e.slamCooldown > 0 || e.throwState || distToPlayer > SLAM_TRIGGER) return false;
+    e.slam = { phase: 'windup', t: 0 };
+    return true;
+  }
+  S.t++;
+  if (S.phase === 'windup') {
+    // Поднимает оба кулака над головой — те же позы, что при подъёме предмета
+    e.throwPose = S.t < 10 ? 'lift1' : (S.t < 20 ? 'lift2' : 'lift3');
+    if (S.t >= SLAM_WINDUP) {
+      S.phase = 'recover';
+      S.t = 0;
+      e.throwPose = 'slam';
+      bruteSlamImpact(e);
+    }
+    return true;
+  }
+  if (S.t >= SLAM_RECOVER) {
+    e.slam = null;
+    e.throwPose = null;
+    e.slamCooldown = SLAM_COOLDOWN + Math.floor(Math.random() * 240);
+    return false;
+  }
+  return true;
+}
+
+function bruteSlamImpact(e) {
+  const fx = e.x, fy = e.y + footDY(e);
+  spawnShockwave(fx, fy, SLAM_RADIUS, '#d6b98c', 28);
+  spawnDirectionalSparks(fx, fy, -Math.PI / 2, Math.PI * 2, 12, '#a8a29e', 3, 8, 14);
+  SoundFX.bossSwing(true);
+  if (Math.hypot(player.x - e.x, player.y - e.y) < 520) {
+    cameraKickX += (Math.random() - 0.5) * 22;
+    cameraKickY += (Math.random() - 0.5) * 22;
+  }
+  const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
+  if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), fx, fy, SLAM_RADIUS)) {
+    if (!playerDodged()) dazePlayer(SLAM_STUN, SLAM_DAZE, SLAM_DAZE_SPEED);
+  }
+}
+
+// Круг на земле, пока громила замахивается: кольцо — докуда достанет, заливка — сколько осталось
+function drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (!e.slam || e.slam.phase !== 'windup') continue;
+    if (e.x < viewMinX - 200 || e.x > viewMaxX + 200 || e.y < viewMinY - 200 || e.y > viewMaxY + 200) continue;
+    const k = Math.min(1, e.slam.t / SLAM_WINDUP);
+    const fx = e.x, fy = e.y + footDY(e);
+    ctx.save();
+    ctx.fillStyle = `rgba(217, 119, 6, ${0.08 + 0.16 * k})`;
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, SLAM_RADIUS * k, SLAM_RADIUS * GROUND_SQUASH * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = k > 0.75 ? 'rgba(254, 243, 199, 0.95)' : 'rgba(245, 158, 11, 0.7)';
+    ctx.lineWidth = k > 0.75 ? 3 : 2;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, SLAM_RADIUS, SLAM_RADIUS * GROUND_SQUASH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// --- ТРИ КАРТЫ ПОСЛЕ БОССА (src/cards.js показывает, здесь — что дают) ---
+const CARD_EFFECTS = {
+  speed: 0.12,          // +12% к бегу
+  agilityRoll: 0.3,     // перекат дешевле и чаще на 30%
+  agilityDodge: 0.1,    // 10% шанс увернуться от удара, пули, языка, броска
+  vitalityHp: 40,       // +40 к максимуму здоровья
+  vitalityBandage: 0.5  // бинт лечит на 50% больше
+};
+let cardOfferTimer = 0;
+
+// Уворот (карта «Ловкость»): удар, пуля, язык или брошенный предмет проходят мимо
+function playerDodged() {
+  const agi = (player.cards && player.cards.agility) || 0;
+  if (agi > 0 && Math.random() < CARD_EFFECTS.agilityDodge * agi) {
+    addFloatingText(player.x - 26, player.y - 44, currentLang === 'ru' ? 'УВОРОТ!' : 'DODGE!', '#a5f3fc');
+    return true;
+  }
+  return false;
+}
+
+function offerBossCards() {
+  if (!window.BossCards || gameState !== 'PLAYING') return;
+  gameState = 'CARDS';
+  window.BossCards.open(applyBossCard);
+}
+
+function applyBossCard(id) {
+  player.cards[id] = (player.cards[id] || 0) + 1;
+  if (id === 'vitality') {
+    player.maxHp += CARD_EFFECTS.vitalityHp;
+    player.hp += CARD_EFFECTS.vitalityHp;
+  }
+  player.pendingCards = false;
+  gameState = 'PLAYING';
+  createParticles(player.x, player.y - 20, '#facc15', 24);
+  updateHUD(true);
+  if (window.Menu) window.Menu.requestSave();
+}
+
+// --- ПРОЛОМ В ЗАБОРЕ (переход в Промзону) ---
+// Удары берсерка-Мясника по земле трескают пролёт бетонного забора прямо за его логовом. Когда
+// локация зачищена, Василий проламывает треснувший пролёт — за ним путь в Промзону (локация 2,
+// пока заглушка). Состояние: intact → cracked → open. Рисует пролом EnvironmentRenderer
+const fenceBreach = { x: 3685, halfW: 55, state: 'intact', cracks: 0 };
+window.fenceBreach = fenceBreach;
+
+function crackFence() {
+  if (fenceBreach.state === 'open') return;
+  fenceBreach.state = 'cracked';
+  fenceBreach.cracks = Math.min(3, fenceBreach.cracks + 1);
+}
+
+// Коллизия верхнего забора разрезается: в пролёте можно пройти
+function openBreachCollision() {
+  const i = buildings.findIndex(b => b.type === 'border_fence' && b.side === 'top');
+  if (i < 0) return;
+  const r = buildings[i];
+  const gapL = fenceBreach.x - fenceBreach.halfW, gapR = fenceBreach.x + fenceBreach.halfW;
+  buildings.splice(i, 1,
+    { type: 'border_fence', side: 'top_l', x: r.x, y: r.y, w: gapL - r.x, h: r.h },
+    { type: 'border_fence', side: 'top_r', x: gapR, y: r.y, w: r.x + r.w - gapR, h: r.h });
+}
+
+function breakFence() {
+  fenceBreach.state = 'open';
+  openBreachCollision();
+  const x = fenceBreach.x, y = 40;
+  if (window.threeCharacter && window.threeCharacter.triggerSwing) window.threeCharacter.triggerSwing();
+  for (let k = 0; k < 4; k++) spawnGunpowderSmoke(x - 40 + k * 26, y + 10, Math.PI / 2 + (Math.random() - 0.5), 6);
+  spawnDirectionalSparks(x, y, Math.PI / 2, 2.6, 24, '#9ca3af', 4, 12, 18);
+  createParticles(x, y + 20, '#6b7280', 30);
+  shakeScreen(30, 18);
+  SoundFX.bossSwing(true);
+  SoundFX.batSwing(true);
+  showToast(t('breach_title'), t('breach_sub'));
+  if (window.Menu) window.Menu.requestSave();
+}
+
+// Пролом открыт и Василий шагнул в него — переход в Промзону
+function checkBreachTransit() {
+  if (fenceBreach.state !== 'open' || player.y > 48 || Math.abs(player.x - fenceBreach.x) > fenceBreach.halfW) return;
+  gameState = 'TRANSIT';
+  ['kicker', 'title', 'text', 'wip', 'back'].forEach(k => {
+    document.getElementById('transit-' + k).textContent = t('transit_' + k);
+  });
+  document.getElementById('transit-modal').style.display = 'flex';
+}
+
+window.leaveTransit = function() {
+  document.getElementById('transit-modal').style.display = 'none';
+  player.x = fenceBreach.x;
+  player.y = 120;
+  gameState = 'PLAYING';
+};
+
+// Надпись на асфальте у пролома и полоска света из него
+function drawBreachGround(ctx) {
+  if (fenceBreach.state !== 'open') return;
+  const x = fenceBreach.x;
+  const t = performance.now() / 1000;
+  ctx.save();
+  const g = ctx.createLinearGradient(x, 30, x, 190);
+  g.addColorStop(0, `rgba(250, 204, 21, ${0.22 + Math.sin(t * 2) * 0.05})`);
+  g.addColorStop(1, 'rgba(250, 204, 21, 0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(x - fenceBreach.halfW + 8, 40);
+  ctx.lineTo(x + fenceBreach.halfW - 8, 40);
+  ctx.lineTo(x + 80, 190);
+  ctx.lineTo(x - 80, 190);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = 'rgba(250, 204, 21, 0.55)';
+  ctx.font = '900 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(currentLang === 'ru' ? '▲ ПРОМЗОНА ▲' : '▲ INDUSTRIAL ZONE ▲', x, 150);
+  ctx.restore();
+}
+
+// Над треснувшим пролётом, когда локация зачищена: прыгающая золотая стрелка и подсветка плиты
+function drawBreachHint(ctx) {
+  if (!levelCleared || fenceBreach.state !== 'cracked') return;
+  const now = performance.now() / 1000;
+  const x = fenceBreach.x;
+  const pulse = 0.5 + 0.5 * Math.sin(now * 4);
+  ctx.save();
+  // Подсветка треснувшей плиты
+  ctx.fillStyle = `rgba(250, 204, 21, ${0.12 + 0.12 * pulse})`;
+  ctx.strokeStyle = `rgba(253, 224, 71, ${0.5 + 0.4 * pulse})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x - 56, -20, 112, 68, 6);
+  ctx.fill();
+  ctx.stroke();
+  // Стрелка вниз, на плиту
+  const y = -44 - Math.abs(Math.sin(now * 3.2)) * 16;
+  ctx.fillStyle = '#facc15';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x, y + 26);
+  ctx.lineTo(x - 18, y + 4);
+  ctx.lineTo(x - 7, y + 4);
+  ctx.lineTo(x - 7, y - 16);
+  ctx.lineTo(x + 7, y - 16);
+  ctx.lineTo(x + 7, y + 4);
+  ctx.lineTo(x + 18, y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.font = '900 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 3;
+  ctx.strokeText(t('breach_here'), x, y - 24);
+  ctx.fillText(t('breach_here'), x, y - 24);
+  ctx.restore();
+}
+
+// Когда локация зачищена, золотая стрелка у края экрана показывает, где пролом, и сколько до него
+function drawBreachMarker() {
+  if (gameState !== 'PLAYING' || !levelCleared || fenceBreach.state === 'intact') return;
+  const sx = fenceBreach.x - camera.x, sy = 60 - camera.y;
+  const w = canvas.width, h = canvas.height;
+  if (sx > 0 && sx < w && sy > 0 && sy < h) return;
+  const left = 40, right = w - 40, top = 80, bottom = h - 110;
+  const cx = (left + right) / 2, cy = (top + bottom) / 2;
+  const dx = sx - cx, dy = sy - cy;
+  const k = Math.min((right - cx) / Math.max(1e-3, Math.abs(dx)), (bottom - cy) / Math.max(1e-3, Math.abs(dy)));
+  const ax = cx + dx * k, ay = cy + dy * k;
+  const a = Math.atan2(dy, dx);
+  const pulse = 0.8 + Math.sin(performance.now() / 200) * 0.2;
+  ctx.save();
+  ctx.translate(ax, ay);
+  ctx.rotate(a);
+  ctx.globalAlpha = pulse;
+  ctx.fillStyle = '#facc15';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(24, 0);
+  ctx.lineTo(-14, -17);
+  ctx.lineTo(-6, 0);
+  ctx.lineTo(-14, 17);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+  // Подпись — ближе к центру экрана, без поворота
+  const meters = Math.round(Math.hypot(fenceBreach.x - player.x, 60 - player.y) / 45);
+  const label = `${t('breach_marker')} · ${meters} ${currentLang === 'ru' ? 'м' : 'm'}`;
+  ctx.save();
+  ctx.globalAlpha = pulse;
+  ctx.font = '900 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lx = ax - Math.cos(a) * 44, ly = ay - Math.sin(a) * 30;
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.strokeText(label, lx, ly);
+  ctx.fillStyle = '#fde047';
+  ctx.fillText(label, lx, ly);
+  ctx.restore();
+}
+
 // --- АУРА ПЕРЕГАРА (перк «Аура перегара») ---
 // Вокруг Василия стелется облако перегара. Клубы рождаются у него под ногами, расползаются и тают
 // ровно на границе действия — по ним видно, докуда достаёт аура. Жабы в облаке хмелеют
@@ -3728,6 +4288,7 @@ function updateGruntTongue(e, distToPlayer, angle, slowed) {
     const tg = tongueTarget();
     if (distToSegment(tg.x, tg.y, m.x, m.y, tipX, tipY) < player.radius + 4) {
       L.hit = true;
+      if (playerDodged()) return true;
       const dmg = Math.round(TONGUE_DAMAGE + (e.tier || 1) * 1.6);
       player.hp -= dmg;
       addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
@@ -4045,7 +4606,7 @@ function landThrowable(f) {
   placeObstacleFor(o, f.kind);
 
   const hitR = def.radius + 26;
-  if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR) {
+  if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR && !playerDodged()) {
     player.hp -= def.dmg;
     const a = Math.atan2(player.y - y, player.x - x);
     slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
@@ -4314,7 +4875,19 @@ function updateHUD(forceWeaponRefresh = false) {
   if (showBossBar) {
     const bossPct = Math.max(0, Math.round((bossRef.hp / bossRef.maxHp) * 1000) / 10);
     setHudStyle(document.getElementById('boss-bar-fill'), 'width', `${bossPct}%`);
-    setHudText(document.getElementById('boss-name'), bossRef.enraged ? `${t('boss_name')} — ${t('boss_enraged')}` : t('boss_name'));
+    const shieldPct = Math.max(0, Math.round((bossRef.shield / BOSS_SHIELD_MAX) * 1000) / 10);
+    setHudStyle(document.getElementById('boss-shield-bg'), 'display', shieldPct > 0 ? 'block' : 'none');
+    setHudStyle(document.getElementById('boss-shield-fill'), 'width', `${shieldPct}%`);
+    const tag = bossRef.shield > 0 ? t('boss_shield_tag') : bossRef.berserk ? t('boss_berserk') : bossRef.enraged ? t('boss_enraged') : '';
+    setHudText(document.getElementById('boss-name'), tag ? `${t('boss_name')} — ${tag}` : t('boss_name'));
+  }
+  const dazed = player.dazeTimer > 0;
+  if (_hudCache.dazed !== dazed || (dazed && _hudCache.dazeLang !== currentLang)) {
+    _hudCache.dazed = dazed;
+    _hudCache.dazeLang = currentLang;
+    const dazeBadge = document.getElementById('daze-badge');
+    dazeBadge.textContent = t('status_daze');
+    dazeBadge.style.display = dazed ? 'block' : 'none';
   }
 
   if (gameState === 'PLAYING' && dist && dist.id !== lastPlayerDistrictId) {
@@ -4507,10 +5080,25 @@ function handleEnemyKilled(index) {
 // --- БОСС «ЗОЛОТОЙ МЯСНИК» (логово в СВ Квако-гнезде, появляется один раз за забег) ---
 const BOSS_HOME = { x: 3680, y: 330 };
 const BOSS_LEASH_RADIUS = 720;
-const BOSS_MAX_HP = 6000;
+const BOSS_MAX_HP = 4800;
 // Золотая кожа: спереди гасит почти половину урона; со спины — только во время его ударов,
-// пока он не доворачивается (см. damageEnemy)
+// пока он не доворачивается. Числа брони — в damageBoss
 const BOSS_ARMOR = 0.45;
+const BOSS_ARMOR_FLAT = 10;      // столько срезает с каждого попадания огнестрела, дрели, биты
+const BOSS_ARMOR_MIN = 0.25;     // но четверть урона проходит всегда
+const BOSS_PLASMA_VS_SKIN = 0.12;
+// Энергощит: снимает только плазма. Пока Василий вне логова, щит возвращается за 5 с, а
+// здоровье — полностью, но медленно (~40 с)
+const BOSS_SHIELD_MAX = 1800;
+const BOSS_SHIELD_REGEN = BOSS_SHIELD_MAX / (60 * 5);
+const BOSS_REGEN = 0.0004;       // доля здоровья за кадр вне боя
+// Берсерк на последних 10%: бьёт мечом по земле — трясётся всё логово, Василия оглушает
+const BOSS_BERSERK_AT = 0.1;
+const BOSS_QUAKE_RADIUS = 380;
+const BOSS_QUAKE_EVERY = 420;    // кадров между землетрясениями (~7 с)
+const BOSS_QUAKE_STUN = 60;      // 1 с без управления
+const BOSS_QUAKE_DAZE = 180;     // 3 с замедления
+const BOSS_QUAKE_SLOW = 0.55;
 // Тайминги — в кадрах симуляции (60 в секунду); arc — половина угла сектора в радианах
 const BOSS_ATTACKS = {
   slash: { windup: 34, active: 8, recover: 30, range: 165, arc: 1.2, damage: 36 },
@@ -4518,7 +5106,9 @@ const BOSS_ATTACKS = {
   spin: { windup: 38, active: 30, recover: 44, range: 150, damage: 26 },
   lunge: { windup: 40, active: 14, recover: 36, range: 300, damage: 40 },
   // Захват — наказание за стояние вплотную: хватает и швыряет
-  grab: { windup: 24, active: 6, recover: 40, range: 125, damage: 48 }
+  grab: { windup: 24, active: 6, recover: 40, range: 125, damage: 48 },
+  // Землетрясение берсерка: удар мечом по земле на всё логово, оглушает
+  quake: { windup: 56, active: 4, recover: 46, range: BOSS_QUAKE_RADIUS, damage: 0 }
 };
 // Сколько кадров можно стоять рядом с Мясником, прежде чем он схватит (накапливается вблизи,
 // убывает вдали)
@@ -4551,6 +5141,10 @@ function spawnBoss() {
     attackCooldown: 0,
     lungeCooldown: 0,
     enraged: false,
+    shield: BOSS_SHIELD_MAX,
+    shieldFlash: 0,
+    berserk: false,
+    quakeTimer: 0,
     introShown: false
   };
   enemies.push(bossRef);
@@ -4558,6 +5152,7 @@ function spawnBoss() {
 
 function bossHitPlayer(e, damage) {
   if (player.isRolling) return; // перекат даёт неуязвимость
+  if (playerDodged()) return;
   player.hp -= damage;
   const a = Math.atan2(player.y - e.y, player.x - e.x);
   const kx = player.x + Math.cos(a) * 26;
@@ -4575,7 +5170,7 @@ function bossHitPlayer(e, damage) {
 
 function startBossAttack(e, key) {
   const def = BOSS_ATTACKS[key];
-  const tempo = e.enraged ? 0.8 : 1.0;
+  const tempo = e.berserk ? 0.7 : (e.enraged ? 0.8 : 1.0);
   e.attack = {
     key,
     phase: 'windup',
@@ -4589,7 +5184,17 @@ function startBossAttack(e, key) {
 }
 
 function onBossStrike(e, a, def) {
-  SoundFX.bossSwing(a.key === 'chop');
+  SoundFX.bossSwing(a.key === 'chop' || a.key === 'quake');
+  if (a.key === 'quake') {
+    // Меч в землю: волна на всё логово, трещины по асфальту и по забору за логовом
+    spawnShockwave(e.x, e.y + 4, def.range, '#f59e0b', 42);
+    spawnShockwave(e.x, e.y + 4, def.range * 0.55, '#fde68a', 30);
+    spawnDirectionalSparks(e.x + Math.cos(a.aim) * 90, e.y + Math.sin(a.aim) * 60, -Math.PI / 2, 2.6, 18, '#fbbf24', 4, 12, 16);
+    shakeScreen(40, 26);
+    addLairCrack(e.x + Math.cos(a.aim) * 80, e.y + Math.sin(a.aim) * 50);
+    crackFence();
+    return;
+  }
   if (a.key === 'slash') {
     muzzleFlashes.push({ x: e.x, y: e.y - 18, angle: a.aim, type: 'boss_slash', life: 10, maxLife: 10, scale: def.range / 54 });
   } else if (a.key === 'spin') {
@@ -4627,8 +5232,12 @@ function updateBossStrike(e, a, def) {
     }
   } else if (a.key === 'spin') {
     if ((a.t === 4 || a.t === 19) && dist < def.range + player.radius) bossHitPlayer(e, def.damage);
+  } else if (a.key === 'quake') {
+    if (a.t === 1 && !player.isRolling && inGroundEllipse(player.x, player.y + footDY(player), e.x, e.y + 4, def.range)) {
+      if (!playerDodged()) dazePlayer(BOSS_QUAKE_STUN, BOSS_QUAKE_DAZE, BOSS_QUAKE_SLOW);
+    }
   } else if (a.key === 'grab') {
-    if (a.t === 1 && !player.isRolling && dist < def.range + player.radius) {
+    if (a.t === 1 && !player.isRolling && dist < def.range + player.radius && !playerDodged()) {
       // Схватил: урон и бросок на пару шагов, Василий оглушён
       player.hp -= def.damage;
       const ang = Math.atan2(dy, dx);
@@ -4681,12 +5290,14 @@ function advanceBossAttack(e) {
       a.t = 0;
     }
   } else if (a.t >= a.recover) {
+    if (a.key === 'quake') e.quakeTimer = BOSS_QUAKE_EVERY;
     e.attack = null;
     e.attackCooldown = e.enraged ? 12 : 24;
   }
 }
 
 function chooseBossAttack(e, dist) {
+  if (e.berserk && e.quakeTimer <= 0) return 'quake';
   if (e.closeFrames >= BOSS_GRAB_AFTER) {
     e.closeFrames = 0;
     return 'grab';
@@ -4707,6 +5318,19 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   if (e.hitFlash > 0) e.hitFlash--;
   if (e.attackCooldown > 0) e.attackCooldown--;
   if (e.lungeCooldown > 0) e.lungeCooldown--;
+  if (e.shieldFlash > 0) e.shieldFlash--;
+  if (e.shieldRipples) e.shieldRipples = e.shieldRipples.filter(r => ++r.t < 34);
+  if (e.quakeTimer > 0) e.quakeTimer--;
+
+  // Последние 10% (щит уже снят): берсерк. Бросает текущий удар и сразу бьёт мечом по земле
+  if (!e.berserk && e.shield <= 0 && e.hp < e.maxHp * BOSS_BERSERK_AT) {
+    e.berserk = true;
+    e.attack = null;
+    addFloatingText(e.x - 50, e.y - 120, `💢 ${t('boss_berserk')}`, '#ef4444');
+    spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 24, '#ef4444', 4, 11, 18);
+    startBossAttack(e, 'quake');
+    return;
+  }
 
   if (!e.enraged && e.hp < e.maxHp * 0.5) {
     e.enraged = true;
@@ -4738,7 +5362,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
     addFloatingText(e.x - 60, e.y - 96, `⚔ ${t('boss_name')}`, '#facc15');
   }
 
-  let speed = e.speed * (e.enraged ? 1.25 : 1.0);
+  let speed = e.speed * (e.berserk ? 1.4 : (e.enraged ? 1.25 : 1.0));
   if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
 
   if (!e.isAggroed) {
@@ -4752,7 +5376,10 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
       e.x += (hx / homeDist) * Math.min(speed, homeDist);
       e.y += (hy / homeDist) * Math.min(speed, homeDist);
     }
-    if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.0015);
+    // Щит возвращается быстро, здоровье — полностью, но медленно
+    if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * BOSS_REGEN);
+    if (e.shield < BOSS_SHIELD_MAX) e.shield = Math.min(BOSS_SHIELD_MAX, e.shield + BOSS_SHIELD_REGEN);
+    if (e.berserk && e.hp >= e.maxHp * BOSS_BERSERK_AT) e.berserk = false;
     return;
   }
 
@@ -4824,6 +5451,10 @@ function onBossDefeated(e) {
   cameraKickY += (Math.random() - 0.5) * 20;
   SoundFX.bossSwing(true);
   addFloatingText(e.x - 110, e.y - 80, t('boss_defeated'), '#facc15');
+  // Забор за логовом трещит (если берсерк не успел его расколоть), а Василию — выбор из трёх карт
+  crackFence();
+  player.pendingCards = true;
+  cardOfferTimer = 150;
 
   // Разовая крупная награда, раскиданная вокруг тела
   BOSS_REWARD.forEach(([type, val], i) => {
@@ -4853,6 +5484,22 @@ function drawBossTelegraph(ctx, e) {
   if (!a || a.phase !== 'windup') return;
   const def = BOSS_ATTACKS[a.key];
   const p = Math.min(1, a.t / a.windup);
+  if (a.key === 'quake') {
+    // Землетрясение: огромный круг вокруг Мясника, к удару наливается
+    ctx.save();
+    ctx.fillStyle = `rgba(239, 68, 68, ${0.06 + 0.16 * p})`;
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + 4, def.range * p, def.range * GROUND_SQUASH * p, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = p > 0.75 ? 'rgba(254, 226, 226, 0.95)' : 'rgba(239, 68, 68, 0.7)';
+    ctx.lineWidth = p > 0.75 ? 4 : 2.5;
+    ctx.setLineDash([16, 10]);
+    ctx.beginPath();
+    ctx.ellipse(e.x, e.y + 4, def.range, def.range * GROUND_SQUASH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
   const locked = a.windup - a.t <= BOSS_AIM_LOCK_FRAMES;
   const lungeHalfW = e.radius + 34;
 
@@ -5048,8 +5695,215 @@ function drawBossPlaceholder(ctx, e) {
 }
 
 function drawBoss(ctx, e) {
-  if (window.threeBoss && window.threeBoss.draw(ctx, e)) return;
-  drawBossPlaceholder(ctx, e);
+  if (e.shield > 0) drawBossShield(ctx, e, false);
+  if (!(window.threeBoss && window.threeBoss.draw(ctx, e))) drawBossPlaceholder(ctx, e);
+  if (e.shield > 0) drawBossShield(ctx, e, true);
+}
+
+// Энергощит: сфера из сот, медленно вращается вокруг Мясника. Задняя половина рисуется за ним,
+// передняя — перед ним. К краю сферы соты ярче (как у мыльного пузыря), от попаданий по ним бегут
+// волны, почти пробитый щит мерцает, пробитый — разлетается сотами (shieldShards)
+const SHIELD_R = 96;            // радиус сферы, px
+const SHIELD_SQUASH_X = 0.8;    // по горизонтали сфера уже — по фигуре Мясника
+const SHIELD_CY = -58;          // центр сферы над ступнями
+const SHIELD_TILT = 0.35;       // сфера наклонена к камере, как и весь мир
+const SHIELD_CELLS = (() => {
+  const cells = [];
+  for (let lat = -75; lat <= 75; lat += 15) {
+    const phi = lat * Math.PI / 180;
+    const n = Math.max(6, Math.round(24 * Math.cos(phi)));
+    const shift = (Math.abs(lat / 15) % 2) * 0.5;
+    for (let k = 0; k < n; k++) cells.push({ phi, lam: (k + shift) / n * Math.PI * 2 });
+  }
+  return cells;
+})();
+let shieldShards = [];
+
+// Шестиугольник радиуса r в текущих координатах
+function hexPath(ctx, r) {
+  ctx.beginPath();
+  for (let k = 0; k < 6; k++) {
+    const a = k * Math.PI / 3 + Math.PI / 6;
+    if (k) ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    else ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath();
+}
+
+// front — передняя половина (перед фигурой) или задняя (за ней)
+function drawBossShield(ctx, e, front) {
+  const t = performance.now() / 1000;
+  const k = e.shield / BOSS_SHIELD_MAX;
+  const flash = (e.shieldFlash || 0) / 8;
+  // Почти пробит — мерцает
+  const flicker = k < 0.3 ? 0.55 + 0.45 * Math.abs(Math.sin(t * 23 + Math.sin(t * 7) * 3)) : 1;
+  const alpha = (0.35 + 0.65 * Math.min(1, k * 2)) * flicker;
+  const cx = e.x, cy = e.y + SHIELD_CY;
+  const spin = t * 0.35;
+  const ct = Math.cos(SHIELD_TILT), st = Math.sin(SHIELD_TILT);
+  const ripples = e.shieldRipples || [];
+  ctx.save();
+  if (!front) {
+    // Свечение изнутри: к краю гуще
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(SHIELD_SQUASH_X, 1);
+    const g = ctx.createRadialGradient(0, 0, SHIELD_R * 0.25, 0, 0, SHIELD_R);
+    g.addColorStop(0, 'rgba(34, 211, 238, 0)');
+    g.addColorStop(0.75, `rgba(34, 211, 238, ${(0.06 + 0.08 * flash) * alpha})`);
+    g.addColorStop(1, `rgba(165, 243, 252, ${(0.22 + 0.3 * flash) * alpha})`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, SHIELD_R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < SHIELD_CELLS.length; i++) {
+    const c = SHIELD_CELLS[i];
+    const lam = c.lam + spin;
+    const x = SHIELD_R * Math.cos(c.phi) * Math.sin(lam);
+    const y0 = -SHIELD_R * Math.sin(c.phi);
+    const z0 = SHIELD_R * Math.cos(c.phi) * Math.cos(lam);
+    const y = y0 * ct - z0 * st;
+    const z = y0 * st + z0 * ct;
+    if ((z > 0) !== front) continue;
+    const f = Math.abs(z) / SHIELD_R;            // 1 — смотрит на камеру, 0 — по краю
+    const sx = cx + x * SHIELD_SQUASH_X, sy = cy + y;
+    // Волны от попаданий: кольцо бежит от точки удара
+    let boost = 0;
+    for (let r = 0; r < ripples.length; r++) {
+      const rp = ripples[r];
+      const d = Math.hypot(sx - (cx + rp.x), sy - (cy + rp.y));
+      boost += Math.max(0, 1 - Math.abs(d - rp.t * 5) / 16) * (1 - rp.t / 34);
+    }
+    const fres = Math.pow(1 - f, 1.4);
+    let a = (0.08 + 0.6 * fres + 0.9 * boost + 0.25 * flash) * alpha;
+    if (!front) a *= 0.4;
+    if (a < 0.02) continue;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(Math.atan2(sy - cy, (sx - cx) / SHIELD_SQUASH_X));
+    ctx.scale(Math.max(0.22, f), 1);
+    hexPath(ctx, SHIELD_R * 0.115);
+    if (boost > 0.05) {
+      ctx.fillStyle = `rgba(165, 243, 252, ${Math.min(0.55, boost * 0.5) * alpha})`;
+      ctx.fill();
+    }
+    ctx.strokeStyle = `rgba(103, 232, 249, ${Math.min(1, a)})`;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (front) {
+    // Кромка и блик сверху слева
+    ctx.translate(cx, cy);
+    ctx.scale(SHIELD_SQUASH_X, 1);
+    ctx.strokeStyle = `rgba(207, 250, 254, ${(0.45 + 0.4 * flash) * alpha})`;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, SHIELD_R, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.35 * alpha})`;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(0, 0, SHIELD_R * 0.86, Math.PI * 1.08, Math.PI * 1.38);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Удар по щиту: волна по сотам от точки, обращённой к стрелку
+function shieldRipple(e, hitAngle) {
+  if (!e.shieldRipples) e.shieldRipples = [];
+  if (e.shieldRipples.length >= 4) e.shieldRipples.shift();
+  e.shieldRipples.push({ x: Math.cos(hitAngle) * SHIELD_R * SHIELD_SQUASH_X * 0.8, y: Math.sin(hitAngle) * SHIELD_R * 0.55, t: 0 });
+}
+
+// Пробитый щит разлетается шестиугольными осколками
+function shatterShield(e) {
+  for (let i = 0; i < 34; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 2 + Math.random() * 5;
+    shieldShards.push({
+      x: e.x + Math.cos(a) * SHIELD_R * SHIELD_SQUASH_X * 0.9,
+      y: e.y + SHIELD_CY + Math.sin(a) * SHIELD_R * 0.9,
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5,
+      rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+      size: 5 + Math.random() * 7, life: 40 + Math.floor(Math.random() * 20), t: 0
+    });
+  }
+}
+
+function updateShieldShards() {
+  for (let i = shieldShards.length - 1; i >= 0; i--) {
+    const s = shieldShards[i];
+    s.x += s.vx;
+    s.y += s.vy;
+    s.vx *= 0.95;
+    s.vy = s.vy * 0.95 + 0.12;
+    s.rot += s.vr;
+    if (++s.t >= s.life) shieldShards.splice(i, 1);
+  }
+}
+
+function drawShieldShards(ctx) {
+  if (shieldShards.length === 0) return;
+  ctx.save();
+  for (let i = 0; i < shieldShards.length; i++) {
+    const s = shieldShards[i];
+    const a = 1 - s.t / s.life;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.rotate(s.rot);
+    hexPath(ctx, s.size);
+    ctx.fillStyle = `rgba(165, 243, 252, ${0.25 * a})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(103, 232, 249, ${0.9 * a})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Трещины по асфальту логова от ударов берсерка (остаются до конца забега)
+let lairCracks = [];
+function addLairCrack(x, y) {
+  if (lairCracks.length >= 8) lairCracks.shift();
+  const lines = [];
+  for (let k = 0; k < 5; k++) {
+    let a = Math.random() * Math.PI * 2;
+    let px = x, py = y;
+    const pts = [[px, py]];
+    const n = 4 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < n; j++) {
+      a += (Math.random() - 0.5) * 0.9;
+      const len = 14 + Math.random() * 22;
+      px += Math.cos(a) * len;
+      py += Math.sin(a) * len * GROUND_SQUASH;
+      pts.push([px, py]);
+    }
+    lines.push(pts);
+  }
+  lairCracks.push(lines);
+}
+
+function drawLairCracks(ctx) {
+  if (lairCracks.length === 0) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  lairCracks.forEach(lines => lines.forEach(pts => {
+    [['rgba(10, 8, 6, 0.75)', 3.2], ['rgba(251, 146, 60, 0.25)', 1]].forEach(([color, w]) => {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.stroke();
+    });
+  }));
+  ctx.restore();
 }
 
 let _lastPromptKey = '';
@@ -5123,6 +5977,11 @@ function update() {
   let currentSpeed = player.speed;
   if (player.hasPerk('slime_skin')) currentSpeed *= 1.22;
   if (player.inSlime) currentSpeed *= BIO_PUDDLE_SLOW;
+  if (player.dazeTimer > 0) {
+    player.dazeTimer--;
+    currentSpeed *= player.dazeMult;
+  }
+  currentSpeed *= 1 + CARD_EFFECTS.speed * (player.cards.speed || 0);
 
   if (player.rollCooldown > 0) player.rollCooldown--;
   // Страховка: если Василия всё же вытолкнуло внутрь препятствия, даём из него выйти, а не запираем
@@ -5207,6 +6066,8 @@ function update() {
   const distToShop = Math.hypot(player.x - safeZone.shopX, player.y - safeZone.shopY);
   if (distToShop < safeZone.shopRadius + player.radius + 20) {
     nearbyInteractable = { type: 'shop' };
+  } else if (fenceBreach.state === 'cracked' && Math.abs(player.x - fenceBreach.x) < 90 && player.y < 150) {
+    nearbyInteractable = { type: 'breach' };
   } else {
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
@@ -5219,13 +6080,17 @@ function update() {
     }
   }
 
-  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}` : '';
+  const toadsLeft = enemies.length - (bossRef ? 1 : 0);
+  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}` : '';
   if (_lastPromptKey !== nextPromptKey) {
     _lastPromptKey = nextPromptKey;
     const promptEl = document.getElementById('interact-prompt');
     if (nearbyInteractable) {
       promptEl.style.display = 'block';
-      promptEl.innerText = nearbyInteractable.type === 'shop' ? t('prompt_shop') : t('prompt_search');
+      const type = nearbyInteractable.type;
+      promptEl.innerText = type === 'shop' ? t('prompt_shop')
+        : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
+        : t('prompt_search');
     } else {
       promptEl.style.display = 'none';
     }
@@ -5340,6 +6205,11 @@ function update() {
   }
 
   updateThrownProps();
+  updateShockwaves();
+  updateShieldShards();
+  updateSpeech();
+  if (cardOfferTimer > 0 && --cardOfferTimer === 0 && player.pendingCards) offerBossCards();
+  checkBreachTransit();
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (enemies[i].hp <= 0) {
       handleEnemyKilled(i);
@@ -5414,7 +6284,7 @@ function update() {
       if (e.type === 'brute') {
         // Тяжёлый: разворачивается медленно и идёт туда, куда смотрит — за спину можно зайти перекатом.
         // На расстоянии ищет, чем бы швырнуть
-        if (!updateBruteThrow(e, distToPlayer, eSpeed)) {
+        if (!updateBruteSlam(e, distToPlayer) && !updateBruteThrow(e, distToPlayer, eSpeed)) {
           e.angle = turnToward(typeof e.angle === 'number' ? e.angle : angle, angle, BRUTE_TURN_RATE);
           slideMove(e, Math.cos(e.angle) * eSpeed, Math.sin(e.angle) * eSpeed, e.radius, true);
         }
@@ -5490,6 +6360,7 @@ function update() {
       e.throwPose = null;
       e.lunge = null;
       e.squash = 0;
+      e.slam = null;
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -5520,7 +6391,7 @@ function update() {
       continue;
     }
     if (Math.hypot(eb.x - player.x, eb.y - player.y) < eb.radius + player.radius) {
-      if (!player.isRolling) {
+      if (!player.isRolling && !playerDodged()) {
         player.hp -= eb.damage;
         createParticles(player.x, player.y, '#10b981', 8);
         addFloatingText(player.x, player.y - 20, `-${eb.damage}`, '#ef4444');
@@ -5902,7 +6773,11 @@ function render() {
 
   // 6.5. Логово босса и красные зоны его ударов (под фигурами)
   drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  drawLairCracks(ctx);
+  drawBreachGround(ctx);
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
+  drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  drawShockwaves(ctx);
   if (bossRef) drawBossTelegraph(ctx, bossRef);
   const fumeOn = player.hasPerk('fume_aura');
   if (fumeOn) drawFumeAura(ctx); // облако перегара стелется по земле, под фигурами
@@ -5951,6 +6826,8 @@ function render() {
     if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
     if (tipsy) drawFumeTipsy(ctx, e);
   }
+  drawShieldShards(ctx);
+  drawBreachHint(ctx);
 
   // 8. Выстрелы и баллистические трассеры — только в пределах экрана
   // 8A. Инопланетные кислотно-плазменные иглы снайперов
@@ -6072,6 +6949,7 @@ function render() {
   }
 
   SpriteRenderer.drawVasiliy(ctx, player);
+  drawDazeStars(ctx);
 
   // 9.2. Машины, деревья, фонари и прочее, за чем стоит Василий или враг, — поверх фигур
   if (window.environmentRenderer) {
@@ -6125,11 +7003,13 @@ function render() {
       ctx.fillText(ft.text, ft.x, ft.y);
     }
   }
+  drawSpeech(ctx);
 
   ctx.restore();
   ctx.restore();
 
   drawLastEnemyMarkers();
+  drawBreachMarker();
 }
 
 // Когда жаб осталось мало, у края экрана стрелки показывают, где они: иначе последнюю
@@ -6240,6 +7120,11 @@ const BALANCE_NAMES = {
   courtyards: 'дв', garages: 'гар', heating: 'тепл', cordon: 'корд', nest: 'гн'
 };
 
+// Урон одного попадания (для обреза — одной дробины)
+function weaponHit(w, base) {
+  return WEAPONS[w].dmg(base);
+}
+
 function weaponDps(w, base) {
   const W = WEAPONS[w];
   if (w === 'shotgun') return W.dmg(base) * W.pellets * W.clip * 60 / (W.clip * W.cooldown + W.reload);
@@ -6278,7 +7163,8 @@ function drawBalanceOverlay() {
     ctx.fillStyle = '#e2e8f0';
     ctx.fillText(`${name}×${g.n}`, cx, y0 + 6 + rowH);
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText(`${Math.round(e.maxHp)}${e.armor ? ' 🛡' + Math.round(e.armor * 100) : ''}`, cx, y0 + 6 + rowH * 2);
+    const armorTag = e.type === 'boss' ? ` −${BOSS_ARMOR_FLAT}/уд +щит ${BOSS_SHIELD_MAX}` : (e.armor ? ' 🛡' + Math.round(e.armor * 100) : '');
+    ctx.fillText(`${Math.round(e.maxHp)}${armorTag}`, cx, y0 + 6 + rowH * 2);
   });
   BALANCE_ROWS.forEach(([wk, label, range], r) => {
     const y = y0 + 6 + rowH * (r + 3);
@@ -6287,8 +7173,15 @@ function drawBalanceOverlay() {
     ctx.fillText(`${label} ${Math.round(dps)}/с`, x0 + 8, y);
     cols.forEach((g, i) => {
       const e = g.e;
-      const front = e.maxHp / (dps * armorFactor(e.armor || 0, wk));
-      const back = e.maxHp / (dps * (e.armor ? BACKSTAB_MULT : 1));
+      let front = e.maxHp / (dps * armorFactor(e.armor || 0, wk));
+      let back = e.maxHp / (dps * (e.armor ? BACKSTAB_MULT : 1));
+      if (e.type === 'boss') {
+        // Только здоровье, без щита: золотая кожа срезает с каждого попадания
+        const hit = weaponHit(wk, player.baseDamage) * (range ? shotgunFalloff(range) : 1);
+        const k = wk === 'plasma' ? BOSS_PLASMA_VS_SKIN : Math.max(BOSS_ARMOR_MIN, 1 - BOSS_ARMOR_FLAT / hit);
+        front = e.maxHp / (dps * k);
+        back = e.maxHp / (dps * (wk === 'plasma' ? BOSS_PLASMA_VS_SKIN : BACKSTAB_MULT));
+      }
       ctx.fillStyle = front > 20 ? '#f87171' : (front > 8 ? '#fbbf24' : '#4ade80');
       ctx.fillText(e.armor ? `${front.toFixed(1)}/${back.toFixed(1)}` : front.toFixed(1), x0 + firstW + i * colW, y);
     });

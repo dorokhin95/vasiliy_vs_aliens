@@ -290,6 +290,127 @@
       top: 128px;
       background: rgba(77, 124, 15, 0.92);
     }
+    /* Плашка «Оглушён» — под плашкой слизи */
+    .status-badge.daze-badge {
+      top: 161px;
+      background: rgba(202, 138, 4, 0.92);
+    }
+
+    /* Щит Мясника — голубая полоска над его здоровьем */
+    .boss-shield-bg {
+      display: none;
+      height: 8px;
+      border-color: #0284c7;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.45);
+    }
+    .boss-shield-fill {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #0369a1, #7dd3fc);
+      transition: width 0.12s linear;
+    }
+
+    /* Переход в Промзону (пока заглушка) */
+    .transit-modal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 40%, rgba(66, 32, 6, 0.9), rgba(4, 5, 8, 0.97) 70%);
+      z-index: 70;
+    }
+    .transit-box {
+      max-width: 560px;
+      padding: 28px 34px;
+      text-align: center;
+      border: 1px solid #a16207;
+      border-radius: 12px;
+      background: rgba(12, 10, 8, 0.86);
+      box-shadow: 0 0 40px rgba(234, 179, 8, 0.2);
+    }
+    .transit-kicker { font-size: 12px; letter-spacing: 3px; color: #a8a29e; }
+    .transit-title { margin: 6px 0 14px; font-size: 40px; font-weight: 900; letter-spacing: 6px; color: #facc15; }
+    .transit-text { font-size: 15px; line-height: 1.5; color: #e7e5e4; }
+    .transit-wip { margin: 16px 0 20px; font-size: 13px; color: #fbbf24; }
+    .transit-btn, .cards-continue {
+      padding: 10px 26px;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: #0c0a09;
+      background: #facc15;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .transit-btn:hover, .cards-continue:hover { background: #fde047; }
+
+    /* Три карты после босса */
+    .cards-modal {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: rgba(6, 8, 12, 0.9);
+      z-index: 70;
+    }
+    .cards-kicker { font-size: 12px; letter-spacing: 3px; color: #a8a29e; }
+    .cards-title { font-size: 30px; font-weight: 900; letter-spacing: 3px; color: #facc15; min-height: 38px; }
+    .cards-sub { font-size: 15px; color: #e2e8f0; min-height: 20px; }
+    .cards-table { position: relative; width: 700px; height: 320px; perspective: 1200px; }
+    .bcard {
+      position: absolute;
+      left: 50%;
+      top: 10px;
+      width: 200px;
+      height: 300px;
+      margin-left: -100px;
+      transition: transform 0.3s ease, opacity 0.35s, filter 0.3s;
+    }
+    .bcard-hover { width: 100%; height: 100%; transition: transform 0.18s; }
+    .bcard.pickable { cursor: pointer; }
+    .bcard.pickable:hover .bcard-hover { transform: translateY(-14px) scale(1.04); filter: drop-shadow(0 0 16px #facc15); }
+    .bcard.dim { filter: brightness(0.45) saturate(0.6); }
+    .bcard.chosen .bcard-hover { transform: scale(1.08); filter: drop-shadow(0 0 22px #facc15); }
+    .bcard-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.55s ease; }
+    .bcard.flipped .bcard-inner { transform: rotateY(180deg); }
+    .bcard-face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 3px solid #a16207;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.65);
+      background: #1c1917;
+    }
+    .bcard-back { transform: rotateY(180deg); }
+    .bcard-art {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 84px;
+    }
+    .bcard-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .bcard-label {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      padding: 26px 10px 12px;
+      text-align: center;
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.88) 40%);
+    }
+    .bcard-label b { display: block; font-size: 20px; letter-spacing: 2px; }
+    .bcard-label span { display: block; margin-top: 3px; font-size: 12px; color: #e2e8f0; }
+    .cards-continue { display: none; }
 
     /* Status Badge */
     .status-badge {
@@ -1088,6 +1209,26 @@
     </div>
 
     <!-- Центральное сообщение (src/game.js showToast) -->
+    <!-- Переход в Промзону через пролом в заборе (локация 2 пока заглушка) -->
+    <div id="transit-modal" class="transit-modal">
+      <div class="transit-box">
+        <div class="transit-kicker" id="transit-kicker"></div>
+        <div class="transit-title" id="transit-title"></div>
+        <div class="transit-text" id="transit-text"></div>
+        <div class="transit-wip" id="transit-wip"></div>
+        <button class="transit-btn" id="transit-back" onclick="leaveTransit()"></button>
+      </div>
+    </div>
+
+    <!-- Три карты после босса (src/cards.js) -->
+    <div id="cards-modal" class="cards-modal">
+      <div class="cards-kicker" id="cards-kicker"></div>
+      <div class="cards-title" id="cards-title"></div>
+      <div class="cards-sub" id="cards-sub"></div>
+      <div class="cards-table" id="cards-table"></div>
+      <button class="cards-continue" id="cards-continue"></button>
+    </div>
+
     <div id="toast" class="toast">
       <div class="toast-title" id="toast-title"></div>
       <div class="toast-sub" id="toast-sub"></div>
@@ -1096,6 +1237,7 @@
     <!-- Boss Health Bar -->
     <div id="boss-bar" class="boss-bar">
       <div class="boss-name" id="boss-name">ЗОЛОТОЙ МЯСНИК</div>
+      <div class="boss-bar-bg boss-shield-bg" id="boss-shield-bg"><div class="boss-shield-fill" id="boss-shield-fill"></div></div>
       <div class="boss-bar-bg"><div class="boss-bar-fill" id="boss-bar-fill"></div></div>
     </div>
 
@@ -1104,6 +1246,8 @@
 
     <!-- Slime Status: Василий стоит в био-луже гнезда -->
     <div id="slime-badge" class="status-badge slime-badge"></div>
+    <!-- Daze Status: громила или берсерк-Мясник оглушили ударом по земле -->
+    <div id="daze-badge" class="status-badge daze-badge"></div>
 
     <!-- Drunk Status -->
     <div id="status-badge" class="status-badge">ПОД МУХОЙ (+Урон, -Точность!)</div>
@@ -1386,13 +1530,14 @@
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1070"></script>
-  <script src="src/three_character.js?v=1070"></script>
-  <script src="src/three_enemies.js?v=1070"></script>
-  <script src="src/three_props.js?v=1070"></script>
-  <script src="src/three_boss.js?v=1070"></script>
-  <script src="src/game.js?v=1070"></script>
-  <script src="src/menu.js?v=1070"></script>
-  <script src="src/comic.js?v=1070"></script>
+  <script src="src/environment.js?v=1074"></script>
+  <script src="src/three_character.js?v=1074"></script>
+  <script src="src/three_enemies.js?v=1074"></script>
+  <script src="src/three_props.js?v=1074"></script>
+  <script src="src/three_boss.js?v=1074"></script>
+  <script src="src/game.js?v=1074"></script>
+  <script src="src/menu.js?v=1074"></script>
+  <script src="src/comic.js?v=1074"></script>
+  <script src="src/cards.js?v=1074"></script>
 </body>
 </html>

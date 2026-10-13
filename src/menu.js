@@ -247,7 +247,9 @@ window.Menu = (() => {
         ammo: { makarov: ammo('makarov'), shotgun: ammo('shotgun') },
         currentWeapon: player.currentWeapon,
         perks: Array.from(player.unlockedPerks),
-        blockedPerks: Array.from(player.blockedPerks)
+        blockedPerks: Array.from(player.blockedPerks),
+        cards: Object.assign({}, player.cards),
+        pendingCards: !!player.pendingCards
       },
       world: {
         // [номер, обыскан, x, y, поворот] — только обысканные и переброшенные
@@ -256,7 +258,11 @@ window.Menu = (() => {
           : null).filter(Boolean),
         bins: movedBins(),
         bossDefeated: !bossRef,
-        boss: bossRef ? { hp: Math.ceil(bossRef.hp), enraged: !!bossRef.enraged } : null,
+        boss: bossRef ? {
+          hp: Math.ceil(bossRef.hp), enraged: !!bossRef.enraged,
+          shield: Math.ceil(bossRef.shield), berserk: !!bossRef.berserk
+        } : null,
+        fence: { state: fenceBreach.state, cracks: fenceBreach.cracks },
         loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
         enemyTotal: levelEnemyTotal,
         enemies: enemies.filter(e => e.type !== 'boss').map(e => ({
@@ -340,6 +346,11 @@ window.Menu = (() => {
     const knownPerk = id => Object.values(UPGRADE_TREES).some(tree => tree.perks[id]);
     (Array.isArray(p.perks) ? p.perks : []).filter(knownPerk).forEach(id => player.unlockedPerks.add(id));
     (Array.isArray(p.blockedPerks) ? p.blockedPerks : []).filter(knownPerk).forEach(id => player.blockedPerks.add(id));
+    // Карты за боссов: здоровье от «Живучести» уже входит в maxHp
+    for (const k in player.cards) {
+      player.cards[k] = Math.floor(num(p.cards && p.cards[k], 0, 0, 9));
+    }
+    player.pendingCards = !!p.pendingCards;
 
     const w = s.world || {};
     if (Array.isArray(w.containers)) {
@@ -380,6 +391,14 @@ window.Menu = (() => {
     } else if (w.boss && bossRef) {
       bossRef.hp = num(w.boss.hp, bossRef.maxHp, 1, bossRef.maxHp);
       bossRef.enraged = !!w.boss.enraged; // подмога из капсул уже вылезала — второй раз не будет
+      bossRef.shield = num(w.boss.shield, BOSS_SHIELD_MAX, 0, BOSS_SHIELD_MAX);
+      bossRef.berserk = !!w.boss.berserk;
+    }
+    // Забор за логовом: треснул или уже проломлен
+    if (w.fence && (w.fence.state === 'cracked' || w.fence.state === 'open')) {
+      fenceBreach.state = w.fence.state;
+      fenceBreach.cracks = Math.floor(num(w.fence.cracks, 1, 0, 3));
+      if (fenceBreach.state === 'open') openBreachCollision();
     }
     (Array.isArray(w.loot) ? w.loot : []).slice(0, LOOT_LIMIT).forEach(it => {
       if (!Array.isArray(it) || !LOOT_TYPES.has(it[2])) return;
