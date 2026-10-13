@@ -34,6 +34,8 @@ class EnvironmentRenderer {
     this.courtyardBins = [];
     this.courtyardBushes = [];
     this.courtyardTrees = [];
+    // Машины, баки и ящики, за которыми в этом кадре стоит персонаж (см. planDeferredContainers)
+    this.deferredContainers = new Set();
 
     this.initAssets();
     this.generateDecorations();
@@ -914,7 +916,6 @@ class EnvironmentRenderer {
     const benchImg = this.props['courtyard_bench'];
     const binImg = this.props['small_trash_bin'];
     const bush1Img = this.props['courtyard_bush'];
-    const bush2Img = this.props['courtyard_bush_2'] || bush1Img;
     const tree1Img = this.props['autumn_tree_1'];
     const lampImg = this.props['street_lamp'];
 
@@ -926,10 +927,7 @@ class EnvironmentRenderer {
       for (let i = 0; i < this.courtyardBushes.length; i++) {
         const b = this.courtyardBushes[i];
         if (!this.isVisible(b.x - 50, b.y - 50, 100, 100, camera, screenW, screenH)) continue;
-        const img = (b.variant === 2 && bush2Img) ? bush2Img : bush1Img;
-        const w = 78 * b.scale;
-        const h = 62 * b.scale;
-        ctx.drawImage(img, b.x - w * 0.5, b.y - h * 0.55, w, h);
+        this.drawBush(ctx, b);
       }
     }
 
@@ -938,11 +936,7 @@ class EnvironmentRenderer {
       for (let i = 0; i < this.courtyardBenches.length; i++) {
         const bn = this.courtyardBenches[i];
         if (!this.isVisible(bn.x - 50, bn.y - 40, 100, 80, camera, screenW, screenH)) continue;
-        ctx.save();
-        ctx.translate(bn.x, bn.y);
-        ctx.scale(bn.flipX || 1, 1);
-        ctx.drawImage(benchImg, -36, -24, 72, 48);
-        ctx.restore();
+        this.drawBench(ctx, bn);
       }
     }
 
@@ -951,12 +945,12 @@ class EnvironmentRenderer {
       for (let i = 0; i < this.courtyardBins.length; i++) {
         const tb = this.courtyardBins[i];
         if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
-        ctx.drawImage(binImg, tb.x - 18, tb.y - 20, 36, 36);
+        this.drawBin(ctx, tb);
       }
       for (let i = 0; i < this.staticSidewalkBins.length; i++) {
         const tb = this.staticSidewalkBins[i];
         if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
-        ctx.drawImage(binImg, tb.x - 18, tb.y - 20, 36, 36);
+        this.drawBin(ctx, tb);
       }
     }
 
@@ -1014,24 +1008,113 @@ class EnvironmentRenderer {
     // Свечение плафона рисует drawLampGlows() поверх персонажей
   }
 
+  bushRect(b) {
+    const w = 78 * b.scale;
+    const h = 62 * b.scale;
+    return { x: b.x - w * 0.5, y: b.y - h * 0.55, w, h };
+  }
+
+  drawBush(ctx, b) {
+    const bush1Img = this.props['courtyard_bush'];
+    const img = (b.variant === 2 && this.props['courtyard_bush_2']) ? this.props['courtyard_bush_2'] : bush1Img;
+    if (!img) return;
+    const r = this.bushRect(b);
+    ctx.drawImage(img, r.x, r.y, r.w, r.h);
+  }
+
+  drawBench(ctx, bn) {
+    const benchImg = this.props['courtyard_bench'];
+    if (!benchImg) return;
+    ctx.save();
+    ctx.translate(bn.x, bn.y);
+    ctx.scale(bn.flipX || 1, 1);
+    ctx.drawImage(benchImg, -36, -24, 72, 48);
+    ctx.restore();
+  }
+
+  drawBin(ctx, tb) {
+    const binImg = this.props['small_trash_bin'];
+    if (binImg) ctx.drawImage(binImg, tb.x - 18, tb.y - 20, 36, 36);
+  }
+
+  // Где на экране видна машина, бак или ящик (с запасом: картинка модели квадратная, с полями)
+  containerRect(c) {
+    if (c.type === 'car') return { x: c.x - 100, y: c.y - 70, w: 200, h: 110 };
+    if (c.type === 'trash') return { x: c.x - 36, y: c.y - 42, w: 72, h: 70 };
+    return { x: c.x - 30, y: c.y - 32, w: 60, h: 56 };
+  }
+
+  // a: {x, y, h} — точка ног и высота спрайта персонажа
+  actorOverlaps(r, a) {
+    return a.x + 24 > r.x && a.x - 24 < r.x + r.w && a.y > r.y && a.y - a.h < r.y + r.h;
+  }
+
   /**
-   * Деревья и фонари рисуются до персонажей; если персонаж стоит позади (выше по экрану) и перекрывается
-   * с ними, дерево/фонарь перерисовывается поверх — иначе Василий «ходит по кроне».
+   * Машина, бак или ящик, за которым стоит персонаж, рисуется не в общем проходе, а после персонажей —
+   * иначе Василий «стоит на крыше» машины. Перерисовать поверх, как деревья, нельзя: обысканные
+   * контейнеры полупрозрачные и вокруг фигуры стали бы плотнее. Если перед тем же контейнером стоит
+   * другой персонаж, порядок выбирается в пользу Василия (actors[0]).
+   * Вызывается из render() до draw().
+   */
+  planDeferredContainers(actors, containers, camera, screenW, screenH) {
+    this.deferredContainers.clear();
+    for (let i = 0; i < containers.length; i++) {
+      const c = containers[i];
+      if (!this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) continue;
+      const r = this.containerRect(c);
+      let playerBehind = false, behind = false, front = false;
+      for (let j = 0; j < actors.length; j++) {
+        const a = actors[j];
+        if (!this.actorOverlaps(r, a)) continue;
+        if (a.y < c.y) {
+          behind = true;
+          if (j === 0) playerBehind = true;
+        } else {
+          front = true;
+        }
+      }
+      if (playerBehind || (behind && !front)) this.deferredContainers.add(c);
+    }
+  }
+
+  /**
+   * Деревья, фонари, кусты, скамейки и урны рисуются до персонажей; если персонаж стоит позади
+   * (выше по экрану) и перекрывается с ними, они перерисовываются поверх — иначе Василий «ходит по кроне».
+   * Здесь же рисуются отложенные контейнеры (planDeferredContainers). Всё — в порядке глубины.
    * actors: [{x, y, h}] — точка ног и высота спрайта.
    */
   drawOccludingProps(ctx, actors, camera, screenW, screenH) {
-    const overlaps = (r, a) => a.x + 24 > r.x && a.x - 24 < r.x + r.w && a.y > r.y && a.y - a.h < r.y + r.h;
+    const items = [];
+    const behind = (baseY, r) => actors.some(a => a.y < baseY && this.actorOverlaps(r, a));
+
+    this.deferredContainers.forEach(c => items.push({ y: c.y, draw: () => this.drawContainer(ctx, c) }));
+    for (let i = 0; i < this.courtyardBushes.length; i++) {
+      const b = this.courtyardBushes[i];
+      if (!this.isVisible(b.x - 50, b.y - 50, 100, 100, camera, screenW, screenH)) continue;
+      if (behind(b.y, this.bushRect(b))) items.push({ y: b.y, draw: () => this.drawBush(ctx, b) });
+    }
+    for (let i = 0; i < this.courtyardBenches.length; i++) {
+      const bn = this.courtyardBenches[i];
+      if (!this.isVisible(bn.x - 50, bn.y - 40, 100, 80, camera, screenW, screenH)) continue;
+      if (behind(bn.y, { x: bn.x - 36, y: bn.y - 24, w: 72, h: 48 })) items.push({ y: bn.y, draw: () => this.drawBench(ctx, bn) });
+    }
+    const bins = [this.courtyardBins, this.staticSidewalkBins];
+    for (let k = 0; k < bins.length; k++) {
+      for (let i = 0; i < bins[k].length; i++) {
+        const tb = bins[k][i];
+        if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
+        if (behind(tb.y, { x: tb.x - 18, y: tb.y - 20, w: 36, h: 36 })) items.push({ y: tb.y, draw: () => this.drawBin(ctx, tb) });
+      }
+    }
     for (let i = 0; i < this.courtyardTrees.length; i++) {
       const tr = this.courtyardTrees[i];
       if (!this.isVisible(tr.x - 95, tr.y - 140, 190, 180, camera, screenW, screenH)) continue;
-      const r = this.treeRect(tr);
-      if (actors.some(a => a.y < tr.y && overlaps(r, a))) this.drawTree(ctx, tr);
+      if (behind(tr.y, this.treeRect(tr))) items.push({ y: tr.y, draw: () => this.drawTree(ctx, tr) });
     }
     for (let i = 0; i < this.staticStreetLamps.length; i++) {
       const lp = this.staticStreetLamps[i];
       if (!this.isVisible(lp.x - 60, lp.y - 160, 120, 180, camera, screenW, screenH)) continue;
-      const r = { x: lp.x - 36, y: lp.y - 138, w: 72, h: 144 };
-      if (actors.some(a => a.y < lp.y && overlaps(r, a))) this.drawLamp(ctx, lp);
+      if (behind(lp.y, { x: lp.x - 36, y: lp.y - 138, w: 72, h: 144 })) items.push({ y: lp.y, draw: () => this.drawLamp(ctx, lp) });
     }
     // Плиты пограничного забора (нижняя и боковые границы), стоящие ближе к камере, чем персонаж
     if (this.borderSegments) {
@@ -1040,9 +1123,12 @@ class EnvironmentRenderer {
         if (s.side === 'top') continue;
         if (!this.isVisible(s.x - s.w / 2, s.y - s.h / 2, s.w, s.h, camera, screenW, screenH)) continue;
         const r = { x: s.x - (s.dir === 0 ? 60 : 12), y: s.y - 45, w: s.dir === 0 ? 120 : 24, h: 80 };
-        if (actors.some(a => a.y < s.baseY && overlaps(r, a))) this.drawBorderSegment(ctx, s);
+        if (behind(s.baseY, r)) items.push({ y: s.baseY, draw: () => this.drawBorderSegment(ctx, s) });
       }
     }
+
+    items.sort((p, q) => p.y - q.y);
+    for (let i = 0; i < items.length; i++) items[i].draw();
   }
 
   drawRoadProps(ctx, camera, screenW, screenH) {
@@ -1260,82 +1346,87 @@ class EnvironmentRenderer {
   drawContainers(ctx, camera, screenW, screenH, containers) {
     containers.forEach(c => {
       if (!this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) return;
-
-      // Путь А: Рендеринг честной 360° 3D-модели (.glb) через Three.js WebGL
-      if (window.threeProps && window.threeProps.drawContainer(ctx, c)) {
-        return;
-      }
-
-      let img = null;
-      let drawW = 58, drawH = 42;
-      let flipX = 1;
-
-      if (c.type === 'car') {
-        const isUaz = c.subType
-          ? (c.subType === 'uaz')
-          : (((Math.floor(c.x) + Math.floor(c.y)) % 2) === 0);
-        img = isUaz ? this.props['car_uaz'] : this.props['car_zhiguli'];
-        drawW = isUaz ? 208 : 200;
-        drawH = isUaz ? 143 : 125;
-        flipX = ((Math.floor(c.x * 13 + c.y * 7) % 2) === 0) ? 1 : -1;
-      } else if (c.type === 'trash') {
-        img = this.props['trash_dumpster'];
-        drawW = 68;
-        drawH = 68;
-      } else {
-        img = this.props['military_crate'];
-        drawW = 58;
-        drawH = 42;
-      }
-
-      ctx.save();
-      ctx.translate(c.x, c.y);
-
-      if (c.searched) {
-        // Обысканный контейнер: полупрозрачный / затемненный
-        ctx.globalAlpha = 0.55;
-        if (img) {
-          ctx.save();
-          ctx.scale(flipX, 1);
-          ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
-          ctx.restore();
-        } else {
-          ctx.fillStyle = '#64748b';
-          ctx.fillRect(-16, -16, 32, 32);
-        }
-        ctx.globalAlpha = 1.0;
-
-        // Отметка обыска
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
-        ctx.font = '13px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('✓', 0, -drawH / 2 - 6);
-      } else {
-        // Необысканный контейнер
-        if (img) {
-          ctx.save();
-          ctx.scale(flipX, 1);
-          ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
-          ctx.restore();
-        } else {
-          ctx.fillStyle = '#f59e0b';
-          ctx.fillRect(-16, -16, 32, 32);
-        }
-
-        // Индикатор неоткрытого тайника над объектом
-        ctx.fillStyle = '#fbbf24';
-        ctx.font = 'bold 12px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        ctx.shadowBlur = 4;
-        ctx.fillText('▼', 0, -drawH / 2 - 6);
-        ctx.shadowBlur = 0;
-      }
-
-      ctx.restore();
+      // За ним стоит персонаж — нарисуем после персонажей (drawOccludingProps)
+      if (this.deferredContainers.has(c)) return;
+      this.drawContainer(ctx, c);
     });
+  }
+
+  drawContainer(ctx, c) {
+    // Путь А: Рендеринг честной 360° 3D-модели (.glb) через Three.js WebGL
+    if (window.threeProps && window.threeProps.drawContainer(ctx, c)) {
+      return;
+    }
+
+    let img = null;
+    let drawW = 58, drawH = 42;
+    let flipX = 1;
+
+    if (c.type === 'car') {
+      const isUaz = c.subType
+        ? (c.subType === 'uaz')
+        : (((Math.floor(c.x) + Math.floor(c.y)) % 2) === 0);
+      img = isUaz ? this.props['car_uaz'] : this.props['car_zhiguli'];
+      drawW = isUaz ? 208 : 200;
+      drawH = isUaz ? 143 : 125;
+      flipX = ((Math.floor(c.x * 13 + c.y * 7) % 2) === 0) ? 1 : -1;
+    } else if (c.type === 'trash') {
+      img = this.props['trash_dumpster'];
+      drawW = 68;
+      drawH = 68;
+    } else {
+      img = this.props['military_crate'];
+      drawW = 58;
+      drawH = 42;
+    }
+
+    ctx.save();
+    ctx.translate(c.x, c.y);
+
+    if (c.searched) {
+      // Обысканный контейнер: полупрозрачный / затемненный
+      ctx.globalAlpha = 0.55;
+      if (img) {
+        ctx.save();
+        ctx.scale(flipX, 1);
+        ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#64748b';
+        ctx.fillRect(-16, -16, 32, 32);
+      }
+      ctx.globalAlpha = 1.0;
+
+      // Отметка обыска
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+      ctx.font = '13px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✓', 0, -drawH / 2 - 6);
+    } else {
+      // Необысканный контейнер
+      if (img) {
+        ctx.save();
+        ctx.scale(flipX, 1);
+        ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(-16, -16, 32, 32);
+      }
+
+      // Индикатор неоткрытого тайника над объектом
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      ctx.shadowBlur = 4;
+      ctx.fillText('▼', 0, -drawH / 2 - 6);
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.restore();
   }
 
   // Отрисовка высокодетализированного 3D выпавшего лута

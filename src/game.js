@@ -1501,6 +1501,8 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
         type = 'grunt'; radius = 24; hp = 230; speed = 2.92; aggroRadius = 345; color = '#22c55e';
       }
     }
+    // Ступни этого типа тоже должны стоять на свободном месте (см. footDY)
+    if (checkWalkCollision(ex, ey, radius, FOOT_DY[type])) continue;
 
     enemies.push({
       x: ex,
@@ -2784,7 +2786,7 @@ function shootPlayerWeapon() {
           const kb = e.type === 'boss' ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
           const kx = e.x + Math.cos(toEnemyAngle) * kb;
           const ky = e.y + Math.sin(toEnemyAngle) * kb;
-          if (!checkWalkCollision(kx, ky, e.radius)) {
+          if (!checkWalkCollision(kx, ky, e.radius, footDY(e))) {
             e.x = kx;
             e.y = ky;
           }
@@ -3171,8 +3173,18 @@ function obstacleHits(o, x, y, r) {
   return (dx * dx) / (ax * ax) + (dy * dy) / (ay * ay) < 1;
 }
 
-// Возвращает то, во что упёрлись (прямоугольник здания {x, y, w, h} или препятствие), либо null
-function checkWalkCollision(x, y, radius) {
+// Точка x, y персонажа — середина фигуры, а ступни нарисованы ниже: у Василия на ~31 px, у жаб на ~20,
+// у громилы на ~38, у босса ровно в ней. Ходьба проверяется по ступням: иначе сзади персонаж заходил
+// ногами на машину или кромку крыши, а спереди не мог подойти вплотную.
+const FOOT_DY = { player: 24, grunt: 14, sniper: 12, brute: 30, boss: 0 };
+function footDY(ent) {
+  return ent === player ? FOOT_DY.player : (FOOT_DY[ent.type] || 0);
+}
+
+// Возвращает то, во что упёрлись (прямоугольник здания {x, y, w, h} или препятствие), либо null.
+// footOffset — на сколько ступни ниже точки (x, y), см. footDY()
+function checkWalkCollision(x, y, radius, footOffset = 0) {
+  y += footOffset;
   const b = checkBuildingCollision(x, y, radius);
   if (b) return b;
   // С мелкими препятствиями сталкиваются ступни, а не плечи: с полным радиусом урна или столб
@@ -3227,15 +3239,16 @@ function walkBlockerNormal(shape, x, y, radius) {
 // и сам выбирает, куда повернуть
 const SLIDE_COMMIT_FRAMES = 45;
 function slideMove(ent, dx, dy, radius, steer = false) {
+  const fo = footDY(ent);
   const tx = ent.x + dx, ty = ent.y + dy;
-  const hit = checkWalkCollision(tx, ty, radius);
+  const hit = checkWalkCollision(tx, ty, radius, fo);
   if (!hit) {
     ent.x = tx;
     ent.y = ty;
     if (ent.slideCommit > 0) ent.slideCommit--;
     return;
   }
-  const n = walkBlockerNormal(hit, ent.x, ent.y, radius);
+  const n = walkBlockerNormal(hit, ent.x, ent.y + fo, radius);
   if (n) {
     const vn = dx * n.x + dy * n.y;
     if (vn < 0) {
@@ -3256,7 +3269,7 @@ function slideMove(ent, dx, dy, radius, steer = false) {
         }
       }
       const sx = ent.x + sdx, sy = ent.y + sdy;
-      if (Math.abs(sdx) + Math.abs(sdy) > 0.05 && !checkWalkCollision(sx, sy, radius)) {
+      if (Math.abs(sdx) + Math.abs(sdy) > 0.05 && !checkWalkCollision(sx, sy, radius, fo)) {
         ent.x = sx;
         ent.y = sy;
         return;
@@ -3266,8 +3279,8 @@ function slideMove(ent, dx, dy, radius, steer = false) {
     }
   }
   // Касательная упёрлась во второе препятствие — по осям, как раньше
-  if (!checkWalkCollision(tx, ent.y, radius)) ent.x = tx;
-  if (!checkWalkCollision(ent.x, ty, radius)) ent.y = ty;
+  if (!checkWalkCollision(tx, ent.y, radius, fo)) ent.x = tx;
+  if (!checkWalkCollision(ent.x, ty, radius, fo)) ent.y = ty;
 }
 
 // Размеры — по нижней части спрайтов (крыша машины и крона дерева рисуются выше и не мешают ходить за ними)
@@ -3610,7 +3623,7 @@ function bossHitPlayer(e, damage) {
   const a = Math.atan2(player.y - e.y, player.x - e.x);
   const kx = player.x + Math.cos(a) * 26;
   const ky = player.y + Math.sin(a) * 26;
-  if (!checkWalkCollision(kx, ky, player.radius)) {
+  if (!checkWalkCollision(kx, ky, player.radius, footDY(player))) {
     player.x = kx;
     player.y = ky;
   }
@@ -3679,8 +3692,8 @@ function updateBossStrike(e, a, def) {
     const step = def.range / def.active;
     const nx = e.x + Math.cos(a.aim) * step;
     const ny = e.y + Math.sin(a.aim) * step;
-    if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
-    if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
+    if (!checkWalkCollision(nx, e.y, e.radius, footDY(e))) e.x = nx;
+    if (!checkWalkCollision(e.x, ny, e.radius, footDY(e))) e.y = ny;
     if (a.t % 2 === 0) createParticles(e.x, e.y + 14, '#78716c', 2);
     if (!a.hit && dist < e.radius + player.radius + 34) {
       a.hit = true;
@@ -3800,7 +3813,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   if (overlap > 0 && dist > 0.01 && !player.isRolling) {
     const px = player.x + (dx / dist) * overlap;
     const py = player.y + (dy / dist) * overlap;
-    if (!checkWalkCollision(px, py, player.radius)) {
+    if (!checkWalkCollision(px, py, player.radius, footDY(player))) {
       player.x = px;
       player.y = py;
     }
@@ -4107,7 +4120,7 @@ function update() {
 
   if (player.rollCooldown > 0) player.rollCooldown--;
   // Страховка: если Василия всё же вытолкнуло внутрь препятствия, даём из него выйти, а не запираем
-  const playerStuck = checkWalkCollision(player.x, player.y, player.radius);
+  const playerStuck = checkWalkCollision(player.x, player.y, player.radius, footDY(player));
   if (player.isRolling) {
     if (playerStuck) {
       player.x += player.rollDx * 9;
@@ -4437,7 +4450,7 @@ function update() {
       e.angle = e.patrolAngle;
       const pnx = e.x + Math.cos(e.patrolAngle) * 0.8;
       const pny = e.y + Math.sin(e.patrolAngle) * 0.8;
-      if (!checkWalkCollision(pnx, pny, e.radius)) {
+      if (!checkWalkCollision(pnx, pny, e.radius, footDY(e))) {
         e.x = pnx; e.y = pny;
       }
     }
@@ -4765,7 +4778,16 @@ function render() {
   const viewMinY = camera.y - 120;
   const viewMaxY = camera.y + canvas.height + 120;
 
+  // Ступни и высоты фигур на экране: по ним предметы, за которыми кто-то стоит, рисуются поверх (9.2)
+  const actors = [{ x: player.x, y: player.y + footDY(player), h: 88 }];
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
+    actors.push({ x: e.x, y: e.y + footDY(e), h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 110 : 62) });
+  }
+
   if (window.environmentRenderer) {
+    window.environmentRenderer.planDeferredContainers(actors, containers, camera, canvas.width, canvas.height);
     window.environmentRenderer.draw(ctx, camera, canvas.width, canvas.height, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
   } else {
     ctx.fillStyle = '#161b24';
@@ -4982,14 +5004,8 @@ function render() {
 
   SpriteRenderer.drawVasiliy(ctx, player);
 
-  // 9.2. Деревья и фонари перед персонажами (Василий или враг стоит позади) — поверх них
+  // 9.2. Машины, деревья, фонари и прочее, за чем стоит Василий или враг, — поверх фигур
   if (window.environmentRenderer) {
-    const actors = [{ x: player.x, y: player.y, h: 95 }];
-    for (let i = 0; i < enemies.length; i++) {
-      const e = enemies[i];
-      if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
-      actors.push({ x: e.x, y: e.y, h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 120 : 90) });
-    }
     window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height);
     // 9.3. Плафоны фонарей, ореолы и конусы света — поверх персонажей
     window.environmentRenderer.drawLampGlows(ctx, camera, canvas.width, canvas.height);
