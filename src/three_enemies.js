@@ -47,6 +47,34 @@ function promoteFrameToImage(cache, key, canvas) {
   });
 }
 
+// Позы броска громилы (см. applyBrutePose и updateBruteThrow в game.js): lift0…lift3 — предмет
+// поднимается от груди до положения над головой, throw — руки выброшены вперёд после броска
+const BRUTE_LIFT_STEPS = 4;
+const BRUTE_THROW_POSES = ['lift0', 'lift1', 'lift2', 'lift3', 'throw'];
+// Направления плеча (плечевой сустав → локоть) и предплечья (локоть → кулак) в осях
+// [вверх, вперёд — куда смотрит громила, наружу от позвоночника]. Между chest и overhead —
+// промежуточные шаги подъёма
+const BRUTE_POSE_DIRS = {
+  chest: { arm: [-0.35, 1.0, 0.35], fore: [0.35, 1.0, -0.45] },
+  overhead: { arm: [0.8, 0.15, 0.6], fore: [0.45, 0.1, -0.9] },
+  throw: { arm: [0.1, 1.0, 0.1], fore: [0.15, 1.0, -0.15] }
+};
+// Обычный кадр громилы: 138 px мира, центр на 16 px выше его точки. Кадр позы выше: поднятые
+// руки торчат над головой и иначе обрезались бы
+const BRUTE_FRAME = { w: 138, anchor: -16 };
+const BRUTE_POSE_FRAME = { w: 170, anchor: -37 };
+
+function brutePoseDirs(pose) {
+  if (pose === 'throw') return BRUTE_POSE_DIRS.throw;
+  const k = Number(pose.slice(4)) / (BRUTE_LIFT_STEPS - 1);
+  const mix = (a, b) => {
+    const la = Math.hypot(...a), lb = Math.hypot(...b);
+    return a.map((x, i) => x / la + (b[i] / lb - x / la) * k);
+  };
+  const { chest, overhead } = BRUTE_POSE_DIRS;
+  return { arm: mix(chest.arm, overhead.arm), fore: mix(chest.fore, overhead.fore) };
+}
+
 class ThreeEnemyManager {
   constructor() {
     this.models = {
@@ -76,6 +104,10 @@ class ThreeEnemyManager {
     // Frame cache: Map<key, HTMLCanvasElement → HTMLImageElement once decoded (see promoteFrameToImage)>
     this.cache = new Map();
 
+    // Кулаки громилы в кадрах поз броска: ключ кадра → {x, y} от его точки (см. getBruteFists)
+    this.bruteFists = new Map();
+    this.bruteSkin = null;
+
     // Offscreen Three.js setup
     this.width = 160;
     this.height = 160;
@@ -97,6 +129,7 @@ class ThreeEnemyManager {
 
     // 2.5D Orthographic Camera matching Vasily's perspective
     const frustumSize = 2.45;
+    this.frustumSize = frustumSize;
     this.camera = new THREE.OrthographicCamera(
       -frustumSize / 2,
       frustumSize / 2,
@@ -195,6 +228,7 @@ class ThreeEnemyManager {
           // Special scale adjustments if needed
           if (cfg.type === 'brute') {
             model.scale.set(1.05, 1.05, 1.05);
+            this.bruteSkin = this.buildBruteArmSkin(model);
           }
 
           this.roots[cfg.type].add(model);
@@ -226,14 +260,20 @@ class ThreeEnemyManager {
         }
       }
     }
+    // Позы броска громилы — тоже заранее, чтобы первый бросок в новую сторону не дёргал кадр
+    if (this.isLoaded.brute) {
+      for (let dirIdx = 0; dirIdx < this.numDirections; dirIdx++) {
+        BRUTE_THROW_POSES.forEach(pose => tasks.push(() => this.getFrameCanvas('brute', dirIdx, 0, pose)));
+      }
+    }
     runIdleTasks(tasks);
   }
 
   /**
    * Renders and caches a single 3D pose of the enemy
    */
-  getFrameCanvas(type, dirIdx, frameIdx) {
-    const key = `${type}_${dirIdx}_${frameIdx}`;
+  getFrameCanvas(type, dirIdx, frameIdx, pose = null) {
+    const key = pose ? `${type}_${dirIdx}_${pose}` : `${type}_${dirIdx}_${frameIdx}`;
     if (this.cache.has(key)) {
       return this.cache.get(key);
     }
@@ -266,6 +306,9 @@ class ThreeEnemyManager {
       this.mixers[type].setTime(t);
     }
 
+    // Поза броска поверх кадра ходьбы (руки после setTime — ходьба двигает те же кости)
+    const posed = pose ? this.applyBrutePose(this.models[type], this.roots[type], pose) : null;
+
     // Camera height adjustment per enemy
     if (type === 'brute') {
       this.camera.zoom = 0.85;
@@ -274,21 +317,223 @@ class ThreeEnemyManager {
       this.camera.zoom = 1.0;
       this.camera.lookAt(0, 0.90, 0);
     }
+    let size = this.width;
+    if (posed) {
+      // Кадр позы охватывает больше (BRUTE_POSE_FRAME) при той же плотности пикселей,
+      // окно камеры сдвинуто вверх на разницу якорей
+      const { w, anchor } = BRUTE_POSE_FRAME;
+      size = Math.round(this.width * w / BRUTE_FRAME.w);
+      this.camera.zoom = 0.85 * BRUTE_FRAME.w / w;
+      const shift = (BRUTE_FRAME.anchor - anchor) * (this.frustumSize / this.camera.zoom) / w;
+      this.camera.top = this.frustumSize / 2 + shift;
+      this.camera.bottom = -this.frustumSize / 2 + shift;
+      this.renderer.setSize(size, size, false);
+    }
     this.camera.updateProjectionMatrix();
 
     // Render WebGL
     this.renderer.render(this.scene, this.camera);
+    if (posed) {
+      this.bruteFists.set(key, this.bruteFistsOnScreen(this.models[type]));
+      // Вернуть кости рук и веса как были: микшер пишет не все значения при следующем setTime
+      posed.forEach(([bone, q]) => bone.quaternion.copy(q));
+      this.useBrutePoseSkin(false);
+    }
 
     // Copy to dedicated 2D canvas for persistent caching
     const cachedCanvas = document.createElement('canvas');
-    cachedCanvas.width = this.width;
-    cachedCanvas.height = this.height;
+    cachedCanvas.width = size;
+    cachedCanvas.height = size;
     const cctx = cachedCanvas.getContext('2d');
     cctx.drawImage(this.canvas, 0, 0);
+    if (posed) {
+      this.renderer.setSize(this.width, this.height, false);
+      this.camera.top = this.frustumSize / 2;
+      this.camera.bottom = -this.frustumSize / 2;
+    }
 
     this.cache.set(key, cachedCanvas);
     promoteFrameToImage(this.cache, key, cachedCanvas);
     return cachedCanvas;
+  }
+
+  /**
+   * Вторые веса скина громилы — для поз броска.
+   * В модели длинные руки висят до колен, и кулаки с предплечьями привязаны в основном к костям бёдер,
+   * а кости предплечий вершин почти не двигают: поднимешь руку — локоть уходит вверх, а кулак остаётся
+   * у колена. Для поз каждая вершина руки переназначается по близости к костям (в позе привязки):
+   * предплечье и кулак — на ForearmL/R (у локтя вперемешку с плечевой), плечо — на ArmL/R.
+   * Ходьба рисуется с исходными весами: там кулаки качаются вместе с бёдрами, и это выглядит живо.
+   */
+  buildBruteArmSkin(model) {
+    const meshes = [];
+    model.traverse(o => { if (o.isSkinnedMesh) meshes.push(o); });
+    if (meshes.length === 0) return null;
+    const sk = meshes[0].skeleton;
+    const bi = name => sk.bones.findIndex(b => b.name === name);
+    if (['ArmL', 'ArmR', 'ForearmL', 'ForearmR', 'Pelvis', 'Head'].some(n => bi(n) < 0)) return null;
+    const bonePos = name => new THREE.Vector3().setFromMatrixPosition(sk.boneInverses[bi(name)].clone().invert());
+    const bindPos = (sm, i) => new THREE.Vector3()
+      .fromBufferAttribute(sm.geometry.attributes.position, i).applyMatrix4(sm.bindMatrix);
+    // Расстояние от точки до отрезка ab и где на нём ближайшая точка (0 — a, 1 — b)
+    const segDist = (p, a, b) => {
+      const ab = b.clone().sub(a);
+      const t = Math.max(0, Math.min(1, p.clone().sub(a).dot(ab) / ab.lengthSq()));
+      return [p.distanceTo(a.clone().addScaledVector(ab, t)), t];
+    };
+    const pelvis = bonePos('Pelvis'), head = bonePos('Head');
+    const sides = {};
+    ['L', 'R'].forEach(s => {
+      const shoulder = bonePos('Arm' + s);
+      const sign = Math.sign(shoulder.x);
+      // Кулак висит у колена снаружи от ноги: дальше 0,58 от оси на высоте 0,15–1,3 — только
+      // кисти и предплечья. Кулак — середина самых нижних из этих вершин
+      const pts = [];
+      meshes.forEach(sm => {
+        for (let i = 0; i < sm.geometry.attributes.position.count; i++) {
+          const p = bindPos(sm, i);
+          if (p.x * sign > 0.58 && p.y > 0.15 && p.y < 1.3) pts.push(p);
+        }
+      });
+      if (pts.length === 0) return;
+      const minY = pts.reduce((m, p) => Math.min(m, p.y), Infinity);
+      const low = pts.filter(p => p.y < minY + 0.12);
+      const knee = bonePos('Shin' + s);
+      sides[s] = {
+        sign, A: bi('Arm' + s), F: bi('Forearm' + s),
+        shoulder, elbow: bonePos('Forearm' + s),
+        fist: low.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / low.length),
+        hip: bonePos('Thigh' + s), foot: knee.clone().setY(0.05)
+      };
+    });
+    if (!sides.L || !sides.R) return null;
+
+    const swaps = meshes.map(sm => {
+      const geo = sm.geometry;
+      const si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight;
+      const fi = si.clone(), fw = sw.clone();
+      for (let i = 0; i < si.count; i++) {
+        const p = bindPos(sm, i);
+        if (Math.abs(p.x) < 0.2) continue;
+        const S = Math.sign(p.x) === sides.L.sign ? sides.L : sides.R;
+        const [dF, tF] = segDist(p, S.elbow, S.fist);
+        const [dU, tU] = segDist(p, S.shoulder, S.elbow);
+        const other = Math.min(segDist(p, S.hip, S.foot)[0], segDist(p, pelvis, head)[0]);
+        if (dF <= dU && dF < other && dF < 0.35 && p.y < 1.45) {
+          const wf = Math.min(1, Math.max(0, (tF + 0.05) / 0.2));
+          fi.setXYZW(i, S.F, S.A, 0, 0);
+          fw.setXYZW(i, wf, 1 - wf, 0, 0);
+        } else if (dU < dF && dU < other && dU < 0.4) {
+          // У плечевого сустава остаётся часть старых весов (спина, голова) — иначе рвётся плечо
+          const ka = Math.min(1, 0.4 + tU * 1.5);
+          const idx = [si.getX(i), si.getY(i), si.getZ(i), si.getW(i)];
+          const ws = [sw.getX(i), sw.getY(i), sw.getZ(i), sw.getW(i)];
+          const m = new Map([[S.A, ka]]);
+          for (let c = 0; c < 4; c++) {
+            if (ws[c] > 0) m.set(idx[c], (m.get(idx[c]) || 0) + ws[c] * (1 - ka));
+          }
+          const top = [...m].sort((a, b) => b[1] - a[1]).slice(0, 4);
+          const total = top.reduce((a, e) => a + e[1], 0);
+          while (top.length < 4) top.push([0, 0]);
+          fi.setXYZW(i, top[0][0], top[1][0], top[2][0], top[3][0]);
+          fw.setXYZW(i, top[0][1] / total, top[1][1] / total, top[2][1] / total, top[3][1] / total);
+        }
+      }
+      return { geo, walk: [si, sw], pose: [fi, fw] };
+    });
+    // Кулак в осях кости предплечья: с новыми весами он сидит на ней жёстко
+    const fistLocal = {};
+    ['L', 'R'].forEach(s => {
+      fistLocal[s] = sides[s].fist.clone().applyMatrix4(sk.boneInverses[sides[s].F]);
+    });
+    return { swaps, fistLocal };
+  }
+
+  // Веса для поз броска (true) или исходные, для ходьбы (false)
+  useBrutePoseSkin(on) {
+    this.bruteSkin.swaps.forEach(k => {
+      const [si, sw] = on ? k.pose : k.walk;
+      k.geo.setAttribute('skinIndex', si);
+      k.geo.setAttribute('skinWeight', sw);
+    });
+  }
+
+  /**
+   * Руки громилы для броска (game.js выставляет e.throwPose, см. BRUTE_THROW_POSES).
+   * Плечо и предплечье поворачиваются так, чтобы «плечо → локоть» и «локоть → кулак» легли
+   * на направления из BRUTE_POSE_DIRS. Возвращает исходные повороты костей, чтобы вернуть их
+   * после рендера (веса возвращает useBrutePoseSkin(false)).
+   */
+  applyBrutePose(model, root, pose) {
+    const spine = model.getObjectByName('Spine');
+    if (!spine || !this.bruteSkin) return null;
+    this.useBrutePoseSkin(true);
+    model.updateMatrixWorld(true);
+    const P = brutePoseDirs(pose);
+    const up = new THREE.Vector3(0, 1, 0);
+    const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(root.getWorldQuaternion(new THREE.Quaternion()));
+    fwd.y = 0;
+    fwd.normalize();
+    const spinePos = spine.getWorldPosition(new THREE.Vector3());
+    const saved = [];
+    // Повернуть кость так, чтобы направление from → tip легло на target
+    const aim = (bone, from, tip, target) => {
+      saved.push([bone, bone.quaternion.clone()]);
+      const cur = tip.sub(from).normalize();
+      const worldQ = bone.getWorldQuaternion(new THREE.Quaternion());
+      const delta = new THREE.Quaternion().setFromUnitVectors(cur, target);
+      const parentQ = bone.parent.getWorldQuaternion(new THREE.Quaternion());
+      bone.quaternion.copy(parentQ.invert().multiply(delta.multiply(worldQ)));
+      bone.updateMatrixWorld(true);
+    };
+    ['L', 'R'].forEach(s => {
+      const arm = model.getObjectByName('Arm' + s);
+      const fore = model.getObjectByName('Forearm' + s);
+      if (!arm || !fore) return;
+      const shoulder = arm.getWorldPosition(new THREE.Vector3());
+      const side = shoulder.clone().sub(spinePos);
+      side.y = 0;
+      side.normalize();
+      const dir = d => new THREE.Vector3()
+        .addScaledVector(up, d[0]).addScaledVector(fwd, d[1]).addScaledVector(side, d[2]).normalize();
+      aim(arm, shoulder, fore.getWorldPosition(new THREE.Vector3()), dir(P.arm));
+      const elbow = fore.getWorldPosition(new THREE.Vector3());
+      aim(fore, elbow, fore.localToWorld(this.bruteSkin.fistLocal[s].clone()), dir(P.fore));
+    });
+    return saved;
+  }
+
+  // Середина между кулаками в только что отрисованном кадре позы, px мира от точки громилы
+  bruteFistsOnScreen(model) {
+    const { w, anchor } = BRUTE_POSE_FRAME;
+    let x = 0, y = 0;
+    ['L', 'R'].forEach(s => {
+      const fore = model.getObjectByName('Forearm' + s);
+      const p = fore.localToWorld(this.bruteSkin.fistLocal[s].clone()).project(this.camera);
+      x += ((p.x + 1) / 2) * w - w / 2;
+      y += ((1 - p.y) / 2) * w - w / 2 + anchor;
+    });
+    return { x: x / 2, y: y / 2 };
+  }
+
+  /**
+   * Где кулаки громилы в позе броска (середина между ними, px мира от e.x, e.y) — game.js кладёт
+   * туда поднятый предмет. null, пока модель не загружена: тогда game.js берёт средние высоты.
+   */
+  getBruteFists(e, pose) {
+    if (!this.isLoaded.brute || !this.bruteSkin) return null;
+    const dirIdx = this.dirIndex(e);
+    const key = `brute_${dirIdx}_${pose}`;
+    if (!this.bruteFists.has(key)) this.getFrameCanvas('brute', dirIdx, 0, pose);
+    return this.bruteFists.get(key) || null;
+  }
+
+  // Направление взгляда, округлённое до одного из numDirections кадров
+  dirIndex(e) {
+    let angle = e.angle !== undefined ? e.angle : (e.patrolAngle || 0);
+    while (angle < 0) angle += Math.PI * 2;
+    while (angle >= Math.PI * 2) angle -= Math.PI * 2;
+    return Math.round((angle / (Math.PI * 2)) * this.numDirections) % this.numDirections;
   }
 
   /**
@@ -300,18 +545,14 @@ class ThreeEnemyManager {
       return false; // Fallback to 2D while loading
     }
 
-    // Quantize facing angle (0 to 2PI)
-    let angle = e.angle !== undefined ? e.angle : (e.patrolAngle || 0);
-    while (angle < 0) angle += Math.PI * 2;
-    while (angle >= Math.PI * 2) angle -= Math.PI * 2;
-
-    const dirIdx = Math.round((angle / (Math.PI * 2)) * this.numDirections) % this.numDirections;
+    const dirIdx = this.dirIndex(e);
 
     // Quantize animation frame (walk stride)
     const animTimer = e.animTimer || 0;
     const frameIdx = Math.floor(animTimer * 1.2) % this.numFrames;
 
-    const frameCanvas = this.getFrameCanvas(type, dirIdx, frameIdx);
+    const pose = type === 'brute' && e.throwPose ? e.throwPose : null;
+    const frameCanvas = this.getFrameCanvas(type, dirIdx, frameIdx, pose);
     if (!frameCanvas) return false;
 
     // Render dimensions
@@ -324,10 +565,14 @@ class ThreeEnemyManager {
       renderH = 82;
       anchorOffsetY = -10;
     } else if (type === 'brute') {
-      renderW = 138;
-      renderH = 138;
-      anchorOffsetY = -16;
+      renderW = BRUTE_FRAME.w;
+      renderH = BRUTE_FRAME.w;
+      anchorOffsetY = BRUTE_FRAME.anchor;
     }
+    // Кадр позы броска больше обычного (BRUTE_POSE_FRAME), фигура в нём того же размера
+    const posed = pose && this.bruteFists.has(`brute_${dirIdx}_${pose}`);
+    const frameW = posed ? BRUTE_POSE_FRAME.w : renderW;
+    const frameY = posed ? BRUTE_POSE_FRAME.anchor : anchorOffsetY;
 
     ctx.save();
     ctx.translate(e.x, e.y);
@@ -341,10 +586,10 @@ class ThreeEnemyManager {
     // 2. Draw 3D Model Canvas (without slow CPU ctx.filter)
     ctx.drawImage(
       frameCanvas,
-      -renderW / 2,
-      -renderH / 2 + anchorOffsetY,
-      renderW,
-      renderH
+      -frameW / 2,
+      -frameW / 2 + frameY,
+      frameW,
+      frameW
     );
 
     if (e.hitFlash && e.hitFlash > 0) {

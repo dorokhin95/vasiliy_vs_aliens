@@ -3475,17 +3475,41 @@ function spawnBioPuddleBubbles() {
 // и швыряет туда, где Василий. Место падения заранее подсвечено красным кругом — от броска уходят
 // перекатом. Предмет остаётся там, где упал (тайник можно обыскать там же), и задевает жаб тоже.
 // o.airborne — предмет поднят или летит: тогда он рисуется поверх фигур, а его препятствие снято
+// bottom — насколько видимое дно предмета ниже его центра на экране (по кадрам моделей):
+// по нему предмет кладётся днищем на ладони громилы
 const THROWABLE = {
-  bin: { dmg: 26, radius: 40, weight: 0.6 },
-  trash: { dmg: 42, radius: 56, weight: 1.0 },
-  box: { dmg: 38, radius: 50, weight: 0.9 },
-  car: { dmg: 64, radius: 84, weight: 1.6 }
+  bin: { dmg: 26, radius: 40, weight: 0.6, bottom: 14 },
+  trash: { dmg: 42, radius: 56, weight: 1.0, bottom: 30 },
+  box: { dmg: 38, radius: 50, weight: 0.9, bottom: 13 },
+  car: { dmg: 64, radius: 84, weight: 1.6, bottom: 42 }
 };
+// Высота кулаков громилы над его точкой, пока 3D-модель не загрузилась (потом — точно по кадру позы,
+// threeEnemies.getBruteFists): у груди и над головой
+const BRUTE_HANDS_CHEST = 55;
+const BRUTE_HANDS_UP = 93;
+const THROW_HOLD_STEPS = 3;       // позы подъёма lift0…lift3 (BRUTE_THROW_POSES в three_enemies.js)
+
+// Где предмет в руках громилы на шаге подъёма step: у груди кулаки держат его за бока (середина
+// предмета на кулаках), над головой — днищем на кулаках, между ними — по шагу
+function throwHoldPos(e, o, kind, step) {
+  const fists = window.threeEnemies && window.threeEnemies.getBruteFists(e, 'lift' + step);
+  const k = step / THROW_HOLD_STEPS;
+  const fx = fists ? fists.x : 0;
+  const fy = fists ? fists.y : -(BRUTE_HANDS_CHEST + (BRUTE_HANDS_UP - BRUTE_HANDS_CHEST) * k);
+  const bottom = (kind === 'car' ? (o.subType === 'uaz' ? 47 : 36) : THROWABLE[kind].bottom) * k;
+  return { x: e.x + fx, y: e.y + 2, z: 2 - fy + bottom };
+}
 const THROW_RANGE_MIN = 170;
+// Ближе THROW_RANGE_MIN громила за предметом не ходит, но то, что лежит прямо у него под рукой
+// (часто тот же бак, который он только что швырнул в Василия), поднимает и бросает в упор
+const THROW_CLOSE_MIN = 60;
+const THROW_CLOSE_REACH = 100;
 const THROW_RANGE_MAX = 520;
 const THROW_SEEK_RADIUS = 240;    // ищет предмет не дальше этого от себя
-const THROW_LIFT_FRAMES = 34;     // замах с предметом над головой
-const THROW_COOLDOWN = 420;       // ~7 с между бросками одного громилы
+const THROW_LIFT_FRAMES = 34;     // подъём и замах: подхват, три шага вверх, удержание над головой
+const THROW_GRAB_FRAMES = 8;      // предмет идёт с земли в кулаки у груди
+const THROW_LIFT_STEP = 6;        // кадров на каждый следующий шаг подъёма
+const THROW_COOLDOWN = 240;       // 4–6 с между бросками одного громилы (+ случайная добавка)
 const BRUTE_TURN_RATE = 0.035;    // рад/кадр: громила разворачивается ~1,5 с — за спину успевают зайти
 let thrownProps = [];             // летящие предметы
 
@@ -3505,15 +3529,16 @@ function throwableKind(o) {
   return o.type === 'trash' || o.type === 'box' || o.type === 'car' ? o.type : 'bin';
 }
 
-function findThrowable(e) {
+function findThrowable(e, radius) {
   const env = window.environmentRenderer;
   const pool = containers.concat(env ? env.courtyardBins.concat(env.staticSidewalkBins) : []);
-  let best = null, bestD = THROW_SEEK_RADIUS;
+  let best = null, bestD = radius;
   for (let i = 0; i < pool.length; i++) {
     const o = pool[i];
     if (o.airborne || o.claimedBy) continue;
     if (o.type === 'car' && (e.tier || 0) < 4) continue; // машины поднимают только элитные громилы
-    if (Math.hypot(o.x - safeZone.x, o.y - safeZone.y) < safeZone.radius + 40) continue;
+    // Под куполом не берёт; у края — берёт (туда падает брошенное в стоящего у купола Василия)
+    if (Math.hypot(o.x - safeZone.x, o.y - safeZone.y) < safeZone.radius + 10) continue;
     const d = Math.hypot(o.x - e.x, o.y - e.y);
     if (d < bestD) {
       bestD = d;
@@ -3533,21 +3558,25 @@ function cancelThrow(e) {
     st.obj.y = Math.round(e.y + e.radius * 0.6);
     st.obj.z = 0;
     st.obj.airborne = false;
+    st.obj.heldBehind = false;
     st.obj.moved = true;
     placeObstacleFor(st.obj, st.kind);
   }
   e.throwState = null;
+  e.throwPose = null;
 }
 
 // true — в этом кадре громила занят броском (подходит к предмету или замахивается)
 function updateBruteThrow(e, distToPlayer, eSpeed) {
   if (e.throwCooldown > 0) e.throwCooldown--;
+  if (e.throwPoseTimer > 0 && --e.throwPoseTimer === 0) e.throwPose = null;
   const st = e.throwState;
   if (!st) {
-    if (e.throwCooldown > 0 || distToPlayer < THROW_RANGE_MIN || distToPlayer > THROW_RANGE_MAX) return false;
-    const o = findThrowable(e);
+    if (e.throwCooldown > 0 || distToPlayer < THROW_CLOSE_MIN || distToPlayer > THROW_RANGE_MAX) return false;
+    const far = distToPlayer >= THROW_RANGE_MIN;
+    const o = findThrowable(e, far ? THROW_SEEK_RADIUS : e.radius + THROW_CLOSE_REACH);
     if (!o) {
-      e.throwCooldown = 90;
+      if (far) e.throwCooldown = 90;
       return false;
     }
     o.claimedBy = e;
@@ -3557,13 +3586,16 @@ function updateBruteThrow(e, distToPlayer, eSpeed) {
   st.t++;
   const o = st.obj;
   if (st.phase === 'seek') {
-    if (o.airborne || st.t > 200 || distToPlayer < 110) {
+    // Дотянуться — по размеру препятствия предмета: к машине сбоку иначе было не подойти
+    const ob = o.obstacle;
+    const reach = e.radius + (ob ? Math.max(ob.rx, ob.ry) : THROWABLE[st.kind].radius * 0.5) + 12;
+    const d = Math.hypot(o.x - e.x, o.y - e.y);
+    // Василий подошёл, пока громила шёл за предметом, — бросает затею (если предмет не под рукой)
+    if (o.airborne || st.t > 200 || (d > reach && distToPlayer < 110) || distToPlayer < THROW_CLOSE_MIN) {
       cancelThrow(e);
       e.throwCooldown = 120;
       return false;
     }
-    const reach = e.radius + THROWABLE[st.kind].radius * 0.45 + 18;
-    const d = Math.hypot(o.x - e.x, o.y - e.y);
     if (d > reach) {
       const a = Math.atan2(o.y - e.y, o.x - e.x);
       e.angle = turnToward(e.angle, a, BRUTE_TURN_RATE * 2);
@@ -3576,19 +3608,38 @@ function updateBruteThrow(e, distToPlayer, eSpeed) {
     o.z = 0;
     st.phase = 'lift';
     st.t = 0;
+    st.ox = o.x;
+    st.oy = o.y;
     SoundFX.reload();
     return true;
   }
-  // Замах: предмет над головой, громила доворачивается к Василию
-  const k = Math.min(1, st.t / THROW_LIFT_FRAMES);
-  o.x = e.x;
-  o.y = e.y + 2;
-  o.z = 40 + 75 * k;
+  // Подъём: подхватывает предмет у груди и шагами поднимает над головой, доворачиваясь к Василию.
+  // Предмет всё время в кулаках текущей позы
   e.angle = turnToward(e.angle, Math.atan2(player.y - e.y, player.x - e.x), BRUTE_TURN_RATE);
+  const step = st.t < THROW_GRAB_FRAMES ? 0
+    : Math.min(THROW_HOLD_STEPS, 1 + Math.floor((st.t - THROW_GRAB_FRAMES) / THROW_LIFT_STEP));
+  e.throwPose = 'lift' + step;
+  const hold = throwHoldPos(e, o, st.kind, step);
+  if (st.t < THROW_GRAB_FRAMES) {
+    // Подхват: предмет идёт с земли в кулаки, а не телепортируется
+    const g = 1 - Math.pow(1 - (st.t + 1) / THROW_GRAB_FRAMES, 2);
+    o.x = st.ox + (hold.x - st.ox) * g;
+    o.y = st.oy + (hold.y - st.oy) * g;
+    o.z = hold.z * g;
+  } else {
+    o.x = hold.x;
+    o.y = hold.y;
+    o.z = hold.z;
+  }
+  // Громила спиной к камере держит предмет перед собой — его закрывает фигура
+  o.heldBehind = step <= 1 && Math.sin(e.angle) < -0.3;
   if (st.t >= THROW_LIFT_FRAMES) {
+    o.heldBehind = false;
     launchThrowable(e, o, st.kind);
     e.throwState = null;
-    e.throwCooldown = THROW_COOLDOWN + Math.floor(Math.random() * 180);
+    e.throwPose = 'throw';
+    e.throwPoseTimer = 14;
+    e.throwCooldown = THROW_COOLDOWN + Math.floor(Math.random() * 120);
   }
   return true;
 }
@@ -3709,32 +3760,42 @@ function drawThrowTargets(ctx) {
   }
 }
 
-// Поднятые и летящие предметы — поверх фигур, с тенью на земле
+// Поднятые и летящие предметы — поверх фигур, с тенью на земле. Кроме тех, что громила держит
+// перед собой, стоя спиной к камере: их рисует drawHeldBehind до его фигуры
 function drawAirborneProps(ctx) {
   const env = window.environmentRenderer;
   if (!env) return;
   const draw = (o, isBin) => {
-    if (!o.airborne) return;
-    const z = o.z || 0;
-    ctx.save();
-    ctx.globalAlpha = Math.max(0.15, 0.4 - z / 600);
-    ctx.fillStyle = '#000';
-    const w = isBin ? 14 : (o.type === 'car' ? 62 : 26);
-    ctx.beginPath();
-    ctx.ellipse(o.x, o.y + 8, w * (1 - Math.min(0.5, z / 400)), w * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    ctx.save();
-    ctx.translate(o.x, o.y - z);
-    ctx.rotate(o.tilt || 0);
-    ctx.translate(-o.x, -o.y);
-    if (isBin) env.drawBin(ctx, o);
-    else env.drawContainer(ctx, o);
-    ctx.restore();
+    if (o.airborne && !o.heldBehind) drawAirborneProp(ctx, o, isBin);
   };
   for (let i = 0; i < containers.length; i++) draw(containers[i], false);
   env.courtyardBins.forEach(b => draw(b, true));
   env.staticSidewalkBins.forEach(b => draw(b, true));
+}
+
+function drawHeldBehind(ctx, e) {
+  const o = e.throwState && e.throwState.obj;
+  if (o && o.heldBehind && window.environmentRenderer) drawAirborneProp(ctx, o, !containers.includes(o));
+}
+
+function drawAirborneProp(ctx, o, isBin) {
+  const env = window.environmentRenderer;
+  const z = o.z || 0;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0.15, 0.4 - z / 600);
+  ctx.fillStyle = '#000';
+  const w = isBin ? 14 : (o.type === 'car' ? 62 : 26);
+  ctx.beginPath();
+  ctx.ellipse(o.x, o.y + 8, w * (1 - Math.min(0.5, z / 400)), w * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  ctx.save();
+  ctx.translate(o.x, o.y - z);
+  ctx.rotate(o.tilt || 0);
+  ctx.translate(-o.x, -o.y);
+  if (isBin) env.drawBin(ctx, o);
+  else env.drawContainer(ctx, o);
+  ctx.restore();
 }
 
 // Размеры — по нижней части спрайтов (крыша машины и крона дерева рисуются выше и не мешают ходить за ними)
@@ -5053,6 +5114,7 @@ function update() {
       }
     } else {
       if (e.throwState) cancelThrow(e);
+      e.throwPose = null;
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -5489,6 +5551,7 @@ function render() {
       ctx.restore();
     }
 
+    if (e.type === 'brute') drawHeldBehind(ctx, e);
     if (window.threeEnemies && window.threeEnemies.draw(ctx, e)) {
       continue;
     }
