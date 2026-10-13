@@ -3105,16 +3105,16 @@ function buildingCollisionRect(b) {
   return { x: b.x - o.side, y: b.y - o.top, w: b.w + o.side * 2, h: b.h + o.top };
 }
 
-// Здания (с крышей): блокируют и персонажей, и пули
+// Здания (с крышей): блокируют и персонажей, и пули. Возвращает прямоугольник здания или null
 function checkBuildingCollision(x, y, radius) {
   for (let i = 0; i < buildings.length; i++) {
     const r = buildings[i].col || buildings[i];
     if (x + radius > r.x && x - radius < r.x + r.w &&
         y + radius > r.y && y - radius < r.y + r.h) {
-      return true;
+      return r;
     }
   }
-  return false;
+  return null;
 }
 
 // --- Препятствия для ходьбы: машины, баки, ящики, ларёк, деревья, фонари, скамейки, урны, кусты ---
@@ -3152,8 +3152,10 @@ function obstacleHits(o, x, y, r) {
   return (dx * dx) / (ax * ax) + (dy * dy) / (ay * ay) < 1;
 }
 
+// Возвращает то, во что упёрлись (прямоугольник здания {x, y, w, h} или препятствие), либо null
 function checkWalkCollision(x, y, radius) {
-  if (checkBuildingCollision(x, y, radius)) return true;
+  const b = checkBuildingCollision(x, y, radius);
+  if (b) return b;
   // С мелкими препятствиями сталкиваются ступни, а не плечи: с полным радиусом урна или столб
   // посреди тротуара перекрывали его целиком, и мимо них нельзя было пройти
   const feet = radius * 0.5;
@@ -3162,11 +3164,91 @@ function checkWalkCollision(x, y, radius) {
       const cell = obstacleGrid.get(cx * 4096 + cy);
       if (!cell) continue;
       for (let i = 0; i < cell.length; i++) {
-        if (obstacleHits(cell[i], x, y, feet)) return true;
+        if (obstacleHits(cell[i], x, y, feet)) return cell[i];
       }
     }
   }
-  return false;
+  return null;
+}
+
+// Нормаль от препятствия к точке (x, y), по которой персонаж скользит вдоль его края
+const SLIDE_CORNER = 12;
+function walkBlockerNormal(shape, x, y, radius) {
+  let nx, ny;
+  if (shape.w !== undefined || shape.rect) {
+    const pad = shape.w !== undefined ? radius : radius * 0.5;
+    const x1 = (shape.w !== undefined ? shape.x : shape.x1) - pad;
+    const y1 = (shape.w !== undefined ? shape.y : shape.y1) - pad;
+    const x2 = (shape.w !== undefined ? shape.x + shape.w : shape.x2) + pad;
+    const y2 = (shape.w !== undefined ? shape.y + shape.h : shape.y2) + pad;
+    // Углы считаем скруглёнными: у самого угла нормаль косая, и персонаж соскальзывает за угол
+    const k = Math.min(SLIDE_CORNER, (x2 - x1) / 2, (y2 - y1) / 2);
+    nx = x - Math.max(x1 + k, Math.min(x2 - k, x));
+    ny = y - Math.max(y1 + k, Math.min(y2 - k, y));
+  } else {
+    const feet = radius * 0.5;
+    const ax = shape.rx + feet, ay = shape.ry + feet;
+    let dx = x - shape.x, dy = y - shape.y;
+    const c = shape.rot ? Math.cos(shape.rot) : 1, s = shape.rot ? Math.sin(shape.rot) : 0;
+    const lx = dx * c + dy * s, ly = -dx * s + dy * c;
+    // Градиент эллипса в его осях, повёрнутый обратно в мир
+    const gx = lx / (ax * ax), gy = ly / (ay * ay);
+    nx = gx * c - gy * s;
+    ny = gx * s + gy * c;
+  }
+  const len = Math.hypot(nx, ny);
+  return len > 1e-6 ? { x: nx / len, y: ny / len } : null;
+}
+
+// Шаг с обтеканием препятствий. Раньше X и Y проверялись по отдельности: у круглых препятствий
+// (машины, деревья, урны) при шаге наискосок упирались обе оси разом, и обойти препятствие
+// можно было, только отойдя назад. Теперь упёршийся шаг проецируется на касательную к краю.
+// steer: для врагов — при упоре почти в лоб всё равно обходят и, выбрав сторону, держатся её
+// до конца обхода (иначе у середины борта качаются туда-обратно). Игрок в лоб просто стоит
+// и сам выбирает, куда повернуть
+const SLIDE_COMMIT_FRAMES = 45;
+function slideMove(ent, dx, dy, radius, steer = false) {
+  const tx = ent.x + dx, ty = ent.y + dy;
+  const hit = checkWalkCollision(tx, ty, radius);
+  if (!hit) {
+    ent.x = tx;
+    ent.y = ty;
+    if (ent.slideCommit > 0) ent.slideCommit--;
+    return;
+  }
+  const n = walkBlockerNormal(hit, ent.x, ent.y, radius);
+  if (n) {
+    const vn = dx * n.x + dy * n.y;
+    if (vn < 0) {
+      let sdx = dx - n.x * vn, sdy = dy - n.y * vn;
+      let forced = false;
+      if (steer) {
+        const step = Math.hypot(dx, dy);
+        const along = sdx * -n.y + sdy * n.x;
+        const committed = ent.slideCommit > 0;
+        if (Math.abs(along) < step * 0.5 || (committed && Math.sign(along) !== ent.slideSide)) {
+          const side = committed ? ent.slideSide
+            : (Math.abs(along) > step * 0.05 ? Math.sign(along) : (ent.slideSide || 1));
+          ent.slideSide = side;
+          ent.slideCommit = SLIDE_COMMIT_FRAMES;
+          sdx = -n.y * side * step * 0.6;
+          sdy = n.x * side * step * 0.6;
+          forced = true;
+        }
+      }
+      const sx = ent.x + sdx, sy = ent.y + sdy;
+      if (Math.abs(sdx) + Math.abs(sdy) > 0.05 && !checkWalkCollision(sx, sy, radius)) {
+        ent.x = sx;
+        ent.y = sy;
+        return;
+      }
+      // С этой стороны тупик — в следующий раз обходим с другой
+      if (forced) ent.slideSide = -ent.slideSide;
+    }
+  }
+  // Касательная упёрлась во второе препятствие — по осям, как раньше
+  if (!checkWalkCollision(tx, ent.y, radius)) ent.x = tx;
+  if (!checkWalkCollision(ent.x, ty, radius)) ent.y = ty;
 }
 
 // Размеры — по нижней части спрайтов (крыша машины и крона дерева рисуются выше и не мешают ходить за ними)
@@ -3690,10 +3772,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
 
   e.isMoving = dist > 95;
   if (e.isMoving) {
-    const nx = e.x + (dx / dist) * speed;
-    const ny = e.y + (dy / dist) * speed;
-    if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
-    if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
+    slideMove(e, (dx / dist) * speed, (dy / dist) * speed, e.radius, true);
   }
 
   // Тело босса непроходимое: выталкиваем Василия, а не наносим контактный урон
@@ -4009,11 +4088,13 @@ function update() {
   // Страховка: если Василия всё же вытолкнуло внутрь препятствия, даём из него выйти, а не запираем
   const playerStuck = checkWalkCollision(player.x, player.y, player.radius);
   if (player.isRolling) {
-    const nextX = player.x + player.rollDx * 9;
-    const nextY = player.y + player.rollDy * 9;
-    if (playerStuck || !checkWalkCollision(nextX, player.y, player.radius)) player.x = nextX;
-    if (playerStuck || !checkWalkCollision(player.x, nextY, player.radius)) player.y = nextY;
-    
+    if (playerStuck) {
+      player.x += player.rollDx * 9;
+      player.y += player.rollDy * 9;
+    } else {
+      slideMove(player, player.rollDx * 9, player.rollDy * 9, player.radius);
+    }
+
     player.rollDuration--;
     createParticles(player.x, player.y, '#64748b', 1);
     if (player.rollDuration <= 0) player.isRolling = false;
@@ -4036,11 +4117,12 @@ function update() {
 
     if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
     
-    const nextX = player.x + dx * currentSpeed;
-    const nextY = player.y + dy * currentSpeed;
-
-    if (playerStuck || !checkWalkCollision(nextX, player.y, player.radius)) player.x = nextX;
-    if (playerStuck || !checkWalkCollision(player.x, nextY, player.radius)) player.y = nextY;
+    if (playerStuck) {
+      player.x += dx * currentSpeed;
+      player.y += dy * currentSpeed;
+    } else if (dx !== 0 || dy !== 0) {
+      slideMove(player, dx * currentSpeed, dy * currentSpeed, player.radius);
+    }
   }
 
   player.x = Math.max(player.radius, Math.min(WORLD_WIDTH - player.radius, player.x));
@@ -4271,10 +4353,7 @@ function update() {
       const angle = Math.atan2(player.y - e.y, player.x - e.x);
       e.angle = angle;
       if (e.type === 'grunt' || e.type === 'brute') {
-        const nx = e.x + Math.cos(angle) * eSpeed;
-        const ny = e.y + Math.sin(angle) * eSpeed;
-        if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
-        if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
+        slideMove(e, Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed, e.radius, true);
 
         if (distToPlayer < player.radius + e.radius && !player.isRolling) {
           // Усиленный контактный урон по тирам зоны!
@@ -4287,12 +4366,7 @@ function update() {
       } else if (e.type === 'sniper') {
         // Держит дистанцию 200–320 px: подходит или отступает, но, как и все, не сквозь стены
         const step = distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0);
-        if (step !== 0) {
-          const nx = e.x + Math.cos(angle) * step;
-          const ny = e.y + Math.sin(angle) * step;
-          if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
-          if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
-        }
+        if (step !== 0) slideMove(e, Math.cos(angle) * step, Math.sin(angle) * step, e.radius, true);
         if (distToPlayer > 320) {
           e.angle = angle;
         } else if (distToPlayer < 200) {
