@@ -1298,10 +1298,12 @@ function generateWorld() {
     const cRadius = type === 'car' ? 48 : (type === 'trash' ? 26 : 22);
     const pad = type === 'car' ? 56 : 38;
 
-    const insideBuilding = buildings.some(b =>
-      cx >= b.x - pad && cx <= b.x + b.w + pad &&
-      cy >= b.y - pad && cy <= b.y + b.h + pad
-    );
+    // Дом рисуется выше своего пятна (крыша уходит назад) — тайник за ним оказался бы на стене
+    const insideBuilding = buildings.some(b => {
+      const roof = BUILDING_SPRITE_TOP[b.type] || 0;
+      return cx >= b.x - pad && cx <= b.x + b.w + pad &&
+        cy >= b.y - pad - roof && cy <= b.y + b.h + pad;
+    });
     if (insideBuilding) return false;
 
     const tooClose = containers.some(existing =>
@@ -1325,7 +1327,9 @@ function generateWorld() {
   };
 
   // Сетка 16 городских кварталов между дорогами (MAP.BLOCKS). Расстояния внутри квартала — ×MAP.SPACE
-  // к прежней карте, дома — ×MAP.HOUSE; гаражи, заборы, трубы и машины — прежнего размера
+  // к прежней карте, дома — ×MAP.HOUSE; гаражи, заборы, трубы и машины — прежнего размера.
+  // Между силуэтами соседних домов — проход не уже ~90 px: щель, в которую видно землю, но не пройти,
+  // хуже глухой стены. Дома прижаты к дорогам квартала — иначе в квартал два крупных дома не встают
   const colRanges = MAP.BLOCKS;
   const rowRanges = MAP.BLOCKS;
   const S = v => Math.round(v * MAP.SPACE);
@@ -1364,8 +1368,8 @@ function generateWorld() {
 
       if (dist.id === 'courtyards') {
         // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из 5-этажных Хрущёвок и 9-этажных Брежневок
-        const b1 = tryAddBuilding(x1 + S(60), y1 + S(70), H(320), H(160), 'panel', { subType: 'khrushchevka' });
-        const b2 = tryAddBuilding(x2 - S(70) - H(220), y2 - S(60) - H(260), H(220), H(260), 'panel', { subType: 'brezhnevka' });
+        const b1 = tryAddBuilding(x1 + S(60), y1 + S(33), H(320), H(160), 'panel', { subType: 'khrushchevka' });
+        const b2 = tryAddBuilding(x2 - S(70) - H(220), y2 - S(25) - H(260), H(220), H(260), 'panel', { subType: 'brezhnevka' });
         const b3 = tryAddBuilding(x1 + S(90), y2 - S(80) - H(160), H(320), H(160), 'panel', { subType: 'khrushchevka' });
         [b1, b2, b3].forEach(b => { if (b) blockBuildings.push(b); });
 
@@ -1422,8 +1426,8 @@ function generateWorld() {
 
       } else if (dist.id === 'heating') {
         // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — Кирпичные Котельные ТЭЦ, Брежневки и длинные линии труб теплотрассы
-        const p1 = tryAddBuilding(x1 + S(45), y1 + S(90), H(220), H(260), 'panel', { subType: 'brezhnevka' });
-        const p2 = tryAddBuilding(x1 + S(45), y2 - S(70) - H(160), H(320), H(160), 'boiler_house');
+        const p1 = tryAddBuilding(x1 + S(45), y1 + S(36), H(220), H(260), 'panel', { subType: 'brezhnevka' });
+        const p2 = tryAddBuilding(x1 + S(45), y2 - S(16) - H(160), H(320), H(160), 'boiler_house');
         // Гараж — справа от брежневки (под ней теперь котельная)
         const g1 = p1 ? tryAddBuilding(p1.x + p1.w + 60, p1.y + S(40), 140, 100, 'garage') : null;
 
@@ -1454,7 +1458,7 @@ function generateWorld() {
       } else if (dist.id === 'cordon') {
         // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — Командный Бункер/Казарма с РЛС, блокпосты из плит ПО-2, санитарные УАЗы, склады
         const b1 = tryAddBuilding(x1 + S(70), y1 + S(90), H(320), H(160), 'military_hq');
-        const g1 = tryAddBuilding(x1 + S(120), y2 - S(220), 140, 100, 'garage');
+        const g1 = tryAddBuilding(x1 + S(120), y2 - S(165), 140, 100, 'garage');
         const g2 = tryAddBuilding(x2 - S(360), y1 + S(120), 140, 100, 'garage');
 
         // Длинные защитные рубежи из бетонных заборов ПО-2
@@ -1466,7 +1470,8 @@ function generateWorld() {
         placeContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
         placeContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
         placeContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
-        placeContainer(x1 + S(220), bcy + S(60), 'car', 'uaz', 0);
+        // УАЗ — на площадке правее гаража: у стены штаба он вставал в проход между штабом и гаражом
+        placeContainer(x1 + S(380), y2 - S(150), 'car', 'uaz', 0);
         placeContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
         placeContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
 
@@ -3506,6 +3511,9 @@ const BUILDING_ROOF_OVERHANG = {
   garage: { top: 9, side: 0 },
   fence_wall: { top: 23, side: 0 }
 };
+
+// Насколько модель дома поднимается над его пятном (замерено по силуэтам: до 94 px у брежневки)
+const BUILDING_SPRITE_TOP = { panel: 100, boiler_house: 100, military_hq: 100, garage: 16 };
 
 function buildingCollisionRect(b) {
   const o = BUILDING_ROOF_OVERHANG[houseKind(b)] || { top: 0, side: 0 };

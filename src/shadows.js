@@ -88,6 +88,7 @@ class ShadowCaster {
   // Начать слой теней кадра: тот же размер и та же камера, что у основного холста
   begin(ctx) {
     const c = ctx.canvas;
+    if (!c.width || !c.height) return; // свёрнутое окно: холст нулевой, рисовать некуда
     if (this.layer.width !== c.width || this.layer.height !== c.height) {
       this.layer.width = c.width;
       this.layer.height = c.height;
