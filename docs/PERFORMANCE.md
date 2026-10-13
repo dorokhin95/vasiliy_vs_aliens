@@ -101,11 +101,8 @@ blender -b --factory-startup --python tools/optimize_models_blender.py -- --only
 ## 5. Blender MCP на новом компьютере
 
 1. Blender 4.2 и аддон **MCP for Blender** (`addon.py` из https://github.com/ahujasid/blender-mcp; у нас стоит версия 1.8) — установить и включить в *Preferences → Add-ons*.
-2. Установить `uv`: `pip install uv`.
-3. В папке проекта зарегистрировать сервер для Claude Code (анонимная статистика выключена):
-   ```bash
-   claude mcp add blender -e DISABLE_TELEMETRY=true -- uvx blender-mcp
-   ```
+2. Установить `uv`: `pip install --user uv` и добавить папку `%APPDATA%\Python\Python312\Scripts` в PATH пользователя (проверка: `uvx --version`).
+3. Сервер уже прописан в `.mcp.json` в корне репозитория (`uvx blender-mcp`, анонимная статистика выключена) — регистрировать вручную не нужно. При первом запуске Claude Code в папке проекта одобрите сервер `blender`.
 4. В Blender: **N → вкладка BlenderMCP →** включить *Hyper3D Rodin* → **Connect to MCP server** (порт 9876).
 5. Открыть новую сессию Claude Code в папке проекта — инструменты Blender появятся в ней.
 
