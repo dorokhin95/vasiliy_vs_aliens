@@ -56,7 +56,7 @@ class ThreePropsManager {
 
     this.modelHeights = {};
 
-    // Cache: Map<`${propKey}_${dirIdx}`, HTMLCanvasElement>
+    // Cache: Map<`${propKey}_${dirIdx}`, HTMLCanvasElement → HTMLImageElement once decoded (see promoteFrameToImage)>
     this.cache = new Map();
 
     // Offscreen WebGL canvas (high enough resolution for large vehicles & buildings)
@@ -282,6 +282,7 @@ class ThreePropsManager {
     cctx.drawImage(this.canvas, 0, 0);
 
     this.cache.set(cacheKey, cachedCanvas);
+    promoteFrameToImage(this.cache, cacheKey, cachedCanvas);
     return cachedCanvas;
   }
 

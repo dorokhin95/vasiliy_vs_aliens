@@ -29,6 +29,24 @@ function runIdleTasks(tasks) {
   if (tasks.length > 0) requestIdle(step);
 }
 
+/**
+ * Replaces a cached frame <canvas> with a decoded <img> once it is ready (also used by three_props.js).
+ * Chrome "hibernates" 2D canvases when the tab gets hidden (minimised, or the window fully covered
+ * by another app); canvases that are only drawn *from* never wake up, and each drawImage from them
+ * becomes ~10x slower until reload. Decoded images are not affected.
+ */
+function promoteFrameToImage(cache, key, canvas) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const img = new Image();
+    // The object URL is kept alive on purpose: the browser may drop decoded pixels and re-read src
+    img.src = URL.createObjectURL(blob);
+    img.decode().then(() => {
+      if (cache.get(key) === canvas) cache.set(key, img);
+    }).catch(() => {});
+  });
+}
+
 class ThreeEnemyManager {
   constructor() {
     this.models = {
@@ -55,7 +73,7 @@ class ThreeEnemyManager {
       brute: false
     };
 
-    // Frame cache: Map<key, HTMLCanvasElement>
+    // Frame cache: Map<key, HTMLCanvasElement → HTMLImageElement once decoded (see promoteFrameToImage)>
     this.cache = new Map();
 
     // Offscreen Three.js setup
@@ -269,6 +287,7 @@ class ThreeEnemyManager {
     cctx.drawImage(this.canvas, 0, 0);
 
     this.cache.set(key, cachedCanvas);
+    promoteFrameToImage(this.cache, key, cachedCanvas);
     return cachedCanvas;
   }
 
