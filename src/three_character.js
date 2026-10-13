@@ -87,6 +87,7 @@ class ThreeCharacterManager {
     this.lastY = null;
     this.lastTime = performance.now();
     this.lastRenderState = '';
+    this.idleFrameCounter = 0;
 
     // Weapon & Modular Arm Objects loaded from glTF
     this.batObj = null;
@@ -110,7 +111,7 @@ class ThreeCharacterManager {
     }
 
     const loader = new THREE.GLTFLoader();
-    const modelUrl = 'assets/models/vasiliy.glb?v=1028';
+    const modelUrl = 'assets/models/vasiliy.glb?v=1030';
     loader.load(
       modelUrl,
       (gltf) => {
@@ -407,7 +408,15 @@ class ThreeCharacterManager {
       this.rollPivot.rotation.y = 0;
     }
 
-    // Render to offscreen canvas
+    // Render to offscreen canvas. Standing still and aiming at the same spot only changes the subtle
+    // idle breathing, so re-rendering every 3rd frame (20 fps) is enough; the canvas keeps the last
+    // image (preserveDrawingBuffer). Moving, rolling, recoil, swings and the drill render every frame.
+    const isIdle = !player.isMoving && !player.isRolling && this.recoil <= 0 && this.swingTimer <= 0 && currentWeapon !== 'drill';
+    const stateKey = `${currentWeapon}|${Math.round(player.angle * 180)}`;
+    if (isIdle && stateKey === this.lastRenderState && (++this.idleFrameCounter % 3) !== 0) {
+      return;
+    }
+    this.lastRenderState = isIdle ? stateKey : '';
     this.renderer.render(this.scene, this.camera);
   }
 

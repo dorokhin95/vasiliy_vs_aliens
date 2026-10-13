@@ -144,7 +144,7 @@ class ThreeEnemyManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=1022',
+        cfg.file + '?v=1030',
         (gltf) => {
           const model = gltf.scene;
           this.models[cfg.type] = model;

@@ -172,7 +172,7 @@ class ThreePropsManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=1024',
+        cfg.file + '?v=1030',
         (gltf) => {
           const model = gltf.scene;
           const cScale = cfg.colorScale || 0.90;
