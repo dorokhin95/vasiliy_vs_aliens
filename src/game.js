@@ -860,6 +860,8 @@ const LANGS = {
     say_shield_bullets: "Кажется, обычные пули этот щит не возьмут…",
     say_shield_melee: "Кажется, железкой этот щит не пробить…",
     say_plasma_armor: "Кажется, плазма плохо пробивает эту броню…",
+    say_boss_invuln: "Его сейчас ничем не взять — переждать бы…",
+    boss_invuln: "НЕУЯЗВИМ — берсерк",
     boss_shield_down: "⚡ ЩИТ ПРОБИТ!",
     status_daze: "ОГЛУШЁН: −40% скорости",
     prompt_breach: "[E] Проломить треснувший забор",
@@ -931,6 +933,8 @@ const LANGS = {
     say_shield_bullets: "Looks like plain bullets won't get through this shield…",
     say_shield_melee: "Looks like I can't smash through this shield…",
     say_plasma_armor: "Looks like plasma barely scratches this armor…",
+    say_boss_invuln: "Nothing gets through to him right now — better wait it out…",
+    boss_invuln: "INVULNERABLE — berserk",
     boss_shield_down: "⚡ SHIELD DOWN!",
     status_daze: "DAZED: −40% speed",
     prompt_breach: "[E] Smash the cracked fence",
@@ -1330,6 +1334,20 @@ function generateWorld() {
   // Враги появляются после того, как расставлены все препятствия, иначе жаба может родиться внутри машины
   const pendingSpawns = [];
 
+  // Тайник у желаемой точки, а если там дом или другой тайник — в ближайшем свободном месте (по кольцам
+  // до 300 px): с крупными домами прежние точки часто оказывались внутри стен
+  const placeContainer = (x, y, type, subType = null, dirIdx = undefined) => {
+    if (tryAddContainer(x, y, type, subType, dirIdx)) return true;
+    for (let r = 60; r <= 300; r += 60) {
+      const n = Math.max(6, Math.round(r / 25));
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        if (tryAddContainer(x + Math.cos(a) * r, y + Math.sin(a) * r, type, subType, dirIdx)) return true;
+      }
+    }
+    return false;
+  };
+
   // 0. Стартовые мусорные баки у площади Михалыча, по краям главного проспекта (Tier 0 -> Tier 1 переход)
   const C = MAP.CENTER, main = MAP.MAIN;
   tryAddContainer(C - 340, main.pos - 55, 'trash', null, 0);
@@ -1361,10 +1379,13 @@ function generateWorld() {
 
         // Контейнеры: мусорные баки ЖЭК-4 рядом со стенами панелек + редкие Жигули у дороги
         blockBuildings.forEach(b => {
-          tryAddContainer(b.x - 48, b.y + b.h - 24, 'trash', null, 0);
-          tryAddContainer(b.x + H(80), b.y + b.h + 48, 'trash', null, 1);
+          placeContainer(b.x - 48, b.y + b.h - 24, 'trash', null, 0);
+          placeContainer(b.x + H(80), b.y + b.h + 48, 'trash', null, 1);
         });
-        tryAddContainer(bcx, y1 + 25, 'car', 'zhiguli', 0);
+        placeContainer(bcx, y1 + 25, 'car', 'zhiguli', 0);
+        // Домов во дворе теперь два (крупные) — ещё пара баков посреди двора
+        placeContainer(bcx - S(60), bcy + S(40), 'trash', null, 0);
+        placeContainer(x1 + S(200), y2 - S(120), 'trash', null, 1);
 
         // Враги: ТОЛЬКО слабые Жабы-Пехотинцы (65 HP), никаких Громил и Снайперов у базы!
         for (let i = 0; i < 3; i++) {
@@ -1387,12 +1408,12 @@ function generateWorld() {
         if (g6) tryAddBuilding(g6.x + g6.w + 4, g6.y + g6.h - 32, 220, 30, 'fence_wall', { segments: 2 });
 
         // Контейнеры: Жигули и УАЗы перед гаражами + мусорные баки + армейский ящик с инструментами в глубине
-        if (g1) tryAddContainer(g1.x + 70, g1.y + g1.h + 72, 'car', 'zhiguli', 0);
-        if (g3) tryAddContainer(g3.x + 70, g3.y + g3.h + 72, 'car', 'uaz', 8);
-        tryAddContainer(x2 - S(90), bcy - S(120), 'car', 'zhiguli', 1);
-        tryAddContainer(x1 + S(420), y1 + S(230), 'box', null, 0);
-        tryAddContainer(x1 + S(60), y2 - S(50), 'trash', null, 0);
-        tryAddContainer(x2 - S(110), y2 - S(110), 'box', null, 1);
+        if (g1) placeContainer(g1.x + 70, g1.y + g1.h + 72, 'car', 'zhiguli', 0);
+        if (g3) placeContainer(g3.x + 70, g3.y + g3.h + 72, 'car', 'uaz', 8);
+        placeContainer(x2 - S(90), bcy - S(120), 'car', 'zhiguli', 1);
+        placeContainer(x1 + S(420), y1 + S(230), 'box', null, 0);
+        placeContainer(x1 + S(60), y2 - S(50), 'trash', null, 0);
+        placeContainer(x2 - S(110), y2 - S(110), 'box', null, 1);
 
         // Враги: Пехотинцы + Снайперы в засадах между гаражами
         for (let i = 0; i < 4; i++) {
@@ -1402,8 +1423,9 @@ function generateWorld() {
       } else if (dist.id === 'heating') {
         // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — Кирпичные Котельные ТЭЦ, Брежневки и длинные линии труб теплотрассы
         const p1 = tryAddBuilding(x1 + S(45), y1 + S(90), H(220), H(260), 'panel', { subType: 'brezhnevka' });
-        const g1 = tryAddBuilding(x1 + S(55), y1 + S(90) + H(260) + S(60), 140, 100, 'garage');
         const p2 = tryAddBuilding(x1 + S(45), y2 - S(70) - H(160), H(320), H(160), 'boiler_house');
+        // Гараж — справа от брежневки (под ней теперь котельная)
+        const g1 = p1 ? tryAddBuilding(p1.x + p1.w + 60, p1.y + S(40), 140, 100, 'garage') : null;
 
         // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен Котельной и домов
         if (p1) {
@@ -1417,12 +1439,12 @@ function generateWorld() {
         }
 
         // Контейнеры: тайники с водкой и тушенкой у тепловых камер + машины
-        tryAddContainer(x1 + S(330), y1 + S(290), 'trash', null, 0);
-        tryAddContainer(x1 + S(420), y1 + S(380), 'box', null, 0);
-        tryAddContainer(x1 + S(260), y1 + S(575), 'trash', null, 1);
-        tryAddContainer(x1 + S(480), y2 - S(280), 'box', null, 0);
-        tryAddContainer(x1 + S(160), y1 + 38, 'car', 'uaz', 0);
-        tryAddContainer(x2 - S(110), bcy + S(40), 'car', 'zhiguli', 8);
+        placeContainer(x1 + S(330), y1 + S(290), 'trash', null, 0);
+        placeContainer(x1 + S(420), y1 + S(380), 'box', null, 0);
+        placeContainer(x1 + S(260), y1 + S(575), 'trash', null, 1);
+        placeContainer(x1 + S(480), y2 - S(280), 'box', null, 0);
+        placeContainer(x1 + S(160), y1 + 38, 'car', 'uaz', 0);
+        placeContainer(x2 - S(110), bcy + S(40), 'car', 'zhiguli', 8);
 
         // Враги: Снайперы и Штурмовики вдоль труб
         for (let i = 0; i < 4; i++) {
@@ -1441,12 +1463,12 @@ function generateWorld() {
         if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
 
         // Контейнеры: преобладают Армейские ящики (55%) и УАЗ-Буханки (35%)
-        tryAddContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
-        tryAddContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
-        tryAddContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
-        tryAddContainer(x1 + S(220), bcy + S(60), 'car', 'uaz', 0);
-        tryAddContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
-        tryAddContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
+        placeContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
+        placeContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
+        placeContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
+        placeContainer(x1 + S(220), bcy + S(60), 'car', 'uaz', 0);
+        placeContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
+        placeContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
 
         // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
         for (let i = 0; i < 5; i++) {
@@ -1465,17 +1487,17 @@ function generateWorld() {
         // СВ угол — логово босса: вместо центрального склада открытая арена, ящики-трофеи по краям
         const isBossLair = (cIdx === 3 && rIdx === 0);
         if (isBossLair) {
-          tryAddContainer(x2 - S(40), y1 + S(40), 'box', null, 1);
-          tryAddContainer(x2 - S(40), y2 - S(260), 'box', null, 2);
+          placeContainer(x2 - S(40), y1 + S(40), 'box', null, 1);
+          placeContainer(x2 - S(40), y2 - S(260), 'box', null, 2);
         } else {
           // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
-          tryAddContainer(bcx - S(65), bcy - S(45), 'box', null, 0);
-          tryAddContainer(bcx + S(55), bcy - S(40), 'box', null, 1);
-          tryAddContainer(bcx - S(50), bcy + S(55), 'box', null, 2);
-          tryAddContainer(bcx + S(65), bcy + S(60), 'box', null, 0);
-          tryAddContainer(x2 - S(140), y1 + S(140), 'car', 'uaz', 8);
+          placeContainer(bcx - S(65), bcy - S(45), 'box', null, 0);
+          placeContainer(bcx + S(55), bcy - S(40), 'box', null, 1);
+          placeContainer(bcx - S(50), bcy + S(55), 'box', null, 2);
+          placeContainer(bcx + S(65), bcy + S(60), 'box', null, 0);
+          placeContainer(x2 - S(140), y1 + S(140), 'car', 'uaz', 8);
         }
-        tryAddContainer(x1 + S(150), bcy + S(10), 'car', 'uaz', 0);
+        placeContainer(x1 + S(150), bcy + S(10), 'car', 'uaz', 0);
 
         // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы);
         // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
@@ -1905,12 +1927,12 @@ function scavengeContainer(c) {
     bottleRoll = Math.round((1 + Math.floor(Math.random() * 2)) * bMult);
     bonusDrops.push('stew');
     if (dist.id === 'cordon') {
-      // На Военном Кордоне гарантированно падают Оружейные детали!
-      bonusDrops.push('mil_parts');
+      // На Военном Кордоне — Оружейные детали (ящиков там много, поэтому не в каждом)
+      if (Math.random() < 0.55) bonusDrops.push('mil_parts');
       if (Math.random() < 0.55) bonusDrops.push('ammo_12g');
     } else if (dist.id === 'nest') {
-      // В Квако-Гнезде падают Квако-ядра и иногда Оружейные детали
-      bonusDrops.push('alien_core');
+      // В Квако-Гнезде — Квако-ядра в каждом втором ящике и иногда Оружейные детали
+      if (Math.random() < 0.5) bonusDrops.push('alien_core');
       if (Math.random() < 0.25) bonusDrops.push('mil_parts');
     } else {
       bonusDrops.push('ammo_9x18');
@@ -2638,6 +2660,12 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
 function damageBoss(e, dmg, weapon, fromX, fromY) {
   e.isAggroed = true;
   const hitAngle = Math.atan2(fromY - e.y, fromX - e.x);
+  if (e.invuln > 0) {
+    // Входит в берсерк: всё отскакивает
+    spawnDirectionalSparks(e.x + Math.cos(hitAngle) * 40, e.y - 44 + Math.sin(hitAngle) * 30, hitAngle, 1.4, 5, '#fca5a5', 3, 9, 8);
+    sayLine('say_boss_invuln');
+    return { dealt: 0, invuln: true };
+  }
   if (e.shield > 0) {
     e.shieldFlash = 8;
     shieldRipple(e, hitAngle);
@@ -2687,6 +2715,7 @@ function onBossShieldBroken(e) {
 
 // Подпись к цифре урона: «БРОНЯ», если броня съела урон, «В СПИНУ», если удар зашёл сзади
 function damageLabel(hit, base) {
+  if (hit.invuln) return currentLang === 'ru' ? 'НЕУЯЗВИМ' : 'IMMUNE';
   if (hit.shielded) return currentLang === 'ru' ? 'ЩИТ' : 'SHIELD';
   if (hit.shield) return base + ' 🛡';
   if (hit.fromBehind) return base + (currentLang === 'ru' ? ' В СПИНУ' : ' BACKSTAB');
@@ -5005,7 +5034,7 @@ function updateHUD(forceWeaponRefresh = false) {
     const shieldPct = Math.max(0, Math.round((bossRef.shield / BOSS_SHIELD_MAX) * 1000) / 10);
     setHudStyle(document.getElementById('boss-shield-bg'), 'display', shieldPct > 0 ? 'block' : 'none');
     setHudStyle(document.getElementById('boss-shield-fill'), 'width', `${shieldPct}%`);
-    const tag = bossRef.shield > 0 ? t('boss_shield_tag') : bossRef.berserk ? t('boss_berserk') : bossRef.enraged ? t('boss_enraged') : '';
+    const tag = bossRef.shield > 0 ? t('boss_shield_tag') : bossRef.invuln > 0 ? t('boss_invuln') : bossRef.berserk ? t('boss_berserk') : bossRef.enraged ? t('boss_enraged') : '';
     setHudText(document.getElementById('boss-name'), tag ? `${t('boss_name')} — ${tag}` : t('boss_name'));
   }
   const dazed = player.dazeTimer > 0;
@@ -5219,8 +5248,10 @@ const BOSS_PLASMA_VS_SKIN = 0.12;
 const BOSS_SHIELD_MAX = 1800;
 const BOSS_SHIELD_REGEN = BOSS_SHIELD_MAX / (60 * 5);
 const BOSS_REGEN = 0.0004;       // доля здоровья за кадр вне боя
-// Берсерк на последних 10%: бьёт мечом по земле — трясётся всё логово, Василия оглушает
-const BOSS_BERSERK_AT = 0.1;
+// Берсерк на последней четверти здоровья: бьёт мечом по земле — трясётся всё логово, Василия оглушает.
+// Пока замахивается в первый раз и ещё немного после, неуязвим: его не добить, пока он не начал
+const BOSS_BERSERK_AT = 0.25;
+const BOSS_BERSERK_INVULN = 60 * 4;
 const BOSS_QUAKE_RADIUS = 380;
 const BOSS_QUAKE_EVERY = 420;    // кадров между землетрясениями (~7 с)
 const BOSS_QUAKE_STUN = 60;      // 1 с без управления
@@ -5271,6 +5302,7 @@ function spawnBoss() {
     shield: BOSS_SHIELD_MAX,
     shieldFlash: 0,
     berserk: false,
+    invuln: 0,
     quakeTimer: 0,
     introShown: false
   };
@@ -5449,9 +5481,12 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   if (e.shieldRipples) e.shieldRipples = e.shieldRipples.filter(r => ++r.t < 34);
   if (e.quakeTimer > 0) e.quakeTimer--;
 
-  // Последние 10% (щит уже снят): берсерк. Бросает текущий удар и сразу бьёт мечом по земле
+  if (e.invuln > 0) e.invuln--;
+
+  // Последняя четверть (щит уже снят): берсерк. Бросает текущий удар и сразу бьёт мечом по земле
   if (!e.berserk && e.shield <= 0 && e.hp < e.maxHp * BOSS_BERSERK_AT) {
     e.berserk = true;
+    e.invuln = BOSS_BERSERK_INVULN;
     e.attack = null;
     addFloatingText(e.x - 50, e.y - 120, `💢 ${t('boss_berserk')}`, '#ef4444');
     spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 24, '#ef4444', 4, 11, 18);
@@ -6817,6 +6852,30 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
   }
 }
 
+// Кадры персонажей и лута для слоя теней (environment.drawCastShadows): их тени ложатся на землю
+// вместе с тенями домов и деревьев, до всех предметов
+function collectActorShadows(minX, maxX, minY, maxY) {
+  const list = [];
+  const pc = window.threeCharacter && window.threeCharacter.shadowSprite(player);
+  if (pc) list.push(pc);
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    if (e.x < minX || e.x > maxX || e.y < minY || e.y > maxY) continue;
+    const sp = e.type === 'boss'
+      ? window.threeBoss && window.threeBoss.shadowSprite(e)
+      : window.threeEnemies && window.threeEnemies.shadowSprite(e);
+    if (sp) list.push(sp);
+  }
+  const tp = window.threeProps;
+  for (let i = 0; tp && i < lootItems.length; i++) {
+    const l = lootItems[i];
+    if (l.x < minX || l.x > maxX || l.y < minY || l.y > maxY) continue;
+    const sp = tp.lootSprite(l);
+    if (sp) list.push({ img: sp.frame, x: sp.x, y: sp.y, w: sp.w, h: sp.h });
+  }
+  return list;
+}
+
 function render() {
   ctx.save();
   ctx.fillStyle = '#0f131a';
@@ -6845,6 +6904,7 @@ function render() {
   }
 
   if (window.environmentRenderer) {
+    window.environmentRenderer.shadowActors = collectActorShadows(viewMinX, viewMaxX, viewMinY, viewMaxY);
     window.environmentRenderer.planDeferredContainers(actors, containers, camera, canvas.width, canvas.height);
     window.environmentRenderer.draw(ctx, camera, canvas.width, canvas.height, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
   } else {

@@ -604,6 +604,12 @@ class ThreeCharacterManager {
     };
   }
 
+  // Для слоя теней (shadows.js): холст с Василием (прошлый кадр — разницы не видно) и где он на карте
+  shadowSprite(player) {
+    if (!this.isLoaded) return null;
+    return { img: this.canvas, x: player.x - 55, y: player.y - 55 - 14, w: 110, h: 110, live: true };
+  }
+
   draw(ctx, player) {
     if (!this.isLoaded) return false;
 
@@ -619,8 +625,8 @@ class ThreeCharacterManager {
 
     // Аура перегара рисуется облаком на земле до фигур (drawFumeAura в game.js)
 
-    // Мягкая тень под ногами
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    // Контактная тень под ногами (отбрасываемую кладёт слой теней, shadows.js)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
     ctx.beginPath();
     ctx.ellipse(0, 10, 24, 10, 0, 0, Math.PI * 2);
     ctx.fill();

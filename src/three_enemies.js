@@ -594,11 +594,13 @@ class ThreeEnemyManager {
   /**
    * Main draw call invoked from game.js for each enemy
    */
-  draw(ctx, e) {
+  /**
+   * Кадр жабы сейчас и где он лежит относительно её точки (e.x, e.y): { frame, ox, oy, size, anchorOffsetY }
+   * или null, пока модель грузится. Общий для отрисовки и отбрасываемой тени (shadows.js).
+   */
+  sprite(e) {
     const type = e.type || 'grunt';
-    if (!this.isLoaded[type]) {
-      return false; // Fallback to 2D while loading
-    }
+    if (!this.isLoaded[type]) return null;
 
     const dirIdx = this.dirIndex(e);
 
@@ -607,33 +609,44 @@ class ThreeEnemyManager {
     const frameIdx = Math.floor(animTimer * 1.2) % this.numFrames;
 
     const pose = type === 'brute' && e.throwPose ? e.throwPose : null;
-    const frameCanvas = this.getFrameCanvas(type, dirIdx, frameIdx, pose);
-    if (!frameCanvas) return false;
+    const frame = this.getFrameCanvas(type, dirIdx, frameIdx, pose);
+    if (!frame) return null;
 
     // Render dimensions
     let renderW = GRUNT_FRAME.w;
-    let renderH = GRUNT_FRAME.w;
     let anchorOffsetY = GRUNT_FRAME.anchor;
 
     if (type === 'sniper') {
       renderW = 82;
-      renderH = 82;
       anchorOffsetY = -10;
     } else if (type === 'brute') {
       renderW = BRUTE_FRAME.w;
-      renderH = BRUTE_FRAME.w;
       anchorOffsetY = BRUTE_FRAME.anchor;
     }
     // Кадр позы броска больше обычного (BRUTE_POSE_FRAME), фигура в нём того же размера
     const posed = pose && this.bruteFists.has(`brute_${dirIdx}_${pose}`);
-    const frameW = posed ? BRUTE_POSE_FRAME.w : renderW;
+    const size = posed ? BRUTE_POSE_FRAME.w : renderW;
     const frameY = posed ? BRUTE_POSE_FRAME.anchor : anchorOffsetY;
+    return { frame, ox: -size / 2, oy: -size / 2 + frameY, size, anchorOffsetY };
+  }
+
+  // Для слоя теней: кадр и прямоугольник на карте
+  shadowSprite(e) {
+    const sp = this.sprite(e);
+    return sp && { img: sp.frame, x: e.x + sp.ox, y: e.y + sp.oy, w: sp.size, h: sp.size };
+  }
+
+  draw(ctx, e) {
+    const sp = this.sprite(e);
+    if (!sp) return false; // Fallback to 2D while loading
+    const type = e.type || 'grunt';
+    const anchorOffsetY = sp.anchorOffsetY;
 
     ctx.save();
     ctx.translate(e.x, e.y);
 
-    // 1. Soft Elliptical Ground Shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+    // 1. Контактная тень у ног (отбрасываемую кладёт слой теней, shadows.js)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
     ctx.beginPath();
     ctx.ellipse(0, 10, e.radius * 1.1, e.radius * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -647,13 +660,7 @@ class ThreeEnemyManager {
       ctx.scale(1 + sq * 0.08, 1 - sq * 0.13);
       ctx.translate(0, -22);
     }
-    ctx.drawImage(
-      frameCanvas,
-      -frameW / 2,
-      -frameW / 2 + frameY,
-      frameW,
-      frameW
-    );
+    ctx.drawImage(sp.frame, sp.ox, sp.oy, sp.size, sp.size);
     if (sq) ctx.restore();
 
     if (e.hitFlash && e.hitFlash > 0) {

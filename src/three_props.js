@@ -160,11 +160,11 @@ class ThreePropsManager {
 
     const loader = new THREE.GLTFLoader();
     const configs = [
-      // Дома рисуются крупно (до ~640 px) — их кадр рендерится в высоком разрешении (frameSize)
-      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 640 },
-      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.88, frameSize: 640 },
-      { key: 'building_boiler_house', file: 'assets/models/building_boiler_house.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 640 },
-      { key: 'building_military_hq',  file: 'assets/models/building_military_hq.glb',  targetSpan: 2.15, colorScale: 0.88, frameSize: 640 },
+      // Дома рисуются крупно (до ~1000 px) — их кадр рендерится в высоком разрешении (frameSize)
+      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
+      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.88, frameSize: 1024 },
+      { key: 'building_boiler_house', file: 'assets/models/building_boiler_house.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
+      { key: 'building_military_hq',  file: 'assets/models/building_military_hq.glb',  targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
       { key: 'mikhalyh_shop',  file: 'assets/models/mikhalyh_shop.glb',  targetSpan: 1.95, colorScale: 0.84 },
       { key: 'car_zhiguli',    file: 'assets/models/car_zhiguli.glb',    targetSpan: 1.95, colorScale: 0.92 },
       { key: 'car_uaz',        file: 'assets/models/car_uaz.glb',        targetSpan: 1.95, colorScale: 0.92 },
@@ -172,10 +172,12 @@ class ThreePropsManager {
       { key: 'military_crate', file: 'assets/models/military_crate.glb', targetSpan: 1.55, colorScale: 0.90 },
       // Обысканные тайники — открытые двери и крышки вместо полупрозрачной модели. yaw — поворот,
       // чтобы открытая модель смотрела туда же, что и закрытая (Rodin кладёт их по-разному)
-      { key: 'car_zhiguli_open',    file: 'assets/models/car_zhiguli_open.glb',    targetSpan: 1.95, colorScale: 0.92, yaw: -Math.PI / 2 },
-      { key: 'car_uaz_open',        file: 'assets/models/car_uaz_open.glb',        targetSpan: 1.95, colorScale: 0.92, yaw: -Math.PI / 2 },
-      { key: 'trash_dumpster_open', file: 'assets/models/trash_dumpster_open.glb', targetSpan: 1.75, colorScale: 0.90, yaw: 0 },
-      { key: 'military_crate_open', file: 'assets/models/military_crate_open.glb', targetSpan: 1.55, colorScale: 0.90, yaw: 0 },
+      // fit: [масштаб, растяжка по высоте, сдвиг x, сдвиг z] — подогнано по силуэтам закрытой модели во всех
+      // игровых ракурсах, чтобы после обыска тайник не менял размер и не съезжал (двери и крышки — сверх силуэта)
+      { key: 'car_zhiguli_open',    file: 'assets/models/car_zhiguli_open.glb',    targetSpan: 1.95, colorScale: 0.92, yaw: Math.PI / 2 },
+      { key: 'car_uaz_open',        file: 'assets/models/car_uaz_open.glb',        targetSpan: 1.95, colorScale: 0.92, yaw: Math.PI / 2, fit: [1.025, 1, 0.063, -0.056] },
+      { key: 'trash_dumpster_open', file: 'assets/models/trash_dumpster_open.glb', targetSpan: 1.75, colorScale: 0.90, fit: [1.025, 1.35, -0.188, 0.012] },
+      { key: 'military_crate_open', file: 'assets/models/military_crate_open.glb', targetSpan: 1.55, colorScale: 0.90, fit: [1.038, 1, 0, -0.175] },
       { key: 'fence_po2',      file: 'assets/models/fence_po2.glb',      targetSpan: 2.05, colorScale: 0.72 },
       { key: 'fence_po2_b',    file: 'assets/models/fence_po2_b.glb',    targetSpan: 2.05, colorScale: 0.72 },
       { key: 'heating_pipes',  file: 'assets/models/heating_pipes.glb',  targetSpan: 2.05, colorScale: 0.78 },
@@ -237,6 +239,11 @@ class ThreePropsManager {
           model.position.y -= scaledBox.min.y;
 
           this.modelHeights[cfg.key] = Math.max(0.2, scaledBox.max.y - scaledBox.min.y);
+          if (cfg.fit) {
+            const [f, sy, dx, dz] = cfg.fit;
+            model.scale.set(model.scale.x * f, model.scale.y * f * sy, model.scale.z * f);
+            model.position.set(model.position.x * f + dx, model.position.y * f * sy, model.position.z * f + dz);
+          }
           if (cfg.frameSize) this.frameSizes[cfg.key] = cfg.frameSize;
           if (cfg.yaw) this.yaws[cfg.key] = cfg.yaw;
           this.models[cfg.key] = model;
@@ -296,8 +303,9 @@ class ThreePropsManager {
     const angle = (dirIdx / this.numDirections) * Math.PI * 2;
     this.roots[propKey].rotation.y = angle + (this.yaws[propKey] || 0);
 
-    // Look at vertical center of the normalized model
-    const h = this.modelHeights[propKey] || 0.8;
+    // Look at vertical center of the normalized model (открытый тайник — в кадре закрытого, чтобы не прыгал)
+    const frameKey = propKey.endsWith('_open') ? propKey.slice(0, -5) : propKey;
+    const h = this.modelHeights[frameKey] || this.modelHeights[propKey] || 0.8;
     this.camera.lookAt(0, h * 0.48, 0);
     this.camera.updateProjectionMatrix();
 
@@ -322,28 +330,29 @@ class ThreePropsManager {
    * Renders the 3D Fortified Kiosk "Ларёк Михалыча 24/7" (.glb) in the Safe Zone,
    * strictly aligned with the city grid (dirIdx = 0).
    */
+  // Кадр ларька и где он стоит на карте: { frame, x, y, w, h } или null, пока модель грузится
+  shopSprite(safeZone) {
+    if (!this.isLoaded['mikhalyh_shop']) return null;
+    const frame = this.getFrameCanvas('mikhalyh_shop', 0);
+    if (!frame) return null;
+    const size = 275;
+    return { frame, x: safeZone.shopX - size / 2, y: safeZone.shopY - 10 - size / 2, w: size, h: size };
+  }
+
   drawShop(ctx, safeZone) {
-    if (!this.isLoaded['mikhalyh_shop']) {
-      return false;
-    }
-
-    const dirIdx = 0;
-    const frameCanvas = this.getFrameCanvas('mikhalyh_shop', dirIdx);
-    if (!frameCanvas) return false;
-
-    const renderW = 275;
-    const renderH = 275;
+    const sp = this.shopSprite(safeZone);
+    if (!sp) return false;
 
     ctx.save();
     ctx.translate(safeZone.shopX, safeZone.shopY - 10);
 
-    // Ground contact shadow on concrete plaza
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    // Контактная тень на бетонной площадке (отбрасываемую кладёт слой теней, shadows.js)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
     ctx.roundRect(-106, 22, 212, 48, 12);
     ctx.fill();
 
-    ctx.drawImage(frameCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
+    ctx.drawImage(sp.frame, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
     ctx.restore();
     return true;
   }
@@ -373,10 +382,10 @@ class ThreePropsManager {
     ctx.save();
     ctx.translate(cx, cy);
 
-    // Concrete apron in front of garage doors + ambient shadow
+    // Concrete apron in front of garage doors + contact shadow (отбрасываемая — слой теней, shadows.js)
     ctx.fillStyle = '#252b34';
     ctx.fillRect(-64, 18, 128, 34);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.46)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
     ctx.roundRect(-72, -18, 144, 68, 8);
     ctx.fill();
@@ -527,7 +536,8 @@ class ThreePropsManager {
     ctx.save();
 
     // Concrete foundation apron (отмостка) & ground contact shadow around the building base
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
+    // (отбрасываемую тень кладёт слой теней, shadows.js)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
     ctx.roundRect(b.x - 10, b.y + 4, b.w + 20, b.h + 14, 10);
     ctx.fill();
@@ -673,10 +683,10 @@ class ThreePropsManager {
   }
 
   /**
-   * Renders a 3D container/vehicle onto the main 2D game canvas.
-   * Returns true if 3D model is loaded and rendered, false to fallback while loading.
+   * Кадр тайника и где он лежит на карте: { frame, x, y, w, h, opened, rotAngle, shadowRx, shadowRy }
+   * или null, пока модель грузится. Общий для отрисовки и отбрасываемой тени.
    */
-  drawContainer(ctx, c) {
+  containerSprite(c) {
     let propKey = 'military_crate';
     let renderW = 76;
     let renderH = 76;
@@ -701,7 +711,7 @@ class ThreePropsManager {
     }
 
     if (!this.isLoaded[propKey]) {
-      return false;
+      return null;
     }
     // Обысканный тайник — открытый: распахнутые двери и багажник, откинутая крышка, вывороченный мусор
     const opened = c.searched && this.isLoaded[propKey + '_open'];
@@ -718,18 +728,29 @@ class ThreePropsManager {
     }
     const rotAngle = (dirIdx / this.numDirections) * Math.PI * 2;
 
-    const frameCanvas = this.getFrameCanvas(propKey, dirIdx);
-    if (!frameCanvas) return false;
+    const frame = this.getFrameCanvas(propKey, dirIdx);
+    if (!frame) return null;
+    return { frame, opened, rotAngle, shadowRx, shadowRy, x: c.x - renderW / 2, y: c.y - renderH / 2, w: renderW, h: renderH };
+  }
+
+  /**
+   * Renders a 3D container/vehicle onto the main 2D game canvas.
+   * Returns true if 3D model is loaded and rendered, false to fallback while loading.
+   */
+  drawContainer(ctx, c) {
+    const sp = this.containerSprite(c);
+    if (!sp) return false;
+    const opened = sp.opened;
 
     ctx.save();
     ctx.translate(c.x, c.y);
 
-    // 1. Soft elliptical ground contact shadow aligned with 3D model rotation
-    // (у предмета в руках громилы или в полёте тень рисует game.js — на земле, а не под ним)
+    // 1. Контактная тень у основания (отбрасываемую кладёт слой теней, shadows.js);
+    // у предмета в руках громилы или в полёте тень рисует game.js — на земле, а не под ним
     if (!c.airborne) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
       ctx.beginPath();
-      ctx.ellipse(0, 8, shadowRx, shadowRy, -rotAngle, 0, Math.PI * 2);
+      ctx.ellipse(0, 8, sp.shadowRx * 0.9, sp.shadowRy * 0.85, -sp.rotAngle, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -737,7 +758,7 @@ class ThreePropsManager {
     if (c.searched && !opened) {
       ctx.globalAlpha = 0.55;
     }
-    ctx.drawImage(frameCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
+    ctx.drawImage(sp.frame, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
     ctx.globalAlpha = 1.0;
 
     // 3. Interaction status indicator: необысканный — жёлтая стрелка; обысканный и так видно, что открыт
@@ -765,27 +786,31 @@ class ThreePropsManager {
   /**
    * Renders a 360° 3D loot item (.glb) on the ground with gentle hover & slow 360° rotation.
    */
-  drawLootItem(ctx, l) {
+  // Кадр лута сейчас: медленно вращается (8 ракурсов) и покачивается в воздухе; null — модель грузится
+  lootSprite(l) {
     const propKey = `loot_${l.type}`;
-    if (!this.isLoaded[propKey]) {
-      return false;
-    }
-
+    if (!this.isLoaded[propKey]) return null;
     const now = Date.now();
-    const hoverTime = now * 0.005;
-    const hoverY = Math.sin(hoverTime + l.x) * 3;
-
+    const hoverY = Math.sin(now * 0.005 + l.x) * 3;
     // Cycle through 8 cached 3D angles (even indices 0, 2, 4..14)
     const stepIdx = Math.floor(((now * 0.0018 + l.x * 0.07 + l.y * 0.05) % 1.0) * 8) % 8;
     const dirIdx = (stepIdx * 2) % this.numDirections;
-    const frameCanvas = this.getFrameCanvas(propKey, dirIdx);
-    if (!frameCanvas) return false;
+    const frame = this.getFrameCanvas(propKey, dirIdx);
+    if (!frame) return null;
+    const size = 42;
+    return { frame, hoverY, x: l.x - size / 2, y: l.y - size / 2 + hoverY, w: size, h: size };
+  }
+
+  drawLootItem(ctx, l) {
+    const sp = this.lootSprite(l);
+    if (!sp) return false;
+    const hoverY = sp.hoverY;
 
     ctx.save();
     ctx.translate(l.x, l.y);
 
     // 1. Ground contact shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
     ctx.beginPath();
     ctx.ellipse(0, 10, 10, 5, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -804,8 +829,7 @@ class ThreePropsManager {
     ctx.fill();
 
     // 3. Render 360° 3D model
-    const renderSize = 42;
-    ctx.drawImage(frameCanvas, -renderSize / 2, -renderSize / 2 + hoverY, renderSize, renderSize);
+    ctx.drawImage(sp.frame, -sp.w / 2, -sp.h / 2 + hoverY, sp.w, sp.h);
 
     ctx.restore();
     return true;

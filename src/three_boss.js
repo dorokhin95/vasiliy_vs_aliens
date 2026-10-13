@@ -169,7 +169,11 @@ class ThreeBossManager {
 
     // Hit flash (white) and enraged glow (pulsing orange) through the material emissive
     let r = 0, g = 0, b = 0;
-    if (e.hitFlash > 0) {
+    if (e.invuln > 0) {
+      // Входит в берсерк, неуязвим: раскалённое золото, частый пульс
+      const pulse = 0.34 + Math.sin(e.animTimer * 0.5) * 0.14;
+      r = pulse; g = pulse * 0.72; b = pulse * 0.18;
+    } else if (e.hitFlash > 0) {
       r = g = b = 0.45;
     } else if (e.berserk) {
       // Берсерк: налитый кровью, пульсирует чаще и ярче ярости
@@ -180,6 +184,14 @@ class ThreeBossManager {
       r = pulse; g = pulse * 0.35;
     }
     for (const mat of this.materials) mat.emissive.setRGB(r, g, b);
+  }
+
+  // Для слоя теней (shadows.js): холст прошлого кадра и где он на карте; ноги стоят ровно на e.y
+  shadowSprite(e) {
+    if (!this.isLoaded) return null;
+    const drawSize = this.frustumSize * this.pxPerMeter;
+    const feetOffset = this.lookAtY * Math.cos(this.pitch) * this.pxPerMeter;
+    return { img: this.canvas, x: e.x - drawSize / 2, y: e.y - drawSize / 2 - feetOffset, w: drawSize, h: drawSize, footY: e.y, live: true };
   }
 
   draw(ctx, e) {
@@ -195,12 +207,18 @@ class ThreeBossManager {
     ctx.save();
     ctx.translate(e.x, e.y);
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
     ctx.ellipse(0, 4, 50, 20, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (e.enraged || e.berserk) {
+    if (e.invuln > 0) {
+      ctx.strokeStyle = `rgba(250, 204, 21, ${0.7 + Math.sin(e.animTimer * 0.5) * 0.3})`;
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 62, 26, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (e.enraged || e.berserk) {
       ctx.strokeStyle = e.berserk
         ? `rgba(239, 68, 68, ${0.6 + Math.sin(e.animTimer * 0.35) * 0.3})`
         : `rgba(249, 115, 22, ${0.45 + Math.sin(e.animTimer * 0.2) * 0.2})`;

@@ -14,7 +14,7 @@
  */
 
 // --- РАСКЛАДКА КАРТЫ НОВОХМУРИНСКА (общая для environment.js и game.js: скрипты без модулей) ---
-// Карта 6000×6000. Раньше была 4000, а дома — на 1,7 мельче: Василий рядом с хрущёвкой казался
+// Карта 6000×6000. Раньше была 4000, а дома — в 2,55 раза мельче: Василий рядом с хрущёвкой казался
 // великаном. Три дороги по каждой оси: две кольцевые и проспект через центр, где купол Михалыча.
 // Кварталы, районы, гнёзда и логово Мясника считаются отсюда
 const MAP = (() => {
@@ -35,7 +35,7 @@ const MAP = (() => {
     BLOCKS: [[165, ROADS[0].pos - 60], [end(ROADS[0]) + 50, ROADS[1].pos - 60],
       [end(ROADS[1]) + 50, ROADS[2].pos - 60], [end(ROADS[2]) + 50, SIZE - 165]],
     SPACE: 1.5,                      // расстояния внутри кварталов — во столько раз больше прежних
-    HOUSE: 1.7                       // дома — во столько раз крупнее прежних
+    HOUSE: 2.55                      // дома — во столько раз крупнее прежних (этаж почти в рост Василия)
   };
 })();
 
@@ -833,8 +833,14 @@ class EnvironmentRenderer {
     // 3.5. БИО-ЛУЖИ КВАКО-ГНЁЗД (под всем, что стоит на земле)
     this.drawBioPuddles(ctx, camera, screenW, screenH);
 
-    // 4. БЕЗОПАСНАЯ ЗОНА (Магазин Михалыча на бетонной площади, защитный купол)
+    // 4. БЕЗОПАСНАЯ ЗОНА (бетонная площадь, защитный купол)
     this.drawSafeZone(ctx, camera, screenW, screenH, safeZone);
+
+    // 4.5. ОТБРАСЫВАЕМЫЕ ТЕНИ всего, что стоит на земле, — одним слоем до самих предметов
+    this.drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone);
+
+    // 4.6. ЛАРЁК МИХАЛЫЧА с неоновой вывеской
+    this.drawShopKiosk(ctx, camera, screenW, screenH, safeZone);
 
     // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (3D Хрущевки, Брежневки, Котельные, Штабы, 3D Гаражи, Заборы ПО-2, Теплотрассы)
     this.drawBuildings(ctx, camera, screenW, screenH, buildings);
@@ -1115,6 +1121,97 @@ class EnvironmentRenderer {
     }
   }
 
+  /**
+   * Отбрасываемые тени (shadows.js): дома, гаражи, ларёк, пограничный забор, тайники, деревья, кусты,
+   * скамейки, урны, фонари, а ещё персонажи и лут — их кадры кладёт в this.shadowActors game.js.
+   * Тень уходит влево от предмета на SHEAR·высоту — так и отсекается по экрану.
+   */
+  drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone) {
+    const sc = window.shadowCaster;
+    if (!sc) return;
+    const seen = (x, y, w, h) => this.isVisible(x - sc.reach(h), y, w + sc.reach(h), h, camera, screenW, screenH);
+    sc.begin(ctx);
+    const tp = window.threeProps;
+
+    if (tp) {
+      // Дома и гаражи
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
+        const garage = b.type === 'garage';
+        if (!garage && b.type !== 'panel' && b.type !== 'boiler_house' && b.type !== 'military_hq') continue;
+        const f = garage ? tp.garageFrame(b) : tp.majorBuildingFrame(b);
+        if (!f || !tp.isLoaded[f.propKey] || !seen(f.x, f.y, f.w, f.h)) continue;
+        sc.cast(tp.getFrameCanvas(f.propKey, 0), f.x, f.y, f.w, f.h);
+      }
+      // Ларёк Михалыча
+      const shop = tp.shopSprite(safeZone);
+      if (shop && seen(shop.x, shop.y, shop.w, shop.h)) sc.cast(shop.frame, shop.x, shop.y, shop.w, shop.h);
+      // Плиты пограничного забора (кроме проломленного пролёта)
+      const segs = this.borderSegments;
+      const fb = window.fenceBreach;
+      if (segs && tp.isLoaded['fence_po2']) {
+        for (let i = 0; i < segs.length; i++) {
+          const s = segs[i];
+          const x = s.x - s.w / 2, y = s.y - s.h / 2;
+          if (!seen(x, y, s.w, s.h)) continue;
+          if (fb && fb.state === 'open' && s.side === 'top' && Math.abs(s.x - fb.x) < fb.halfW) continue;
+          const v = tp.fenceVariant(s.x, s.y);
+          const frame = tp.getFrameCanvas(v.key, s.dir) || tp.getFrameCanvas('fence_po2', s.dir);
+          sc.cast(frame, x, y, s.w, s.h, { flip: v.flip });
+        }
+      }
+      // Тайники (поднятые и летящие — их тень рисует game.js)
+      for (let i = 0; i < containers.length; i++) {
+        const c = containers[i];
+        if (c.airborne || !seen(c.x - 110, c.y - 110, 220, 220)) continue;
+        const sp = tp.containerSprite(c);
+        if (sp) sc.cast(sp.frame, sp.x, sp.y, sp.w, sp.h);
+      }
+    }
+
+    // Дворовое: деревья, кусты, скамейки, урны, фонари
+    for (let i = 0; i < this.courtyardTrees.length; i++) {
+      const tr = this.courtyardTrees[i];
+      const r = this.treeRect(tr);
+      if (!seen(r.x, r.y, r.w, r.h)) continue;
+      sc.cast(this.props[(TREE_SPRITES[tr.variant] || TREE_SPRITES[1])[0]] || this.props['autumn_tree_1'], r.x, r.y, r.w, r.h);
+    }
+    for (let i = 0; i < this.courtyardBushes.length; i++) {
+      const b = this.courtyardBushes[i];
+      const r = this.bushRect(b);
+      if (!seen(r.x, r.y, r.w, r.h)) continue;
+      sc.cast(this.props[(BUSH_SPRITES[b.variant] || BUSH_SPRITES[1])[0]] || this.props['courtyard_bush'], r.x, r.y, r.w, r.h);
+    }
+    const bench = this.props['courtyard_bench'];
+    for (let i = 0; i < this.courtyardBenches.length; i++) {
+      const bn = this.courtyardBenches[i];
+      if (seen(bn.x - 36, bn.y - 24, 72, 48)) sc.cast(bench, bn.x - 36, bn.y - 24, 72, 48, { flip: bn.flipX === -1 });
+    }
+    const bin = this.props['small_trash_bin'];
+    [this.courtyardBins, this.staticSidewalkBins].forEach(list => {
+      for (let i = 0; i < list.length; i++) {
+        const tb = list[i];
+        if (!tb.airborne && seen(tb.x - 18, tb.y - 20, 36, 36)) sc.cast(bin, tb.x - 18, tb.y - 20, 36, 36);
+      }
+    });
+    const lamp = this.props['street_lamp'];
+    for (let i = 0; i < this.staticStreetLamps.length; i++) {
+      const lp = this.staticStreetLamps[i];
+      if (seen(lp.x - 36, lp.y - 138, 72, 144)) sc.cast(lamp, lp.x - 36, lp.y - 138, 72, 144, { flip: lp.flipX === -1 });
+    }
+
+    // Персонажи и лут
+    const actors = this.shadowActors;
+    if (actors) {
+      for (let i = 0; i < actors.length; i++) {
+        const a = actors[i];
+        if (seen(a.x, a.y, a.w, a.h)) sc.cast(a.img, a.x, a.y, a.w, a.h, a);
+      }
+    }
+
+    sc.end(ctx);
+  }
+
   drawStreetAndCourtyardProps(ctx, camera, screenW, screenH) {
     const benchImg = this.props['courtyard_bench'];
     const binImg = this.props['small_trash_bin'];
@@ -1163,8 +1260,8 @@ class EnvironmentRenderer {
         const tr = this.courtyardTrees[i];
         const vr = this.treeRect(tr);
         if (!this.isVisible(vr.x, vr.y, vr.w, vr.h + 20, camera, screenW, screenH)) continue;
-        // Мягкая тень на земле у корней дерева
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
+        // Контактная тень у корней (отбрасываемую кладёт слой теней, shadows.js)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
         ctx.beginPath();
         ctx.ellipse(tr.x, tr.y + 4, 24 * tr.scale, 11 * tr.scale, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -1178,7 +1275,7 @@ class EnvironmentRenderer {
         const lp = this.staticStreetLamps[i];
         if (!this.isVisible(lp.x - 60, lp.y - 160, 120, 180, camera, screenW, screenH)) continue;
         // Тень у основания бетонного столба
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.beginPath();
         ctx.ellipse(lp.x, lp.y + 2, 12, 6, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -1431,6 +1528,12 @@ class EnvironmentRenderer {
     ctx.arc(safeZone.x, safeZone.y, safeZone.radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  drawShopKiosk(ctx, camera, screenW, screenH, safeZone) {
+    if (!this.isVisible(safeZone.shopX - 140, safeZone.shopY - 150, 280, 230, camera, screenW, screenH)) return;
+    ctx.save();
 
     // 4. Путь А: 360° 3D-модель Ларька Михалыча (выровнена по сетке дорог dirIdx = 0)
     const rendered3DShop = window.threeProps && window.threeProps.drawShop(ctx, safeZone);
