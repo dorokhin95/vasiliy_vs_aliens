@@ -5276,7 +5276,74 @@ const BOSS_GRAB_NEAR = 140;
 const BOSS_ADDS = 4;
 // За столько кадров до удара босс перестаёт доворачиваться — окно, чтобы уйти перекатом
 const BOSS_AIM_LOCK_FRAMES = 14;
+// Следы погони: в логово он возвращается тем же путём, каким пришёл, — в обход домов
+const BOSS_TRAIL_STEP = 40;
+const BOSS_STUCK_FRAMES = 180;
 let bossRef = null;
+
+// Пока гонится — ставит след каждые BOSS_TRAIL_STEP px; вернулся к старому следу — петля срезается
+function recordBossTrail(e) {
+  const trail = e.trail || (e.trail = []);
+  const last = trail.length ? trail[trail.length - 1] : BOSS_HOME;
+  if (Math.hypot(e.x - last.x, e.y - last.y) < BOSS_TRAIL_STEP) return;
+  if (Math.hypot(e.x - BOSS_HOME.x, e.y - BOSS_HOME.y) < BOSS_TRAIL_STEP * 0.75) {
+    trail.length = 0;
+    return;
+  }
+  for (let i = 0; i < trail.length - 1; i++) {
+    if (Math.hypot(e.x - trail[i].x, e.y - trail[i].y) < BOSS_TRAIL_STEP * 0.75) {
+      trail.length = i + 1;
+      return;
+    }
+  }
+  trail.push({ x: e.x, y: e.y });
+}
+
+// Оказался в доме или в препятствии (старое сохранение, толчок) — на ближайшее свободное место
+function unstickBoss(e) {
+  const fo = footDY(e);
+  if (!checkWalkCollision(e.x, e.y, e.radius, fo)) return;
+  for (let r = 16; r <= 480; r += 16) {
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2;
+      const x = e.x + Math.cos(a) * r, y = e.y + Math.sin(a) * r;
+      if (!checkWalkCollision(x, y, e.radius, fo)) {
+        e.x = x;
+        e.y = y;
+        return;
+      }
+    }
+  }
+}
+
+// Игрок ушёл из логова: обратно по своим следам, со столкновениями. Застрял — пропускает след,
+// следов нет и не сдвинуться — просто оказывается дома (Василия в логове нет, никто не видит)
+function bossWalkHome(e, speed) {
+  const trail = e.trail || (e.trail = []);
+  while (trail.length && Math.hypot(trail[trail.length - 1].x - e.x, trail[trail.length - 1].y - e.y) < 14) trail.pop();
+  const target = trail.length ? trail[trail.length - 1] : BOSS_HOME;
+  const hx = target.x - e.x;
+  const hy = target.y - e.y;
+  const d = Math.hypot(hx, hy);
+  e.isMoving = d > 6;
+  if (!e.isMoving) {
+    e.stuckFrames = 0;
+    return;
+  }
+  e.angle = Math.atan2(hy, hx);
+  const step = Math.min(speed, d);
+  const px = e.x, py = e.y;
+  slideMove(e, (hx / d) * step, (hy / d) * step, e.radius, true);
+  e.stuckFrames = Math.hypot(e.x - px, e.y - py) < step * 0.2 ? (e.stuckFrames || 0) + 1 : 0;
+  if (e.stuckFrames > BOSS_STUCK_FRAMES) {
+    e.stuckFrames = 0;
+    if (trail.length) trail.pop();
+    else {
+      e.x = BOSS_HOME.x;
+      e.y = BOSS_HOME.y;
+    }
+  }
+}
 
 function spawnBoss() {
   bossRef = {
@@ -5482,6 +5549,8 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   if (e.quakeTimer > 0) e.quakeTimer--;
 
   if (e.invuln > 0) e.invuln--;
+  unstickBoss(e);
+  if (e.isAggroed) recordBossTrail(e);
 
   // Последняя четверть (щит уже снят): берсерк. Бросает текущий удар и сразу бьёт мечом по земле
   if (!e.berserk && e.shield <= 0 && e.hp < e.maxHp * BOSS_BERSERK_AT) {
@@ -5529,15 +5598,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
 
   if (!e.isAggroed) {
     // Игрок ушёл из логова: возвращаемся домой и зализываем раны
-    const hx = BOSS_HOME.x - e.x;
-    const hy = BOSS_HOME.y - e.y;
-    const homeDist = Math.hypot(hx, hy);
-    e.isMoving = homeDist > 6;
-    if (e.isMoving) {
-      e.angle = Math.atan2(hy, hx);
-      e.x += (hx / homeDist) * Math.min(speed, homeDist);
-      e.y += (hy / homeDist) * Math.min(speed, homeDist);
-    }
+    bossWalkHome(e, speed);
     // Щит возвращается быстро, здоровье — полностью, но медленно
     if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * BOSS_REGEN);
     if (e.shield < BOSS_SHIELD_MAX) e.shield = Math.min(BOSS_SHIELD_MAX, e.shield + BOSS_SHIELD_REGEN);
