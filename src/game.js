@@ -1206,6 +1206,7 @@ function generateWorld() {
     if (isNearRoad(rx, ry, w, h, 30)) return null;
     if (overlapsAnyBuilding(rx, ry, w, h, null, 24, 28)) return null;
     const obj = Object.assign({ x: rx, y: ry, w, h, type }, extra);
+    obj.col = buildingCollisionRect(obj);
     buildings.push(obj);
     return obj;
   };
@@ -1259,6 +1260,9 @@ function generateWorld() {
     [3290, 3890]
   ];
 
+  // Враги появляются после того, как расставлены все препятствия, иначе жаба может родиться внутри машины
+  const pendingSpawns = [];
+
   // 0. Стартовые мусорные баки вокруг площади Михалыча (Tier 0 -> Tier 1 переход)
   tryAddContainer(1660, 1845, 'trash', null, 0);
   tryAddContainer(2340, 1845, 'trash', null, 0);
@@ -1296,7 +1300,7 @@ function generateWorld() {
 
         // Враги: ТОЛЬКО слабые Жабы-Пехотинцы (65 HP), никаких Громил и Снайперов у базы!
         for (let i = 0; i < 3; i++) {
-          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
       } else if (dist.id === 'garages') {
@@ -1323,7 +1327,7 @@ function generateWorld() {
 
         // Враги: Пехотинцы + Снайперы в засадах между гаражами
         for (let i = 0; i < 5; i++) {
-          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
       } else if (dist.id === 'heating') {
@@ -1353,7 +1357,7 @@ function generateWorld() {
 
         // Враги: Снайперы и Штурмовики вдоль труб
         for (let i = 0; i < 5; i++) {
-          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
       } else if (dist.id === 'cordon') {
@@ -1377,7 +1381,7 @@ function generateWorld() {
 
         // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
         for (let i = 0; i < 6; i++) {
-          spawnEnemyInRect(x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist);
+          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
       } else if (dist.id === 'nest') {
@@ -1408,12 +1412,14 @@ function generateWorld() {
         // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
         const packSize = isBossLair ? 3 : 8;
         for (let i = 0; i < packSize; i++) {
-          spawnEnemyInRect(x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist);
+          pendingSpawns.push([x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist]);
         }
       }
     });
   });
 
+  buildObstacles();
+  pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   spawnBoss();
 }
 
@@ -1426,7 +1432,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     if (Math.hypot(ex - safeZone.x, ey - safeZone.y) < 520) continue;
 
     // Не спавнить внутри зданий/заборов/труб
-    if (checkBuildingCollision(ex, ey, 36)) continue;
+    if (checkWalkCollision(ex, ey, 36)) continue;
 
     const dist = distOverride || getDistrictAt(ex, ey);
     if (dist.id === 'hub') continue;
@@ -2656,7 +2662,7 @@ function shootPlayerWeapon() {
           const kb = e.type === 'boss' ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
           const kx = e.x + Math.cos(toEnemyAngle) * kb;
           const ky = e.y + Math.sin(toEnemyAngle) * kb;
-          if (!checkBuildingCollision(kx, ky, e.radius)) {
+          if (!checkWalkCollision(kx, ky, e.radius)) {
             e.x = kx;
             e.y = ky;
           }
@@ -2979,14 +2985,109 @@ function shootPlayerWeapon() {
   updateHUD(true);
 }
 
+// Насколько 3D-модель выступает за «пятно» здания на земле (замерено по непрозрачной области спрайтов,
+// минус ~6 px прозрачной кромки). Крыша рисуется выше пятна — без этого по ней можно было ходить
+const BUILDING_ROOF_OVERHANG = {
+  khrushchevka: { top: 18, side: 3 },
+  brezhnevka: { top: 31, side: 0 },
+  boiler_house: { top: 31, side: 3 },
+  military_hq: { top: 13, side: 3 },
+  garage: { top: 9, side: 0 },
+  fence_wall: { top: 23, side: 0 }
+};
+
+function buildingCollisionRect(b) {
+  const key = b.type === 'panel' ? (b.w >= 300 ? 'khrushchevka' : 'brezhnevka') : b.type;
+  const o = BUILDING_ROOF_OVERHANG[key] || { top: 0, side: 0 };
+  return { x: b.x - o.side, y: b.y - o.top, w: b.w + o.side * 2, h: b.h + o.top };
+}
+
+// Здания (с крышей): блокируют и персонажей, и пули
 function checkBuildingCollision(x, y, radius) {
-  for (let b of buildings) {
-    if (x + radius > b.x && x - radius < b.x + b.w &&
-        y + radius > b.y && y - radius < b.y + b.h) {
+  for (let i = 0; i < buildings.length; i++) {
+    const r = buildings[i].col || buildings[i];
+    if (x + radius > r.x && x - radius < r.x + r.w &&
+        y + radius > r.y && y - radius < r.y + r.h) {
       return true;
     }
   }
   return false;
+}
+
+// --- Препятствия для ходьбы: машины, баки, ящики, ларёк, деревья, фонари, скамейки, урны, кусты ---
+// Пули их не учитывают (стреляем поверх), персонажи — обходят. Хранятся в сетке 128 px.
+const OBSTACLE_CELL = 128;
+let obstacleGrid = new Map();
+
+// o: эллипс {x, y, rx, ry, rot} (круг при rx === ry) или прямоугольник {rect: true, x1, y1, x2, y2}
+function addObstacle(o) {
+  const ext = o.rect ? 0 : Math.max(o.rx, o.ry);
+  const x1 = o.rect ? o.x1 : o.x - ext;
+  const x2 = o.rect ? o.x2 : o.x + ext;
+  const y1 = o.rect ? o.y1 : o.y - ext;
+  const y2 = o.rect ? o.y2 : o.y + ext;
+  for (let cx = Math.floor(x1 / OBSTACLE_CELL); cx <= Math.floor(x2 / OBSTACLE_CELL); cx++) {
+    for (let cy = Math.floor(y1 / OBSTACLE_CELL); cy <= Math.floor(y2 / OBSTACLE_CELL); cy++) {
+      const key = cx * 4096 + cy;
+      if (!obstacleGrid.has(key)) obstacleGrid.set(key, []);
+      obstacleGrid.get(key).push(o);
+    }
+  }
+}
+
+function obstacleHits(o, x, y, r) {
+  if (o.rect) return x + r > o.x1 && x - r < o.x2 && y + r > o.y1 && y - r < o.y2;
+  let dx = x - o.x;
+  let dy = y - o.y;
+  if (o.rot) {
+    const c = Math.cos(o.rot), s = Math.sin(o.rot);
+    const lx = dx * c + dy * s;
+    dy = -dx * s + dy * c;
+    dx = lx;
+  }
+  const ax = o.rx + r, ay = o.ry + r;
+  return (dx * dx) / (ax * ax) + (dy * dy) / (ay * ay) < 1;
+}
+
+function checkWalkCollision(x, y, radius) {
+  if (checkBuildingCollision(x, y, radius)) return true;
+  for (let cx = Math.floor((x - radius) / OBSTACLE_CELL); cx <= Math.floor((x + radius) / OBSTACLE_CELL); cx++) {
+    for (let cy = Math.floor((y - radius) / OBSTACLE_CELL); cy <= Math.floor((y + radius) / OBSTACLE_CELL); cy++) {
+      const cell = obstacleGrid.get(cx * 4096 + cy);
+      if (!cell) continue;
+      for (let i = 0; i < cell.length; i++) {
+        if (obstacleHits(cell[i], x, y, radius)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Размеры — по нижней части спрайтов (крыша машины и крона дерева рисуются выше и не мешают ходить за ними)
+function buildObstacles() {
+  obstacleGrid = new Map();
+  containers.forEach(c => {
+    const rot = typeof c.dirIdx === 'number' ? -(c.dirIdx / 16) * Math.PI * 2 : 0;
+    if (c.type === 'car') {
+      const isUaz = c.subType === 'uaz';
+      addObstacle({ x: c.x, y: c.y + 6, rx: isUaz ? 80 : 76, ry: isUaz ? 36 : 30, rot });
+    } else if (c.type === 'trash') {
+      addObstacle({ x: c.x, y: c.y + 6, rx: 24, ry: 22, rot: 0 });
+    } else {
+      addObstacle({ x: c.x, y: c.y + 4, rx: 26, ry: 16, rot });
+    }
+  });
+  // Ларёк Михалыча: тело киоска; подойти к прилавку для торговли можно спереди
+  addObstacle({ rect: true, x1: safeZone.shopX - 100, y1: safeZone.shopY - 80, x2: safeZone.shopX + 100, y2: safeZone.shopY + 45 });
+
+  const env = window.environmentRenderer;
+  if (!env) return;
+  env.ensureCourtyardLayout(buildings);
+  env.courtyardTrees.forEach(t => addObstacle({ x: t.x, y: t.y + 2, rx: 16, ry: 12, rot: 0 }));
+  env.staticStreetLamps.forEach(l => addObstacle({ x: l.x, y: l.y, rx: 10, ry: 8, rot: 0 }));
+  env.courtyardBenches.forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 30, ry: 12, rot: 0 }));
+  env.courtyardBins.concat(env.staticSidewalkBins).forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 12, ry: 10, rot: 0 }));
+  env.courtyardBushes.forEach(b => addObstacle({ x: b.x, y: b.y + 6, rx: 28 * b.scale, ry: 14 * b.scale, rot: 0 }));
 }
 
 const _hudCache = {
@@ -3301,7 +3402,7 @@ function bossHitPlayer(e, damage) {
   const a = Math.atan2(player.y - e.y, player.x - e.x);
   const kx = player.x + Math.cos(a) * 26;
   const ky = player.y + Math.sin(a) * 26;
-  if (!checkBuildingCollision(kx, ky, player.radius)) {
+  if (!checkWalkCollision(kx, ky, player.radius)) {
     player.x = kx;
     player.y = ky;
   }
@@ -3370,8 +3471,8 @@ function updateBossStrike(e, a, def) {
     const step = def.range / def.active;
     const nx = e.x + Math.cos(a.aim) * step;
     const ny = e.y + Math.sin(a.aim) * step;
-    if (!checkBuildingCollision(nx, e.y, e.radius)) e.x = nx;
-    if (!checkBuildingCollision(e.x, ny, e.radius)) e.y = ny;
+    if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
+    if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
     if (a.t % 2 === 0) createParticles(e.x, e.y + 14, '#78716c', 2);
     if (!a.hit && dist < e.radius + player.radius + 34) {
       a.hit = true;
@@ -3485,8 +3586,8 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   if (e.isMoving) {
     const nx = e.x + (dx / dist) * speed;
     const ny = e.y + (dy / dist) * speed;
-    if (!checkBuildingCollision(nx, e.y, e.radius)) e.x = nx;
-    if (!checkBuildingCollision(e.x, ny, e.radius)) e.y = ny;
+    if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
+    if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
   }
 
   // Тело босса непроходимое: выталкиваем Василия, а не наносим контактный урон
@@ -3494,7 +3595,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   if (overlap > 0 && dist > 0.01 && !player.isRolling) {
     const px = player.x + (dx / dist) * overlap;
     const py = player.y + (dy / dist) * overlap;
-    if (!checkBuildingCollision(px, py, player.radius)) {
+    if (!checkWalkCollision(px, py, player.radius)) {
       player.x = px;
       player.y = py;
     }
@@ -3799,11 +3900,13 @@ function update() {
   if (player.hasPerk('slime_skin')) currentSpeed *= 1.22;
 
   if (player.rollCooldown > 0) player.rollCooldown--;
+  // Страховка: если Василия всё же вытолкнуло внутрь препятствия, даём из него выйти, а не запираем
+  const playerStuck = checkWalkCollision(player.x, player.y, player.radius);
   if (player.isRolling) {
     const nextX = player.x + player.rollDx * 9;
     const nextY = player.y + player.rollDy * 9;
-    if (!checkBuildingCollision(nextX, player.y, player.radius)) player.x = nextX;
-    if (!checkBuildingCollision(player.x, nextY, player.radius)) player.y = nextY;
+    if (playerStuck || !checkWalkCollision(nextX, player.y, player.radius)) player.x = nextX;
+    if (playerStuck || !checkWalkCollision(player.x, nextY, player.radius)) player.y = nextY;
     
     player.rollDuration--;
     createParticles(player.x, player.y, '#64748b', 1);
@@ -3829,9 +3932,9 @@ function update() {
     
     const nextX = player.x + dx * currentSpeed;
     const nextY = player.y + dy * currentSpeed;
-    
-    if (!checkBuildingCollision(nextX, player.y, player.radius)) player.x = nextX;
-    if (!checkBuildingCollision(player.x, nextY, player.radius)) player.y = nextY;
+
+    if (playerStuck || !checkWalkCollision(nextX, player.y, player.radius)) player.x = nextX;
+    if (playerStuck || !checkWalkCollision(player.x, nextY, player.radius)) player.y = nextY;
   }
 
   player.x = Math.max(player.radius, Math.min(WORLD_WIDTH - player.radius, player.x));
@@ -4060,8 +4163,8 @@ function update() {
       if (e.type === 'grunt' || e.type === 'brute') {
         const nx = e.x + Math.cos(angle) * eSpeed;
         const ny = e.y + Math.sin(angle) * eSpeed;
-        if (!checkBuildingCollision(nx, e.y, e.radius)) e.x = nx;
-        if (!checkBuildingCollision(e.x, ny, e.radius)) e.y = ny;
+        if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
+        if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
 
         if (distToPlayer < player.radius + e.radius && !player.isRolling) {
           // Усиленный контактный урон по тирам зоны!
@@ -4072,13 +4175,17 @@ function update() {
           if (player.hp <= 0) gameOver();
         }
       } else if (e.type === 'sniper') {
+        // Держит дистанцию 200–320 px: подходит или отступает, но, как и все, не сквозь стены
+        const step = distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0);
+        if (step !== 0) {
+          const nx = e.x + Math.cos(angle) * step;
+          const ny = e.y + Math.sin(angle) * step;
+          if (!checkWalkCollision(nx, e.y, e.radius)) e.x = nx;
+          if (!checkWalkCollision(e.x, ny, e.radius)) e.y = ny;
+        }
         if (distToPlayer > 320) {
-          e.x += Math.cos(angle) * eSpeed;
-          e.y += Math.sin(angle) * eSpeed;
           e.angle = angle;
         } else if (distToPlayer < 200) {
-          e.x -= Math.cos(angle) * eSpeed;
-          e.y -= Math.sin(angle) * eSpeed;
           if (e.shootCooldown > 25) {
             e.angle = angle + Math.PI;
           } else {
@@ -4125,7 +4232,7 @@ function update() {
       e.angle = e.patrolAngle;
       const pnx = e.x + Math.cos(e.patrolAngle) * 0.8;
       const pny = e.y + Math.sin(e.patrolAngle) * 0.8;
-      if (!checkBuildingCollision(pnx, pny, e.radius)) {
+      if (!checkWalkCollision(pnx, pny, e.radius)) {
         e.x = pnx; e.y = pny;
       }
     }
@@ -4670,6 +4777,17 @@ function render() {
 
   SpriteRenderer.drawVasiliy(ctx, player);
 
+  // 9.2. Деревья и фонари перед персонажами (Василий или враг стоит позади) — поверх них
+  if (window.environmentRenderer) {
+    const actors = [{ x: player.x, y: player.y, h: 95 }];
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
+      actors.push({ x: e.x, y: e.y, h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 120 : 90) });
+    }
+    window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height);
+  }
+
   // 9.5. Направленные дульные вспышки поверх среза ствола
   drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
 
@@ -4723,7 +4841,13 @@ const perfStats = {
   visible: /[?&]perf\b/.test(location.search),
   frameMs: 16.7,
   updateMs: 0,
-  renderMs: 0
+  renderMs: 0,
+  // Фризы: кадры дольше 50 мс. «Игра» — сколько из них заняли наши update+render;
+  // если фриз большой, а игра маленькая — тормозит браузер/видеокарта, а не код игры
+  hitches: 0,
+  lastHitchMs: 0,
+  lastHitchGameMs: 0,
+  prevFrameGameMs: 0
 };
 
 function drawPerfOverlay() {
@@ -4731,16 +4855,19 @@ function drawPerfOverlay() {
   const lines = [
     `FPS ${Math.round(1000 / perfStats.frameMs)}  (${perfStats.frameMs.toFixed(1)} мс/кадр)`,
     `CPU: update ${perfStats.updateMs.toFixed(2)} мс, render ${perfStats.renderMs.toFixed(2)} мс`,
+    perfStats.hitches > 0
+      ? `Фризы >50 мс: ${perfStats.hitches}, последний ${Math.round(perfStats.lastHitchMs)} мс (игра ${perfStats.lastHitchGameMs.toFixed(1)} мс)`
+      : 'Фризы >50 мс: нет',
     `Враги ${enemies.length}  Частицы ${particles.length}  Пули ${bullets.length + enemyBullets.length}`
   ];
   ctx.save();
   ctx.fillStyle = 'rgba(8, 10, 14, 0.78)';
-  ctx.fillRect(10, canvas.height - 76, 330, 66);
+  ctx.fillRect(10, canvas.height - 95, 420, 85);
   ctx.font = '12px Consolas, monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = perfStats.frameMs > 18 ? '#f87171' : '#4ade80';
-  lines.forEach((line, i) => ctx.fillText(line, 18, canvas.height - 68 + i * 19));
+  lines.forEach((line, i) => ctx.fillText(line, 18, canvas.height - 87 + i * 19));
   ctx.restore();
 }
 
@@ -4760,7 +4887,14 @@ let lastLoopTime = performance.now();
 let lastRenderTime = 0;
 
 function loop(now = performance.now()) {
-  simAccumulator += Math.min(now - lastLoopTime, 100);
+  const gap = now - lastLoopTime;
+  // Паузы дольше секунды — это свёрнутая вкладка, а не фриз
+  if (gap > 50 && gap < 1000 && gameState === 'PLAYING') {
+    perfStats.hitches++;
+    perfStats.lastHitchMs = gap;
+    perfStats.lastHitchGameMs = perfStats.prevFrameGameMs;
+  }
+  simAccumulator += Math.min(gap, 100);
   lastLoopTime = now;
 
   // Порог в полшага: при 60 Гц ровно один update() на кадр даже при дрожании vsync
@@ -4786,6 +4920,7 @@ function loop(now = performance.now()) {
     lastRenderTime = now;
     perfStats.updateMs += ((t1 - t0) / steps - perfStats.updateMs) * 0.05;
     perfStats.renderMs += ((t2 - t1) - perfStats.renderMs) * 0.05;
+    perfStats.prevFrameGameMs = t2 - t0;
   }
   requestAnimationFrame(loop);
 }

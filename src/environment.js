@@ -122,6 +122,11 @@ class EnvironmentRenderer {
     );
   }
 
+  // Площадь у Ларька Михалыча: свои фонари, дорожные сюда не ставим (иначе двоятся и закрывают вывеску)
+  isInShopPlaza(x, y) {
+    return Math.hypot(x - 2000, y - 2000) < 300;
+  }
+
   generateDecorations() {
     // Статичные лужи, люки, фонарные столбы и уличные урны по всей дорожной сети
     const roadLinesH = [800, 1900, 3100];
@@ -180,14 +185,16 @@ class EnvironmentRenderer {
       // Фонарные столбы вдоль вертикальных улиц
       for (let ly = 240; ly < 3800; ly += 380) {
         if (this.isNearIntersection(ly)) continue;
-        this.staticStreetLamps.push({
-          x: rx - 18,
-          y: ly,
-          lightX: rx + 26,
-          lightY: ly + 10,
-          flipX: 1
-        });
-        if (rx === 1900) {
+        if (!this.isInShopPlaza(rx - 18, ly)) {
+          this.staticStreetLamps.push({
+            x: rx - 18,
+            y: ly,
+            lightX: rx + 26,
+            lightY: ly + 10,
+            flipX: 1
+          });
+        }
+        if (rx === 1900 && !this.isInShopPlaza(rx + w + 18, ly + 160)) {
           this.staticStreetLamps.push({
             x: rx + w + 18,
             y: ly + 160,
@@ -199,14 +206,14 @@ class EnvironmentRenderer {
       }
     });
 
-    // Пара фонарей и урн прямо на площади у Ларька Михалыча
+    // Пара фонарей и урн у передних углов площадки Ларька Михалыча — по бокам от киоска, ниже вывески
     this.staticStreetLamps.push(
-      { x: 1888, y: 1936, lightX: 1916, lightY: 1956, flipX: 1 },
-      { x: 2112, y: 1936, lightX: 2084, lightY: 1956, flipX: -1 }
+      { x: 1840, y: 2030, lightX: 1868, lightY: 2050, flipX: 1 },
+      { x: 2160, y: 2030, lightX: 2132, lightY: 2050, flipX: -1 }
     );
     this.staticSidewalkBins.push(
-      { x: 1898, y: 1952 },
-      { x: 2102, y: 1952 }
+      { x: 1812, y: 2044 },
+      { x: 2188, y: 2044 }
     );
   }
 
@@ -642,7 +649,6 @@ class EnvironmentRenderer {
     const bush1Img = this.props['courtyard_bush'];
     const bush2Img = this.props['courtyard_bush_2'] || bush1Img;
     const tree1Img = this.props['autumn_tree_1'];
-    const tree2Img = this.props['autumn_tree_2'] || tree1Img;
     const lampImg = this.props['street_lamp'];
 
     // 1. Теплые пятна натриевого света от уличных фонарей на асфальте и тротуарах
@@ -705,15 +711,12 @@ class EnvironmentRenderer {
       for (let i = 0; i < this.courtyardTrees.length; i++) {
         const tr = this.courtyardTrees[i];
         if (!this.isVisible(tr.x - 95, tr.y - 140, 190, 180, camera, screenW, screenH)) continue;
-        const img = (tr.variant === 2 && tree2Img) ? tree2Img : tree1Img;
-        const w = (tr.variant === 2 ? 156 : 142) * tr.scale;
-        const h = (tr.variant === 2 ? 146 : 164) * tr.scale;
         // Мягкая тень на земле у корней дерева
         ctx.fillStyle = 'rgba(0, 0, 0, 0.36)';
         ctx.beginPath();
         ctx.ellipse(tr.x, tr.y + 4, 24 * tr.scale, 11 * tr.scale, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.drawImage(img, tr.x - w * 0.5, tr.y - h + 16, w, h);
+        this.drawTree(ctx, tr);
       }
     }
 
@@ -722,25 +725,63 @@ class EnvironmentRenderer {
       for (let i = 0; i < this.staticStreetLamps.length; i++) {
         const lp = this.staticStreetLamps[i];
         if (!this.isVisible(lp.x - 60, lp.y - 160, 120, 180, camera, screenW, screenH)) continue;
-
-        ctx.save();
-        ctx.translate(lp.x, lp.y);
         // Тень у основания бетонного столба
         ctx.fillStyle = 'rgba(0, 0, 0, 0.42)';
         ctx.beginPath();
-        ctx.ellipse(0, 2, 12, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(lp.x, lp.y + 2, 12, 6, 0, 0, Math.PI * 2);
         ctx.fill();
-
-        ctx.scale(lp.flipX || 1, 1);
-        ctx.drawImage(lampImg, -36, -138, 72, 144);
-
-        // Теплое свечение самой натриевой лампы в плафоне «Кобры»
-        ctx.fillStyle = 'rgba(253, 224, 71, 0.38)';
-        ctx.beginPath();
-        ctx.arc(16, -116, 14, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        this.drawLamp(ctx, lp);
       }
+    }
+  }
+
+  treeRect(tr) {
+    const w = (tr.variant === 2 ? 156 : 142) * tr.scale;
+    const h = (tr.variant === 2 ? 146 : 164) * tr.scale;
+    return { x: tr.x - w * 0.5, y: tr.y - h + 16, w, h };
+  }
+
+  drawTree(ctx, tr) {
+    const tree1Img = this.props['autumn_tree_1'];
+    const img = (tr.variant === 2 && this.props['autumn_tree_2']) ? this.props['autumn_tree_2'] : tree1Img;
+    if (!img) return;
+    const r = this.treeRect(tr);
+    ctx.drawImage(img, r.x, r.y, r.w, r.h);
+  }
+
+  drawLamp(ctx, lp) {
+    const lampImg = this.props['street_lamp'];
+    if (!lampImg) return;
+    ctx.save();
+    ctx.translate(lp.x, lp.y);
+    ctx.scale(lp.flipX || 1, 1);
+    ctx.drawImage(lampImg, -36, -138, 72, 144);
+    // Теплое свечение самой натриевой лампы в плафоне «Кобры»
+    ctx.fillStyle = 'rgba(253, 224, 71, 0.38)';
+    ctx.beginPath();
+    ctx.arc(16, -116, 14, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * Деревья и фонари рисуются до персонажей; если персонаж стоит позади (выше по экрану) и перекрывается
+   * с ними, дерево/фонарь перерисовывается поверх — иначе Василий «ходит по кроне».
+   * actors: [{x, y, h}] — точка ног и высота спрайта.
+   */
+  drawOccludingProps(ctx, actors, camera, screenW, screenH) {
+    const overlaps = (r, a) => a.x + 24 > r.x && a.x - 24 < r.x + r.w && a.y > r.y && a.y - a.h < r.y + r.h;
+    for (let i = 0; i < this.courtyardTrees.length; i++) {
+      const tr = this.courtyardTrees[i];
+      if (!this.isVisible(tr.x - 95, tr.y - 140, 190, 180, camera, screenW, screenH)) continue;
+      const r = this.treeRect(tr);
+      if (actors.some(a => a.y < tr.y && overlaps(r, a))) this.drawTree(ctx, tr);
+    }
+    for (let i = 0; i < this.staticStreetLamps.length; i++) {
+      const lp = this.staticStreetLamps[i];
+      if (!this.isVisible(lp.x - 60, lp.y - 160, 120, 180, camera, screenW, screenH)) continue;
+      const r = { x: lp.x - 36, y: lp.y - 138, w: 72, h: 144 };
+      if (actors.some(a => a.y < lp.y && overlaps(r, a))) this.drawLamp(ctx, lp);
     }
   }
 
