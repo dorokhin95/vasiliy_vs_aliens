@@ -711,6 +711,183 @@
       line-height: 1.7;
       color: #cbd5e1;
     }
+
+    /* Menu buttons, pause and settings (src/menu.js) */
+    .menu-buttons {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      min-width: 280px;
+    }
+    .btn-secondary {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      padding: 11px 28px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .btn-secondary:hover {
+      background: #334155;
+      border-color: #64748b;
+    }
+    .btn-secondary.armed,
+    .btn-action.armed,
+    .settings-btn.armed {
+      background: #991b1b;
+      border-color: #ef4444;
+      color: #fff;
+    }
+    .menu-note {
+      color: #94a3b8;
+      font-size: 13px;
+      margin: -4px 0 4px;
+    }
+    .pause-screen {
+      background: rgba(10, 12, 16, 0.72);
+      z-index: 110;
+    }
+    .pause-screen h1 {
+      color: #e2e8f0;
+      text-shadow: none;
+    }
+    .settings-modal {
+      z-index: 150;
+    }
+    .settings-content {
+      max-width: 560px;
+    }
+    .settings-section {
+      border-top: 1px solid #1e293b;
+      padding-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .settings-section h3 {
+      font-size: 13px;
+      color: #60a5fa;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .settings-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    .settings-row input[type="range"] {
+      flex: 1;
+      accent-color: #38bdf8;
+    }
+    .settings-row input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+    .settings-val {
+      min-width: 44px;
+      text-align: right;
+      color: #e2e8f0;
+      font-variant-numeric: tabular-nums;
+    }
+    .seg {
+      display: inline-flex;
+      align-self: flex-start;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .seg button {
+      background: #1e293b;
+      color: #cbd5e1;
+      border: none;
+      padding: 6px 14px;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .seg button.active {
+      background: #2563eb;
+      color: #fff;
+    }
+    .controls-list {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 6px 14px;
+      align-items: center;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .controls-list kbd {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      color: #e2e8f0;
+      text-align: center;
+    }
+    .settings-note {
+      color: #94a3b8;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .settings-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .settings-btn {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #475569;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .settings-btn:hover {
+      background: #334155;
+    }
+    .settings-btn.danger {
+      border-color: #b91c1c;
+      color: #fca5a5;
+    }
+    #set-code {
+      width: 100%;
+      min-height: 64px;
+      resize: vertical;
+      background: #0f172a;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 8px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      word-break: break-all;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+    .settings-msg {
+      font-size: 12px;
+      min-height: 16px;
+    }
+    .settings-msg.ok {
+      color: #4ade80;
+    }
+    .settings-msg.err {
+      color: #f87171;
+    }
   </style>
 </head>
 <body>
@@ -899,26 +1076,109 @@
     <div id="screen-menu" class="overlay-screen">
       <h1 id="menu-title">Василий против пришельцев</h1>
       <p id="menu-subtitle">Новохмуринский Квакокалипсис</p>
-      <button class="btn-action" id="btn-start">ВЫЙТИ В ГОРОД</button>
+      <div class="menu-buttons">
+        <button class="btn-action" id="btn-continue" data-t="continue" style="display:none;">ПРОДОЛЖИТЬ</button>
+        <div class="menu-note" id="continue-note" style="display:none;"></div>
+        <button class="btn-action" id="btn-start">ВЫЙТИ В ГОРОД</button>
+        <button class="btn-secondary" id="btn-menu-settings" data-t="settings">НАСТРОЙКИ</button>
+      </div>
 
       <div class="controls-hint">
         <strong id="menu-ctrl-title">УПРАВЛЕНИЕ:</strong><br>
         <span id="menu-ctrl-move">WASD — Передвижение по городу</span> | 
         <span id="menu-ctrl-aim">ЛКМ — Удар битой / Стрельба | R — Перезарядка</span><br>
         <span id="menu-ctrl-roll">ПРОБЕЛ — Перекат (тратит выносливость)</span> | 
-        <span id="menu-ctrl-interact">E — Обыскать тайник / Лавка Михалыча</span><br>
+        <span id="menu-ctrl-interact">E — Обыскать тайник / Лавка Михалыча | ESC — Пауза и настройки</span><br>
         <span id="menu-ctrl-items">1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Следующее оружие</span>
+      </div>
+    </div>
+
+    <!-- Pause Screen (src/menu.js) -->
+    <div id="screen-pause" class="overlay-screen pause-screen" style="display:none;">
+      <h1 data-t="pause">ПАУЗА</h1>
+      <p id="pause-save-status"></p>
+      <div class="menu-buttons">
+        <button class="btn-action" id="btn-resume" data-t="resume">ПРОДОЛЖИТЬ</button>
+        <button class="btn-secondary" id="btn-pause-save" data-t="save_now">СОХРАНИТЬ</button>
+        <button class="btn-secondary" id="btn-pause-settings" data-t="settings">НАСТРОЙКИ</button>
+        <button class="btn-secondary" id="btn-pause-exit" data-t="exit_menu">ВЫЙТИ В МЕНЮ</button>
+      </div>
+    </div>
+
+    <!-- Settings (src/menu.js) -->
+    <div id="settings-modal" class="shop-modal settings-modal">
+      <div class="shop-content settings-content">
+        <div class="shop-title" data-t="settings">НАСТРОЙКИ</div>
+
+        <section class="settings-section">
+          <h3 data-t="sec_sound">Звук</h3>
+          <label class="settings-row">
+            <span data-t="volume">Громкость</span>
+            <input type="range" id="set-volume" min="0" max="100" step="5">
+            <span class="settings-val" id="set-volume-val">100%</span>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-t="sec_lang">Язык</h3>
+          <div class="seg" id="set-lang">
+            <button data-v="ru">Русский</button>
+            <button data-v="en">English</button>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-t="sec_graphics">Графика</h3>
+          <label class="settings-row">
+            <span data-t="lights">Свет фонарей</span>
+            <input type="checkbox" id="set-lights">
+          </label>
+          <div class="settings-row">
+            <span data-t="particles">Частицы и искры</span>
+            <div class="seg" id="set-particles">
+              <button data-v="high" data-t="particles_high">Много</button>
+              <button data-v="low" data-t="particles_low">Мало</button>
+            </div>
+          </div>
+          <label class="settings-row">
+            <span data-t="show_fps">Счётчик FPS (F3)</span>
+            <input type="checkbox" id="set-fps">
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-t="sec_controls">Управление</h3>
+          <div class="controls-list" id="set-controls"></div>
+        </section>
+
+        <section class="settings-section">
+          <h3 data-t="sec_save">Сохранение</h3>
+          <p class="settings-note" data-t="save_note"></p>
+          <p class="settings-note" id="set-save-status"></p>
+          <div class="settings-buttons">
+            <button class="settings-btn" id="btn-copy-code" data-t="copy_code">Скопировать код сохранения</button>
+            <button class="settings-btn danger" id="btn-delete-save" data-t="delete_save">Удалить сохранение</button>
+          </div>
+          <textarea id="set-code" spellcheck="false" data-tp="code_placeholder"></textarea>
+          <div class="settings-buttons">
+            <button class="settings-btn" id="btn-load-code" data-t="load_code">Загрузить из кода</button>
+          </div>
+          <p class="settings-msg" id="set-code-msg"></p>
+        </section>
+
+        <button class="shop-close-btn" id="btn-settings-close" data-t="back">НАЗАД [ESC]</button>
       </div>
     </div>
   </div>
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1041"></script>
-  <script src="src/three_character.js?v=1041"></script>
-  <script src="src/three_enemies.js?v=1041"></script>
-  <script src="src/three_props.js?v=1041"></script>
-  <script src="src/three_boss.js?v=1041"></script>
-  <script src="src/game.js?v=1041"></script>
+  <script src="src/environment.js?v=1042"></script>
+  <script src="src/three_character.js?v=1042"></script>
+  <script src="src/three_enemies.js?v=1042"></script>
+  <script src="src/three_props.js?v=1042"></script>
+  <script src="src/three_boss.js?v=1042"></script>
+  <script src="src/game.js?v=1042"></script>
+  <script src="src/menu.js?v=1042"></script>
 </body>
 </html>

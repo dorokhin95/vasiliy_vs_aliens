@@ -830,7 +830,7 @@ const LANGS = {
     controls_move: "WASD — Передвижение по городу",
     controls_aim: "ЛКМ — Удар / Стрельба | R — Перезарядка",
     controls_roll: "ПРОБЕЛ — Перекат (-25 выносливости)",
-    controls_interact: "E — Обыскать тайник / Лавка Михалыча",
+    controls_interact: "E — Обыскать тайник / Лавка Михалыча | ESC — Пауза и настройки",
     controls_items: "1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Следующее оружие",
     hp: "ЗДОРОВЬЕ",
     stamina: "ВЫНОСЛИВ.",
@@ -869,7 +869,7 @@ const LANGS = {
     controls_move: "WASD — Move around town",
     controls_aim: "LMB — Attack / Shoot | R — Reload",
     controls_roll: "SPACE — Dodge Roll (-25 Stamina)",
-    controls_interact: "E — Scavenge / Shop",
+    controls_interact: "E — Scavenge / Shop | ESC — Pause & settings",
     controls_items: "1–8 — Hotbar slots (drag to reorder) | Q — Next weapon",
     hp: "HEALTH",
     stamina: "STAMINA",
@@ -957,6 +957,7 @@ function updateUILanguage() {
     renderArsenalAndSupplies();
     renderUpgradeTrees();
   }
+  if (window.Menu) window.Menu.refreshTexts();
 }
 
 document.getElementById('btn-lang').addEventListener('click', () => {
@@ -1549,8 +1550,12 @@ let nearbyInteractable = null;
 
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
-  if (e.code === 'KeyE') handleInteract();
-  if (e.code === 'Escape' && gameState === 'SHOP') closeShop();
+  if (e.code === 'KeyE' && gameState === 'PLAYING') handleInteract();
+  // ESC: закрыть настройки / магазин, поставить или снять паузу (src/menu.js)
+  if (e.code === 'Escape') {
+    if (window.Menu) window.Menu.onEscape();
+    else if (gameState === 'SHOP') closeShop();
+  }
 
   if (gameState === 'PLAYING') {
     if (e.code === 'Space') performRoll();
@@ -1665,9 +1670,9 @@ function initHotbarDrag() {
 }
 window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = false; });
 
-document.getElementById('btn-start').addEventListener('click', startGame);
-
-function startGame() {
+// Кнопки меню, сохранения, пауза и настройки — в src/menu.js.
+// save — сохранённый забег (RunSave): мир строится заново, поверх него восстанавливается прогресс
+function startGame(save = null) {
   gameState = 'PLAYING';
   document.getElementById('screen-menu').style.display = 'none';
 
@@ -1706,17 +1711,17 @@ function startGame() {
   player.blockedPerks.clear();
   lastPlayerDistrictId = 'hub';
 
-  if (window.threeCharacter) {
-    window.threeCharacter.setWeapon('bat');
-  }
-
   generateWorld();
+  if (save && window.Menu) window.Menu.applyRun(save);
+  if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon);
   applyHotbarOrder();
   updateHUD(true);
 }
 
 function gameOver() {
   gameState = 'GAMEOVER';
+  // Рогалик: смерть заканчивает забег, сохранение стирается
+  if (window.Menu) window.Menu.onGameOver();
   document.getElementById('screen-menu').style.display = 'flex';
   updateUILanguage();
 }
@@ -1988,6 +1993,7 @@ function openShop() {
 window.closeShop = function() {
   document.getElementById('shop-modal').style.display = 'none';
   gameState = 'PLAYING';
+  if (window.Menu) window.Menu.requestSave(); // покупки сохраняем сразу
 };
 
 window.switchShopTab = function(tab) {
@@ -2369,11 +2375,20 @@ function startReload() {
 const SoundFX = {
   ctx: null,
   noiseBuf: null,
+  out: null, // общая громкость: все звуки идут через этот узел (ползунок в настройках)
+  volume: 1,
+  setVolume(v) {
+    this.volume = v;
+    if (this.out) this.out.gain.value = v;
+  },
   ensure() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
       this.ctx = new AC();
+      this.out = this.ctx.createGain();
+      this.out.gain.value = this.volume;
+      this.out.connect(this.ctx.destination);
       const sr = this.ctx.sampleRate;
       const buf = this.ctx.createBuffer(1, sr * 0.5, sr);
       const data = buf.getChannelData(0);
@@ -2403,7 +2418,7 @@ const SoundFX = {
     nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
     nSrc.connect(filter);
     filter.connect(nGain);
-    nGain.connect(ac.destination);
+    nGain.connect(this.out);
     nSrc.start(now);
     nSrc.stop(now + 0.16);
 
@@ -2416,7 +2431,7 @@ const SoundFX = {
       oGain.gain.setValueAtTime(0.38, now);
       oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
       osc.connect(oGain);
-      oGain.connect(ac.destination);
+      oGain.connect(this.out);
       osc.start(now);
       osc.stop(now + 0.13);
     }
@@ -2437,7 +2452,7 @@ const SoundFX = {
     nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
     nSrc.connect(filter);
     filter.connect(nGain);
-    nGain.connect(ac.destination);
+    nGain.connect(this.out);
     nSrc.start(now);
     nSrc.stop(now + 0.15);
 
@@ -2449,7 +2464,7 @@ const SoundFX = {
     oGain.gain.setValueAtTime(0.28, now);
     oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
     osc.connect(oGain);
-    oGain.connect(ac.destination);
+    oGain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.11);
   },
@@ -2469,7 +2484,7 @@ const SoundFX = {
     nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
     nSrc.connect(filter);
     filter.connect(nGain);
-    nGain.connect(ac.destination);
+    nGain.connect(this.out);
     nSrc.start(now);
     nSrc.stop(now + 0.26);
 
@@ -2481,7 +2496,7 @@ const SoundFX = {
     oGain.gain.setValueAtTime(0.45, now);
     oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
     osc.connect(oGain);
-    oGain.connect(ac.destination);
+    oGain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.18);
   },
@@ -2498,7 +2513,7 @@ const SoundFX = {
     gain.gain.setValueAtTime(0.18, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
     osc.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.14);
   },
@@ -2516,7 +2531,7 @@ const SoundFX = {
     gain.gain.setValueAtTime(0.20, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
     osc.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.18);
   },
@@ -2532,7 +2547,7 @@ const SoundFX = {
     gain.gain.setValueAtTime(0.10, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
     osc.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.13);
   },
@@ -2548,7 +2563,7 @@ const SoundFX = {
     gain.gain.setValueAtTime(0.12, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
     osc.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.045);
   },
@@ -2567,7 +2582,7 @@ const SoundFX = {
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
     nSrc.connect(filter);
     filter.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(this.out);
     nSrc.start(now);
     nSrc.stop(now + 0.37);
   },
@@ -2587,7 +2602,7 @@ const SoundFX = {
     nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
     nSrc.connect(filter);
     filter.connect(nGain);
-    nGain.connect(ac.destination);
+    nGain.connect(this.out);
     nSrc.start(now);
     nSrc.stop(now + 0.31);
 
@@ -2601,7 +2616,7 @@ const SoundFX = {
       oGain.gain.setValueAtTime(0.55, now);
       oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
       osc.connect(oGain);
-      oGain.connect(ac.destination);
+      oGain.connect(this.out);
       osc.start(now);
       osc.stop(now + 0.35);
     }
@@ -2619,13 +2634,17 @@ const SoundFX = {
     gain.gain.setValueAtTime(0.06, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + 0.065);
     osc.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(this.out);
     osc.start(now);
     osc.stop(now + 0.07);
   }
 };
 
+// Множитель количества частиц и искр (настройка «Частицы»: 1 — много, 0.4 — мало)
+let particleScale = 1;
+
 function spawnDirectionalSparks(x, y, baseAngle, spread, count, color, speedMin = 6, speedMax = 14, life = 14) {
+  count = count > 0 ? Math.max(1, Math.round(count * particleScale)) : 0;
   for (let i = 0; i < count; i++) {
     const a = baseAngle + (Math.random() - 0.5) * spread;
     const spd = speedMin + Math.random() * (speedMax - speedMin);
@@ -3385,7 +3404,7 @@ function updateHUD(forceWeaponRefresh = false) {
   }
 
   // Полоска здоровья босса — пока он сражается с Василием
-  const showBossBar = !!(bossRef && bossRef.isAggroed && gameState === 'PLAYING');
+  const showBossBar = !!(bossRef && bossRef.isAggroed && (gameState === 'PLAYING' || gameState === 'PAUSED'));
   setHudStyle(document.getElementById('boss-bar'), 'display', showBossBar ? 'flex' : 'none');
   if (showBossBar) {
     const bossPct = Math.max(0, Math.round((bossRef.hp / bossRef.maxHp) * 1000) / 10);
@@ -3456,6 +3475,7 @@ function updateHUD(forceWeaponRefresh = false) {
 }
 
 function createParticles(x, y, color, count = 6) {
+  count = count > 0 ? Math.max(1, Math.round(count * particleScale)) : 0;
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
     const speed = Math.random() * 3.5 + 1.2;
@@ -3789,6 +3809,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
 
 function onBossDefeated(e) {
   bossRef = null;
+  if (window.Menu) window.Menu.requestSave();
   createParticles(e.x, e.y, '#facc15', 40);
   spawnDirectionalSparks(e.x, e.y - 30, -Math.PI / 2, Math.PI * 2, 30, '#fde047', 5, 14, 22);
   cameraKickX += (Math.random() - 0.5) * 20;
@@ -5071,6 +5092,10 @@ const MAX_SIM_STEPS_PER_FRAME = 4;
 let simAccumulator = 0;
 let lastLoopTime = performance.now();
 let lastRenderTime = 0;
+// Пауза, меню, магазин: мир стоит, поэтому рисуем один кадр и дальше не грузим видеокарту.
+// Хранит состояние, для которого застывший кадр уже нарисован
+let frozenFrameState = null;
+window.addEventListener('resize', () => { frozenFrameState = null; }); // ресайз очищает канвас
 
 function loop(now = performance.now()) {
   const gap = now - lastLoopTime;
@@ -5094,10 +5119,12 @@ function loop(now = performance.now()) {
   if (steps === MAX_SIM_STEPS_PER_FRAME) simAccumulator = 0;
 
   // Без нового шага симуляции кадр совпадает с предыдущим — не тратим на него GPU
-  if (steps > 0) {
+  const frozen = gameState !== 'PLAYING';
+  if (steps > 0 && !(frozen && frozenFrameState === gameState)) {
     const t1 = performance.now();
     render();
     drawPerfOverlay();
+    frozenFrameState = frozen ? gameState : null;
     const t2 = performance.now();
 
     if (lastRenderTime > 0) {

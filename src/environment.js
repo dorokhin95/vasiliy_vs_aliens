@@ -439,6 +439,7 @@ class EnvironmentRenderer {
 
   // Пятна света на земле — до персонажей (тени и фигуры ложатся поверх освещённого асфальта)
   drawLampPools(ctx, camera, screenW, screenH) {
+    if (this.lightsEnabled === false) return; // настройка «Свет фонарей»
     this.ensureLightGradients(ctx);
     const t = performance.now() / 1000;
     ctx.save();
@@ -457,6 +458,7 @@ class EnvironmentRenderer {
   // Плафоны, ореолы и дымка конуса — поверх персонажей: лампа висит высоко, а проходящих под ней
   // тёплый конус слегка подсвечивает
   drawLampGlows(ctx, camera, screenW, screenH) {
+    if (this.lightsEnabled === false) return;
     this.ensureLightGradients(ctx);
     const t = performance.now() / 1000;
     ctx.save();
