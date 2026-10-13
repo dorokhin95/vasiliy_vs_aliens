@@ -29,6 +29,8 @@ TARGETS = {
     'car_uaz':        {'path': 'assets/models/car_uaz.glb',        'mesh_tris': {}, 'tex': 512},
     'trash_dumpster': {'path': 'assets/models/trash_dumpster.glb', 'mesh_tris': {}, 'tex': 512},
     'military_crate': {'path': 'assets/models/military_crate.glb', 'mesh_tris': {}, 'tex': 512},
+    # Вторая (целая) плита ПО-2 — чередуется со старой (со сколом) в заборах
+    'fence_po2_b':    {'path': 'assets/models/fence_po2_b.glb',    'mesh_tris': {'*': 3500}, 'tex': 512},
 }
 WEBP_QUALITY = 82
 

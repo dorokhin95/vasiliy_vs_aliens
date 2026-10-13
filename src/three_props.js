@@ -27,6 +27,7 @@ class ThreePropsManager {
       mikhalyh_shop: null,
       garage_block: null,
       fence_po2: null,
+      fence_po2_b: null,
       heating_pipes: null,
       building_khrushchevka: null,
       building_brezhnevka: null,
@@ -47,6 +48,7 @@ class ThreePropsManager {
       mikhalyh_shop: false,
       garage_block: false,
       fence_po2: false,
+      fence_po2_b: false,
       heating_pipes: false,
       building_khrushchevka: false,
       building_brezhnevka: false,
@@ -119,6 +121,7 @@ class ThreePropsManager {
       mikhalyh_shop: new THREE.Group(),
       garage_block: new THREE.Group(),
       fence_po2: new THREE.Group(),
+      fence_po2_b: new THREE.Group(),
       heating_pipes: new THREE.Group(),
       building_khrushchevka: new THREE.Group(),
       building_brezhnevka: new THREE.Group(),
@@ -156,6 +159,7 @@ class ThreePropsManager {
       { key: 'trash_dumpster', file: 'assets/models/trash_dumpster.glb', targetSpan: 1.55, colorScale: 0.90 },
       { key: 'military_crate', file: 'assets/models/military_crate.glb', targetSpan: 1.55, colorScale: 0.90 },
       { key: 'fence_po2',      file: 'assets/models/fence_po2.glb',      targetSpan: 2.05, colorScale: 0.72 },
+      { key: 'fence_po2_b',    file: 'assets/models/fence_po2_b.glb',    targetSpan: 2.05, colorScale: 0.72 },
       { key: 'heating_pipes',  file: 'assets/models/heating_pipes.glb',  targetSpan: 2.05, colorScale: 0.78 },
       { key: 'garage_block',   file: 'assets/models/garage_block.glb',   targetSpan: 1.90, colorScale: 0.80 },
       { key: 'loot_scrap',     file: 'assets/models/loot_scrap.glb',     targetSpan: 1.65, colorScale: 0.95 },
@@ -237,7 +241,9 @@ class ThreePropsManager {
   schedulePrewarm() {
     const frames = [];
     ['building_khrushchevka', 'building_brezhnevka', 'building_boiler_house', 'building_military_hq',
-      'mikhalyh_shop', 'garage_block', 'fence_po2', 'heating_pipes'].forEach(key => frames.push([key, 0]));
+      'mikhalyh_shop', 'garage_block', 'fence_po2', 'fence_po2_b', 'heating_pipes'].forEach(key => frames.push([key, 0]));
+    // Пограничный забор вдоль боковых границ стоит торцом
+    ['fence_po2', 'fence_po2_b'].forEach(key => frames.push([key, 4]));
     ['car_zhiguli', 'car_uaz'].forEach(key => this.carDirections.forEach(dir => frames.push([key, dir])));
     ['trash_dumpster', 'military_crate'].forEach(key => this.propDirections.forEach(dir => frames.push([key, dir])));
     // Loot cycles through even direction indices (see drawLootItem)
@@ -413,13 +419,37 @@ class ThreePropsManager {
    * Renders a continuous multi-section PO-2 concrete perimeter fence wall (.glb)
    * flush against the outside edge of a building or garage cooperative.
    */
+  /**
+   * Which PO-2 slab stands at (x, y): the chipped one (fence_po2) or the intact one (fence_po2_b),
+   * half of them mirrored. Picked from the position, so a fence looks the same on every load.
+   */
+  fenceVariant(x, y) {
+    const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+    const h = s - Math.floor(s);
+    const intact = h < 0.5 && this.isLoaded['fence_po2_b'];
+    return { key: intact ? 'fence_po2_b' : 'fence_po2', flip: (h * 4) % 1 < 0.5 };
+  }
+
+  // Draws one slab frame centred at (cx, cy), optionally mirrored
+  drawFenceSlab(ctx, variant, dirIdx, cx, cy, w, h) {
+    const frame = this.getFrameCanvas(variant.key, dirIdx) || this.getFrameCanvas('fence_po2', dirIdx);
+    if (!frame) return false;
+    if (variant.flip) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(-1, 1);
+      ctx.drawImage(frame, -w / 2, -h / 2, w, h);
+      ctx.restore();
+    } else {
+      ctx.drawImage(frame, cx - w / 2, cy - h / 2, w, h);
+    }
+    return true;
+  }
+
   drawFenceWall(ctx, b) {
     if (!this.isLoaded['fence_po2']) {
       return false;
     }
-
-    const frameCanvas = this.getFrameCanvas('fence_po2', 0);
-    if (!frameCanvas) return false;
 
     const segments = b.segments || 2;
     const segStep = 110;
@@ -434,11 +464,12 @@ class ThreePropsManager {
     ctx.roundRect(b.x, b.y + 8, segments * segStep, 22, 6);
     ctx.fill();
 
-    // 2. Render connected 3D PO-2 slabs edge-to-edge (3D concrete footers meet naturally)
+    // 2. Render connected 3D PO-2 slabs edge-to-edge (3D concrete footers meet naturally),
+    // alternating the chipped and the intact slab so the fence does not repeat
     for (let i = 0; i < segments; i++) {
       const sx = b.x + i * segStep + segStep * 0.5;
       const sy = b.y + b.h * 0.5 - 10;
-      ctx.drawImage(frameCanvas, sx - renderW / 2, sy - renderH / 2, renderW, renderH);
+      this.drawFenceSlab(ctx, this.fenceVariant(sx, sy), 0, sx, sy, renderW, renderH);
     }
 
     ctx.restore();

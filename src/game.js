@@ -1418,6 +1418,16 @@ function generateWorld() {
     });
   });
 
+  // Бетонный забор ПО-2 по периметру карты: не выпускает ни Василия, ни жаб, пули в него упираются.
+  // Рисует его EnvironmentRenderer.drawBorderFence; здесь — только коллизия (с запасом наружу)
+  const out = 400;
+  [
+    { x: -out, y: -out, w: WORLD_WIDTH + out * 2, h: out + 40 },
+    { x: -out, y: WORLD_HEIGHT - 40, w: WORLD_WIDTH + out * 2, h: out + 40 },
+    { x: -out, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 },
+    { x: WORLD_WIDTH - 32, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 }
+  ].forEach(r => buildings.push(Object.assign({ type: 'border_fence' }, r)));
+
   buildObstacles();
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   spawnBoss();
@@ -3144,12 +3154,15 @@ function obstacleHits(o, x, y, r) {
 
 function checkWalkCollision(x, y, radius) {
   if (checkBuildingCollision(x, y, radius)) return true;
-  for (let cx = Math.floor((x - radius) / OBSTACLE_CELL); cx <= Math.floor((x + radius) / OBSTACLE_CELL); cx++) {
-    for (let cy = Math.floor((y - radius) / OBSTACLE_CELL); cy <= Math.floor((y + radius) / OBSTACLE_CELL); cy++) {
+  // С мелкими препятствиями сталкиваются ступни, а не плечи: с полным радиусом урна или столб
+  // посреди тротуара перекрывали его целиком, и мимо них нельзя было пройти
+  const feet = radius * 0.5;
+  for (let cx = Math.floor((x - feet) / OBSTACLE_CELL); cx <= Math.floor((x + feet) / OBSTACLE_CELL); cx++) {
+    for (let cy = Math.floor((y - feet) / OBSTACLE_CELL); cy <= Math.floor((y + feet) / OBSTACLE_CELL); cy++) {
       const cell = obstacleGrid.get(cx * 4096 + cy);
       if (!cell) continue;
       for (let i = 0; i < cell.length; i++) {
-        if (obstacleHits(cell[i], x, y, radius)) return true;
+        if (obstacleHits(cell[i], x, y, feet)) return true;
       }
     }
   }
@@ -3177,9 +3190,9 @@ function buildObstacles() {
   if (!env) return;
   env.ensureCourtyardLayout(buildings);
   env.courtyardTrees.forEach(t => addObstacle({ x: t.x, y: t.y + 2, rx: 16, ry: 12, rot: 0 }));
-  env.staticStreetLamps.forEach(l => addObstacle({ x: l.x, y: l.y, rx: 10, ry: 8, rot: 0 }));
+  env.staticStreetLamps.forEach(l => addObstacle({ x: l.x, y: l.y, rx: 7, ry: 6, rot: 0 }));
   env.courtyardBenches.forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 30, ry: 12, rot: 0 }));
-  env.courtyardBins.concat(env.staticSidewalkBins).forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 12, ry: 10, rot: 0 }));
+  env.courtyardBins.concat(env.staticSidewalkBins).forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 10, ry: 8, rot: 0 }));
   env.courtyardBushes.forEach(b => addObstacle({ x: b.x, y: b.y + 6, rx: 28 * b.scale, ry: 14 * b.scale, rot: 0 }));
 }
 
@@ -4221,6 +4234,10 @@ function update() {
       continue;
     }
 
+    // Страховка поверх забора: враг никогда не оказывается за пределами карты
+    e.x = Math.max(60, Math.min(WORLD_WIDTH - 60, e.x));
+    e.y = Math.max(60, Math.min(WORLD_HEIGHT - 60, e.y));
+
     const distToSafe = Math.hypot(e.x - safeZone.x, e.y - safeZone.y);
 
     if (distToSafe < safeZone.radius) {
@@ -4879,6 +4896,8 @@ function render() {
       actors.push({ x: e.x, y: e.y, h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 120 : 90) });
     }
     window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height);
+    // 9.3. Плафоны фонарей, ореолы и конусы света — поверх персонажей
+    window.environmentRenderer.drawLampGlows(ctx, camera, canvas.width, canvas.height);
   }
 
   // 9.5. Направленные дульные вспышки поверх среза ствола

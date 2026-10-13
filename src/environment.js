@@ -215,6 +215,265 @@ class EnvironmentRenderer {
       { x: 1812, y: 2044 },
       { x: 2188, y: 2044 }
     );
+
+    // У каждого фонаря свой ритм «дыхания», примерно каждый седьмой — неисправный и моргает.
+    // Зерно зависит только от координат, поэтому рисунок одинаков при каждой загрузке
+    this.staticStreetLamps.forEach(lp => {
+      const s = Math.sin(lp.x * 12.9898 + lp.y * 78.233) * 43758.5453;
+      lp.seed = s - Math.floor(s);
+      lp.faulty = lp.seed < 0.14;
+      // Светящийся плафон «Кобры» в спрайте фонаря
+      lp.headX = lp.x + 16 * (lp.flipX || 1);
+      lp.headY = lp.y - 116;
+    });
+  }
+
+  // --- Граница карты: бетонный забор ПО-2 по периметру и «город за забором» (фон, без коллизий) ---
+  generateOutskirts(worldW, worldH) {
+    if (this.outskirts) return;
+    const lots = [];
+    const rnd = (i) => { const s = Math.sin(i * 91.7 + 13.1) * 43758.5453; return s - Math.floor(s); };
+    const TYPES = [
+      { type: 'panel', w: 320, h: 160 },  // хрущёвка
+      { type: 'panel', w: 220, h: 260 },  // брежневка
+      { type: 'garage', w: 140, h: 100 },
+      { type: 'panel', w: 320, h: 160 },
+      { type: 'boiler_house', w: 320, h: 160 }
+    ];
+    const ROADS = [800, 1900, 3100];
+    // Не ставим дома на продолжения дорог (с запасом под тротуары)
+    const onRoad = (from, size) => ROADS.some(r => from + size > r - 70 && from < r + (r === 1900 ? 200 : 140) + 70);
+    let n = 0;
+    const row = (horizontal, fixed, start, end) => {
+      for (let pos = start; pos < end;) {
+        const t = TYPES[Math.floor(rnd(n++) * TYPES.length)];
+        const span = horizontal ? t.w : t.h;
+        if (!onRoad(pos, span)) {
+          lots.push(horizontal
+            ? { type: t.type, w: t.w, h: t.h, x: pos, y: fixed(t) }
+            : { type: t.type, w: t.w, h: t.h, x: fixed(t), y: pos });
+        }
+        pos += span + 90 + Math.floor(rnd(n++) * 120);
+      }
+    };
+    // Два ряда кварталов с каждой стороны: ближний (за забором) и дальний
+    row(true, (t) => -170 - t.h, -1300, worldW + 1300);
+    row(true, (t) => -620 - t.h, -1300, worldW + 1300);
+    row(true, () => worldH + 170, -1300, worldW + 1300);
+    row(true, () => worldH + 620, -1300, worldW + 1300);
+    row(false, (t) => -170 - t.w, -150, worldH + 150);
+    row(false, (t) => -620 - t.w, -150, worldH + 150);
+    row(false, () => worldW + 170, -150, worldH + 150);
+    row(false, () => worldW + 620, -150, worldH + 150);
+    this.outskirts = { lots, worldW, worldH };
+  }
+
+  // Земля, продолжения дорог и дома за забором, затянутые дымкой. Рисуется первым, под всем остальным
+  drawOutskirts(ctx, camera, screenW, screenH, worldW, worldH, roads) {
+    const x0 = camera.x - 40, y0 = camera.y - 40, x1 = camera.x + screenW + 40, y1 = camera.y + screenH + 40;
+    if (x0 >= 0 && y0 >= 0 && x1 <= worldW && y1 <= worldH) return; // граница не видна
+    this.generateOutskirts(worldW, worldH);
+
+    // 1. Земля снаружи: тот же бесшовный грунт (паттерн привязан к миру, стыка нет)
+    ctx.fillStyle = this.patterns['ground'] || '#22272e';
+    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+
+    // 2. Дороги уходят за забор
+    const asphalt = this.patterns['asphalt'] || '#1e2430';
+    const sidewalk = this.patterns['sidewalk'] || '#4b5563';
+    roads.forEach(r => {
+      const horizontal = r.w > r.h;
+      const segs = horizontal
+        ? [[x0, Math.min(0, x1)], [Math.max(worldW, x0), x1]]
+        : [[y0, Math.min(0, y1)], [Math.max(worldH, y0), y1]];
+      segs.forEach(([a, b]) => {
+        if (b <= a) return;
+        if (horizontal) {
+          ctx.fillStyle = sidewalk;
+          ctx.fillRect(a, r.y - 36, b - a, r.h + 72);
+          ctx.fillStyle = asphalt;
+          ctx.fillRect(a, r.y, b - a, r.h);
+        } else {
+          ctx.fillStyle = sidewalk;
+          ctx.fillRect(r.x - 36, a, r.w + 72, b - a);
+          ctx.fillStyle = asphalt;
+          ctx.fillRect(r.x, a, r.w, b - a);
+        }
+      });
+    });
+
+    // 3. Кварталы за забором (3D-спрайты тех же домов и гаражей)
+    const tp = window.threeProps;
+    if (tp) {
+      this.outskirts.lots.forEach(b => {
+        if (!this.isVisible(b.x - 60, b.y - 120, b.w + 120, b.h + 180, camera, screenW, screenH)) return;
+        if (b.type === 'garage') tp.drawGarage(ctx, b);
+        else tp.drawMajorBuilding(ctx, b);
+      });
+    }
+
+    // 4. Дымка: чем дальше от забора, тем темнее
+    if (!this.outskirtsFog) {
+      const fog = (ax, ay, bx, by) => {
+        const g = ctx.createLinearGradient(ax, ay, bx, by);
+        g.addColorStop(0, 'rgba(9, 12, 17, 0.42)');
+        g.addColorStop(0.45, 'rgba(9, 12, 17, 0.66)');
+        g.addColorStop(1, 'rgba(9, 12, 17, 0.86)');
+        return g;
+      };
+      this.outskirtsFog = {
+        top: fog(0, 0, 0, -1100), bottom: fog(0, worldH, 0, worldH + 1100),
+        left: fog(0, 0, -1100, 0), right: fog(worldW, 0, worldW + 1100, 0)
+      };
+    }
+    const f = this.outskirtsFog;
+    const far = 4000;
+    ctx.fillStyle = f.top; ctx.fillRect(-far, -far, worldW + far * 2, far);
+    ctx.fillStyle = f.bottom; ctx.fillRect(-far, worldH, worldW + far * 2, far);
+    ctx.fillStyle = f.left; ctx.fillRect(-far, 0, far, worldH);
+    ctx.fillStyle = f.right; ctx.fillRect(worldW, 0, far, worldH);
+  }
+
+  // Сегменты забора по периметру: лицом вдоль верхней/нижней границы, торцом вдоль боковых
+  borderFenceSegments(worldW, worldH) {
+    if (this.borderSegments) return this.borderSegments;
+    const segs = [];
+    for (let x = 55; x < worldW; x += 110) {
+      segs.push({ x, y: 15, dir: 0, w: 130, h: 130, baseY: 40, side: 'top' });
+      segs.push({ x, y: worldH - 25, dir: 0, w: 130, h: 130, baseY: worldH, side: 'bottom' });
+    }
+    for (let y = 30; y < worldH; y += 50) {
+      segs.push({ x: 20, y, dir: 4, w: 130, h: 130, baseY: y + 30, side: 'left' });
+      segs.push({ x: worldW - 20, y, dir: 4, w: 130, h: 130, baseY: y + 30, side: 'right' });
+    }
+    segs.sort((a, b) => a.baseY - b.baseY); // ближние к камере (ниже по экрану) рисуются поверх дальних
+    this.borderSegments = segs;
+    return segs;
+  }
+
+  drawBorderSegment(ctx, s) {
+    const tp = window.threeProps;
+    // Целая и сколотая плиты вперемешку, половина отражена — забор не повторяется
+    const drawn = tp && tp.isLoaded['fence_po2'] &&
+      tp.drawFenceSlab(ctx, tp.fenceVariant(s.x, s.y), s.dir, s.x, s.y, s.w, s.h);
+    if (!drawn) {
+      ctx.fillStyle = '#6b7280';
+      if (s.dir === 0) ctx.fillRect(s.x - 55, s.y - 30, 110, 45);
+      else ctx.fillRect(s.x - 8, s.y - 40, 16, 60);
+    }
+  }
+
+  drawBorderFence(ctx, camera, screenW, screenH, worldW, worldH) {
+    const segs = this.borderFenceSegments(worldW, worldH);
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i];
+      if (!this.isVisible(s.x - s.w / 2, s.y - s.h / 2, s.w, s.h, camera, screenW, screenH)) continue;
+      this.drawBorderSegment(ctx, s);
+    }
+  }
+
+  // Единичные градиенты света (радиус/длина 1), масштабируются при рисовании: в кадре ничего не создаётся
+  ensureLightGradients(ctx) {
+    if (this.lightGrad) return;
+    const pool = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    pool.addColorStop(0, 'rgba(255, 192, 105, 0.52)');
+    pool.addColorStop(0.3, 'rgba(255, 170, 78, 0.32)');
+    pool.addColorStop(0.65, 'rgba(255, 140, 55, 0.11)');
+    pool.addColorStop(1, 'rgba(255, 120, 40, 0)');
+    const halo = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    halo.addColorStop(0, 'rgba(255, 246, 220, 0.95)');
+    halo.addColorStop(0.14, 'rgba(255, 214, 140, 0.7)');
+    halo.addColorStop(0.42, 'rgba(255, 168, 78, 0.2)');
+    halo.addColorStop(1, 'rgba(255, 150, 60, 0)');
+    const cone = ctx.createLinearGradient(0, 0, 1, 0);
+    cone.addColorStop(0, 'rgba(255, 205, 130, 0.22)');
+    cone.addColorStop(0.7, 'rgba(255, 180, 95, 0.07)');
+    cone.addColorStop(1, 'rgba(255, 170, 80, 0)');
+    this.lightGrad = { pool, halo, cone };
+  }
+
+  // Яркость фонаря 0..1: лёгкое неравномерное «дыхание» натриевой лампы; у неисправных — серии провалов
+  lampIntensity(lp, t) {
+    const fract = (v) => v - Math.floor(v);
+    let k = 0.9 + 0.06 * Math.sin(t * 1.3 + lp.seed * 40) + 0.04 * Math.sin(t * 3.7 + lp.seed * 17);
+    if (lp.faulty) {
+      // Двухсекундные окна: в части из них лампа «барахлит» короткими провалами по ~120 мс
+      const troubled = fract(Math.sin(Math.floor(t * 0.5) * 7.13 + lp.seed * 19.1) * 3758.5) < 0.4;
+      if (troubled) {
+        const r = fract(Math.sin(Math.floor(t * 8) * 12.9898 + lp.seed * 78.233) * 43758.5453);
+        if (r < 0.5) k *= 0.08 + r * 0.6;
+      }
+    }
+    return k;
+  }
+
+  // Конус света от плафона к пятну на земле (дымка)
+  fillLampCone(ctx, lp) {
+    const dx = lp.lightX - lp.headX;
+    const dy = lp.lightY + 6 - lp.headY;
+    ctx.save();
+    ctx.translate(lp.headX, lp.headY);
+    ctx.rotate(Math.atan2(dy, dx));
+    ctx.scale(Math.hypot(dx, dy), 1);
+    ctx.fillStyle = this.lightGrad.cone;
+    ctx.beginPath();
+    ctx.moveTo(0, -5);
+    ctx.lineTo(1, -62);
+    ctx.lineTo(1, 62);
+    ctx.lineTo(0, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  fillUnitCircle(ctx, x, y, rx, ry, fill) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(rx, ry);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Пятна света на земле — до персонажей (тени и фигуры ложатся поверх освещённого асфальта)
+  drawLampPools(ctx, camera, screenW, screenH) {
+    this.ensureLightGradients(ctx);
+    const t = performance.now() / 1000;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < this.staticStreetLamps.length; i++) {
+      const lp = this.staticStreetLamps[i];
+      if (!this.isVisible(lp.lightX - 130, lp.lightY - 80, 260, 160, camera, screenW, screenH)) continue;
+      const k = this.lampIntensity(lp, t);
+      if (k < 0.03) continue;
+      ctx.globalAlpha = k;
+      this.fillUnitCircle(ctx, lp.lightX, lp.lightY, 122, 72, this.lightGrad.pool);
+    }
+    ctx.restore();
+  }
+
+  // Плафоны, ореолы и дымка конуса — поверх персонажей: лампа висит высоко, а проходящих под ней
+  // тёплый конус слегка подсвечивает
+  drawLampGlows(ctx, camera, screenW, screenH) {
+    this.ensureLightGradients(ctx);
+    const t = performance.now() / 1000;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < this.staticStreetLamps.length; i++) {
+      const lp = this.staticStreetLamps[i];
+      if (!this.isVisible(Math.min(lp.headX, lp.lightX) - 80, lp.headY - 70, 260, lp.lightY - lp.headY + 150, camera, screenW, screenH)) continue;
+      const k = this.lampIntensity(lp, t);
+      if (k < 0.03) continue;
+      ctx.globalAlpha = k;
+      this.fillLampCone(ctx, lp);
+      ctx.globalAlpha = 0.35 * k;
+      this.fillUnitCircle(ctx, lp.headX, lp.headY + 3, 62, 44, this.lightGrad.halo);
+      ctx.globalAlpha = k;
+      this.fillUnitCircle(ctx, lp.headX, lp.headY + 3, 17, 12, this.lightGrad.halo);
+    }
+    ctx.restore();
   }
 
   ensureCourtyardLayout(buildings) {
@@ -345,6 +604,9 @@ class EnvironmentRenderer {
     this.ensurePatterns(ctx);
     this.ensureCourtyardLayout(buildings);
 
+    // 0. ГОРОД ЗА ЗАБОРОМ (видно только у границы карты)
+    this.drawOutskirts(ctx, camera, screenW, screenH, worldWidth, worldHeight, roads);
+
     const viewX = Math.max(0, camera.x);
     const viewY = Math.max(0, camera.y);
     const viewW = Math.min(worldWidth - viewX, screenW);
@@ -376,6 +638,9 @@ class EnvironmentRenderer {
 
     // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (3D Хрущевки, Брежневки, Котельные, Штабы, 3D Гаражи, Заборы ПО-2, Теплотрассы)
     this.drawBuildings(ctx, camera, screenW, screenH, buildings);
+
+    // 5.2. БЕТОННЫЙ ЗАБОР ПО-2 ПО ПЕРИМЕТРУ КАРТЫ
+    this.drawBorderFence(ctx, camera, screenW, screenH, worldWidth, worldHeight);
 
     // 5.5. ДВОРОВОЕ БЛАГОУСТРОЙСТВО И УЛИЧНОЕ ОСВЕЩЕНИЕ (Скамейки, маленькие урны, кусты, деревья с побелкой, фонари «Кобра»)
     this.drawStreetAndCourtyardProps(ctx, camera, screenW, screenH);
@@ -651,21 +916,8 @@ class EnvironmentRenderer {
     const tree1Img = this.props['autumn_tree_1'];
     const lampImg = this.props['street_lamp'];
 
-    // 1. Теплые пятна натриевого света от уличных фонарей на асфальте и тротуарах
-    for (let i = 0; i < this.staticStreetLamps.length; i++) {
-      const lp = this.staticStreetLamps[i];
-      if (!this.isVisible(lp.lightX - 90, lp.lightY - 90, 180, 180, camera, screenW, screenH)) continue;
-
-      ctx.fillStyle = 'rgba(251, 191, 36, 0.08)';
-      ctx.beginPath();
-      ctx.ellipse(lp.lightX, lp.lightY, 78, 52, 0, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = 'rgba(253, 224, 71, 0.11)';
-      ctx.beginPath();
-      ctx.ellipse(lp.lightX, lp.lightY, 42, 28, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // 1. Тёплые пятна натриевого света от уличных фонарей на асфальте и тротуарах
+    this.drawLampPools(ctx, camera, screenW, screenH);
 
     // 2. Дворовые кусты в палисадниках
     if (bush1Img) {
@@ -756,12 +1008,8 @@ class EnvironmentRenderer {
     ctx.translate(lp.x, lp.y);
     ctx.scale(lp.flipX || 1, 1);
     ctx.drawImage(lampImg, -36, -138, 72, 144);
-    // Теплое свечение самой натриевой лампы в плафоне «Кобры»
-    ctx.fillStyle = 'rgba(253, 224, 71, 0.38)';
-    ctx.beginPath();
-    ctx.arc(16, -116, 14, 0, Math.PI * 2);
-    ctx.fill();
     ctx.restore();
+    // Свечение плафона рисует drawLampGlows() поверх персонажей
   }
 
   /**
@@ -782,6 +1030,16 @@ class EnvironmentRenderer {
       if (!this.isVisible(lp.x - 60, lp.y - 160, 120, 180, camera, screenW, screenH)) continue;
       const r = { x: lp.x - 36, y: lp.y - 138, w: 72, h: 144 };
       if (actors.some(a => a.y < lp.y && overlaps(r, a))) this.drawLamp(ctx, lp);
+    }
+    // Плиты пограничного забора (нижняя и боковые границы), стоящие ближе к камере, чем персонаж
+    if (this.borderSegments) {
+      for (let i = 0; i < this.borderSegments.length; i++) {
+        const s = this.borderSegments[i];
+        if (s.side === 'top') continue;
+        if (!this.isVisible(s.x - s.w / 2, s.y - s.h / 2, s.w, s.h, camera, screenW, screenH)) continue;
+        const r = { x: s.x - (s.dir === 0 ? 60 : 12), y: s.y - 45, w: s.dir === 0 ? 120 : 24, h: 80 };
+        if (actors.some(a => a.y < s.baseY && overlaps(r, a))) this.drawBorderSegment(ctx, s);
+      }
     }
   }
 
@@ -950,7 +1208,7 @@ class EnvironmentRenderer {
 
     // 2. Затем отрисовываем основные здания (3D Хрущевки, Брежневки, Котельные ТЭЦ, Военные штабы и 3D-гаражи)
     buildings.forEach(b => {
-      if (b.type === 'fence_wall' || b.type === 'heating_line') return;
+      if (b.type === 'fence_wall' || b.type === 'heating_line' || b.type === 'border_fence') return;
       if (!this.isVisible(b.x - 40, b.y - 40, b.w + 80, b.h + 80, camera, screenW, screenH)) return;
 
       if (b.type === 'panel' || b.type === 'boiler_house' || b.type === 'military_hq') {

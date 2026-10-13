@@ -41,6 +41,7 @@
 | Машины, ящики, баки (кэш 256 px) | `car_uaz.glb` | ≤ 5 тыс. | ≤ 512, WebP | ≤ 0.35 МБ |
 | Здания | `building_brezhnevka.glb` | ≤ 8 тыс. | ≤ 512–1024, WebP | ≤ 0.5 МБ |
 | Лут | `loot_stew.glb` | ≤ 3–4 тыс. | ≤ 512, WebP | ≤ 0.35 МБ |
+| Плиты забора ПО-2 | `fence_po2_b.glb` | ≤ 3.5 тыс. | ≤ 512, WebP | ≤ 0.25 МБ |
 
 Генераторы (Rodin, Tripo, Hunyuan) отдают 300+ тыс. треугольников и текстуры 2–4K — **сырые модели в игру не кладём никогда**.
 
@@ -52,6 +53,8 @@
 
 - **Hyper3D Rodin через Blender MCP** — основной путь (`generate_3d` в MCP). Пробный ключ аддона (`vibecoding`) общий и с дневным лимитом: при `API_INSUFFICIENT_FUNDS` ждём сброса или ставим свой ключ.
   - ⚠️ В рабочей сети крупные загрузки обрываются (SSL EOF): **картинку перед отправкой ужимаем до WebP ≤ 14 КБ** (как `prepare_14k_webp()` в `tools/process_*_pipeline.py`).
+  - ⚠️ Готовый GLB с `file.hyper3d.com` по той же причине скачивается с «Read timed out»: качаем кусками по 14336 байт (`curl.exe -r start-end`, 16 потоков) и склеиваем. Ссылку даёт `POST https://hyperhuman.deemos.com/api/v2/download` с `{"task_uuid": …}` и заголовком `Authorization: Bearer <ключ>`.
+  - Настройки Rodin в аддоне хранятся **в каждой сцене отдельно**: если генератор «выключен», а галочка стоит — значит, активна другая сцена (скопируйте `blendermcp_use_hyper3d`, `blendermcp_hyper3d_mode`, `blendermcp_hyper3d_api_key`).
 - **Hunyuan3D 2.1** — бесплатно, по картинке: https://huggingface.co/spaces/tencent/Hunyuan3D-2.1 → «Gen Textured Shape» → Export: `glb`, *Simplify Mesh* выключить → Transform → Download. Без входа в аккаунт Hugging Face квота GPU маленькая.
 - **Tripo** — бесплатный тариф ограничивает число скачиваний, модели публичные (CC BY 4.0 — при публикации нужно указать автора).
 
