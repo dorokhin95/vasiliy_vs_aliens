@@ -855,7 +855,10 @@ const LANGS = {
     installed: "УСТАНОВЛЕНО",
     locked_by: "БЛОКИРУЕТСЯ:",
     cost_scrap: "чермета",
-    cost_bottles: "бут."
+    cost_bottles: "бут.",
+    boss_name: "ЗОЛОТОЙ МЯСНИК",
+    boss_enraged: "ЯРОСТЬ!",
+    boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!"
   },
   en: {
     game_title: "Vasiliy vs Aliens",
@@ -891,7 +894,10 @@ const LANGS = {
     installed: "INSTALLED",
     locked_by: "LOCKED BY:",
     cost_scrap: "scrap",
-    cost_bottles: "bot."
+    cost_bottles: "bot.",
+    boss_name: "THE GOLDEN BUTCHER",
+    boss_enraged: "ENRAGED!",
+    boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!"
   }
 };
 
@@ -1383,21 +1389,32 @@ function generateWorld() {
         if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
         if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
 
-        // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
-        tryAddContainer(bcx - 65, bcy - 45, 'box', null, 0);
-        tryAddContainer(bcx + 55, bcy - 40, 'box', null, 1);
-        tryAddContainer(bcx - 50, bcy + 55, 'box', null, 2);
-        tryAddContainer(bcx + 65, bcy + 60, 'box', null, 0);
-        tryAddContainer(x2 - 140, y1 + 140, 'car', 'uaz', 8);
+        // СВ угол — логово босса: вместо центрального склада открытая арена, ящики-трофеи по краям
+        const isBossLair = (cIdx === 3 && rIdx === 0);
+        if (isBossLair) {
+          tryAddContainer(x2 - 40, y1 + 40, 'box', null, 1);
+          tryAddContainer(x2 - 40, y2 - 260, 'box', null, 2);
+        } else {
+          // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
+          tryAddContainer(bcx - 65, bcy - 45, 'box', null, 0);
+          tryAddContainer(bcx + 55, bcy - 40, 'box', null, 1);
+          tryAddContainer(bcx - 50, bcy + 55, 'box', null, 2);
+          tryAddContainer(bcx + 65, bcy + 60, 'box', null, 0);
+          tryAddContainer(x2 - 140, y1 + 140, 'car', 'uaz', 8);
+        }
         tryAddContainer(x1 + 150, bcy + 10, 'car', 'uaz', 0);
 
-        // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы)
-        for (let i = 0; i < 8; i++) {
+        // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы);
+        // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
+        const packSize = isBossLair ? 3 : 8;
+        for (let i = 0; i < packSize; i++) {
           spawnEnemyInRect(x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist);
         }
       }
     });
   });
+
+  spawnBoss();
 }
 
 function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
@@ -2445,6 +2462,41 @@ const SoundFX = {
     nSrc.start(now);
     nSrc.stop(now + 0.37);
   },
+  bossSwing(heavy = false) {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    // Тяжёлый свист ржавого тесака
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(260, now);
+    filter.frequency.exponentialRampToValueAtTime(90, now + 0.28);
+    const nGain = ac.createGain();
+    nGain.gain.setValueAtTime(0.32, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    nSrc.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(ac.destination);
+    nSrc.start(now);
+    nSrc.stop(now + 0.31);
+
+    if (heavy) {
+      // Глухой удар о землю
+      const osc = ac.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(72, now);
+      osc.frequency.exponentialRampToValueAtTime(26, now + 0.32);
+      const oGain = ac.createGain();
+      oGain.gain.setValueAtTime(0.55, now);
+      oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+      osc.connect(oGain);
+      oGain.connect(ac.destination);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    }
+  },
   ricochet() {
     const ac = this.ensure();
     if (!ac) return;
@@ -2601,7 +2653,7 @@ function shootPlayerWeapon() {
           e.hitFlash = 6;
 
           // Отбрасывание жабы шипованной битой (чтобы можно было держать дистанцию в стартовой зоне!)
-          const kb = isExhausted ? 7 : (e.type === 'brute' ? 8 : 20);
+          const kb = e.type === 'boss' ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
           const kx = e.x + Math.cos(toEnemyAngle) * kb;
           const ky = e.y + Math.sin(toEnemyAngle) * kb;
           if (!checkBuildingCollision(kx, ky, e.radius)) {
@@ -3043,6 +3095,15 @@ function updateHUD(forceWeaponRefresh = false) {
     }
   }
 
+  // Полоска здоровья босса — пока он сражается с Василием
+  const showBossBar = !!(bossRef && bossRef.isAggroed && gameState === 'PLAYING');
+  setHudStyle(document.getElementById('boss-bar'), 'display', showBossBar ? 'flex' : 'none');
+  if (showBossBar) {
+    const bossPct = Math.max(0, Math.round((bossRef.hp / bossRef.maxHp) * 1000) / 10);
+    setHudStyle(document.getElementById('boss-bar-fill'), 'width', `${bossPct}%`);
+    setHudText(document.getElementById('boss-name'), bossRef.enraged ? `${t('boss_name')} — ${t('boss_enraged')}` : t('boss_name'));
+  }
+
   if (gameState === 'PLAYING' && dist && dist.id !== lastPlayerDistrictId) {
     lastPlayerDistrictId = dist.id;
     const label = currentLang === 'ru' ? dist.name_ru : dist.name_en;
@@ -3183,10 +3244,502 @@ function spawnLootDrop(enemyOrX, yOpt) {
 function handleEnemyKilled(index) {
   const dead = enemies[index];
   if (!dead) return;
+  if (dead.type === 'boss') {
+    // Босс появляется один раз за забег — без респавна
+    enemies.splice(index, 1);
+    onBossDefeated(dead);
+    return;
+  }
   createParticles(dead.x, dead.y, dead.type === 'brute' ? '#a855f7' : '#16a34a', 22);
   spawnLootDrop(dead);
   enemies.splice(index, 1);
   setTimeout(() => spawnPatrolEnemy(dead), 12000);
+}
+
+// --- БОСС «ЗОЛОТОЙ МЯСНИК» (логово в СВ Квако-гнезде, появляется один раз за забег) ---
+const BOSS_HOME = { x: 3680, y: 330 };
+const BOSS_LEASH_RADIUS = 720;
+const BOSS_MAX_HP = 4200;
+// Тайминги — в кадрах симуляции (60 в секунду); arc — половина угла сектора в радианах
+const BOSS_ATTACKS = {
+  slash: { windup: 34, active: 8, recover: 30, range: 165, arc: 1.2, damage: 30 },
+  chop: { windup: 52, active: 6, recover: 50, range: 235, width: 56, damage: 55 },
+  spin: { windup: 38, active: 30, recover: 44, range: 150, damage: 22 },
+  lunge: { windup: 40, active: 14, recover: 36, range: 300, damage: 34 }
+};
+// За столько кадров до удара босс перестаёт доворачиваться — окно, чтобы уйти перекатом
+const BOSS_AIM_LOCK_FRAMES = 14;
+let bossRef = null;
+
+function spawnBoss() {
+  bossRef = {
+    type: 'boss',
+    x: BOSS_HOME.x,
+    y: BOSS_HOME.y,
+    radius: 40,
+    hp: BOSS_MAX_HP,
+    maxHp: BOSS_MAX_HP,
+    speed: 1.9,
+    aggroRadius: 360,
+    isAggroed: false,
+    hitFlash: 0,
+    angle: Math.PI / 2,
+    animTimer: 0,
+    isMoving: false,
+    attack: null,
+    attackCooldown: 0,
+    lungeCooldown: 0,
+    enraged: false,
+    introShown: false
+  };
+  enemies.push(bossRef);
+}
+
+function bossHitPlayer(e, damage) {
+  if (player.isRolling) return; // перекат даёт неуязвимость
+  player.hp -= damage;
+  const a = Math.atan2(player.y - e.y, player.x - e.x);
+  const kx = player.x + Math.cos(a) * 26;
+  const ky = player.y + Math.sin(a) * 26;
+  if (!checkBuildingCollision(kx, ky, player.radius)) {
+    player.x = kx;
+    player.y = ky;
+  }
+  cameraKickX += Math.cos(a) * 9;
+  cameraKickY += Math.sin(a) * 9;
+  createParticles(player.x, player.y, '#ef4444', 10);
+  addFloatingText(player.x, player.y - 30, `-${damage}`, '#ef4444');
+  if (player.hp <= 0) gameOver();
+}
+
+function startBossAttack(e, key) {
+  const def = BOSS_ATTACKS[key];
+  const tempo = e.enraged ? 0.8 : 1.0;
+  e.attack = {
+    key,
+    phase: 'windup',
+    t: 0,
+    windup: Math.round(def.windup * tempo),
+    recover: Math.round(def.recover * tempo),
+    aim: Math.atan2(player.y - e.y, player.x - e.x),
+    hit: false
+  };
+  if (key === 'lunge') e.lungeCooldown = 240;
+}
+
+function onBossStrike(e, a, def) {
+  SoundFX.bossSwing(a.key === 'chop');
+  if (a.key === 'slash') {
+    muzzleFlashes.push({ x: e.x, y: e.y - 18, angle: a.aim, type: 'boss_slash', life: 10, maxLife: 10, scale: def.range / 54 });
+  } else if (a.key === 'spin') {
+    muzzleFlashes.push({ x: e.x, y: e.y - 12, angle: a.aim, type: 'boss_spin', life: def.active, maxLife: def.active, scale: def.range / 54 });
+  } else if (a.key === 'chop') {
+    muzzleFlashes.push({ x: e.x, y: e.y, angle: a.aim, type: 'boss_chop', life: 45, maxLife: 45, scale: 1.0, range: def.range });
+    const tipX = e.x + Math.cos(a.aim) * def.range;
+    const tipY = e.y + Math.sin(a.aim) * def.range;
+    spawnDirectionalSparks(tipX, tipY, a.aim + Math.PI, 2.4, 14, '#fbbf24', 4, 12, 14);
+    spawnGunpowderSmoke(e.x + Math.cos(a.aim) * def.range * 0.5, e.y + Math.sin(a.aim) * def.range * 0.5, a.aim, 6);
+    cameraKickX += (Math.random() - 0.5) * 16;
+    cameraKickY += (Math.random() - 0.5) * 16;
+  }
+}
+
+function updateBossStrike(e, a, def) {
+  const dx = player.x - e.x;
+  const dy = player.y - e.y;
+  const dist = Math.hypot(dx, dy);
+
+  if (a.key === 'slash') {
+    if (a.t === 2 && dist < def.range + player.radius) {
+      let diff = Math.atan2(dy, dx) - a.aim;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) < def.arc) bossHitPlayer(e, def.damage);
+    }
+  } else if (a.key === 'chop') {
+    if (a.t === 1) {
+      const along = dx * Math.cos(a.aim) + dy * Math.sin(a.aim);
+      const across = Math.abs(-dx * Math.sin(a.aim) + dy * Math.cos(a.aim));
+      if (along > -player.radius && along < def.range + player.radius && across < def.width / 2 + player.radius) {
+        bossHitPlayer(e, def.damage);
+      }
+    }
+  } else if (a.key === 'spin') {
+    if ((a.t === 4 || a.t === 19) && dist < def.range + player.radius) bossHitPlayer(e, def.damage);
+  } else if (a.key === 'lunge') {
+    const step = def.range / def.active;
+    const nx = e.x + Math.cos(a.aim) * step;
+    const ny = e.y + Math.sin(a.aim) * step;
+    if (!checkBuildingCollision(nx, e.y, e.radius)) e.x = nx;
+    if (!checkBuildingCollision(e.x, ny, e.radius)) e.y = ny;
+    if (a.t % 2 === 0) createParticles(e.x, e.y + 14, '#78716c', 2);
+    if (!a.hit && dist < e.radius + player.radius + 34) {
+      a.hit = true;
+      bossHitPlayer(e, def.damage);
+    }
+    if (a.t === def.active - 3) {
+      muzzleFlashes.push({ x: e.x, y: e.y - 18, angle: a.aim, type: 'boss_slash', life: 10, maxLife: 10, scale: 2.4 });
+    }
+  }
+}
+
+function advanceBossAttack(e) {
+  const a = e.attack;
+  const def = BOSS_ATTACKS[a.key];
+  a.t++;
+
+  if (a.phase === 'windup') {
+    if (a.windup - a.t > BOSS_AIM_LOCK_FRAMES) {
+      a.aim = Math.atan2(player.y - e.y, player.x - e.x);
+    }
+    e.angle = a.aim;
+    if (a.t >= a.windup) {
+      a.phase = 'active';
+      a.t = 0;
+      onBossStrike(e, a, def);
+    }
+  } else if (a.phase === 'active') {
+    updateBossStrike(e, a, def);
+    if (a.t >= def.active) {
+      a.phase = 'recover';
+      a.t = 0;
+    }
+  } else if (a.t >= a.recover) {
+    e.attack = null;
+    e.attackCooldown = e.enraged ? 12 : 24;
+  }
+}
+
+function chooseBossAttack(e, dist) {
+  if (dist < 175) {
+    const r = Math.random();
+    const spinChance = e.enraged ? 0.38 : 0.22;
+    if (r < spinChance) return 'spin';
+    if (r < spinChance + 0.33) return 'chop';
+    return 'slash';
+  }
+  if (dist > 240 && dist < 470 && e.lungeCooldown <= 0) return 'lunge';
+  return null;
+}
+
+function updateBoss(e, playerInSafe, hasFumeAura) {
+  e.animTimer++;
+  if (e.hitFlash > 0) e.hitFlash--;
+  if (e.attackCooldown > 0) e.attackCooldown--;
+  if (e.lungeCooldown > 0) e.lungeCooldown--;
+
+  if (!e.enraged && e.hp < e.maxHp * 0.5) {
+    e.enraged = true;
+    addFloatingText(e.x - 30, e.y - 96, `🔥 ${t('boss_enraged')}`, '#f97316');
+    spawnDirectionalSparks(e.x, e.y - 30, -Math.PI / 2, Math.PI * 2, 24, '#f97316', 4, 11, 18);
+    SoundFX.bossSwing(true);
+  }
+
+  if (e.attack) {
+    e.isMoving = false;
+    advanceBossAttack(e);
+    return;
+  }
+
+  const dx = player.x - e.x;
+  const dy = player.y - e.y;
+  const dist = Math.hypot(dx, dy);
+  const playerInLair = Math.hypot(player.x - BOSS_HOME.x, player.y - BOSS_HOME.y) < BOSS_LEASH_RADIUS;
+
+  if (!e.isAggroed && dist < e.aggroRadius && !playerInSafe) e.isAggroed = true;
+  if (e.isAggroed && (!playerInLair || playerInSafe)) e.isAggroed = false;
+  if (e.isAggroed && !e.introShown) {
+    e.introShown = true;
+    addFloatingText(e.x - 60, e.y - 96, `⚔ ${t('boss_name')}`, '#facc15');
+  }
+
+  let speed = e.speed * (e.enraged ? 1.25 : 1.0);
+  if (hasFumeAura && dist < 140) speed *= 0.55;
+
+  if (!e.isAggroed) {
+    // Игрок ушёл из логова: возвращаемся домой и зализываем раны
+    const hx = BOSS_HOME.x - e.x;
+    const hy = BOSS_HOME.y - e.y;
+    const homeDist = Math.hypot(hx, hy);
+    e.isMoving = homeDist > 6;
+    if (e.isMoving) {
+      e.angle = Math.atan2(hy, hx);
+      e.x += (hx / homeDist) * Math.min(speed, homeDist);
+      e.y += (hy / homeDist) * Math.min(speed, homeDist);
+    }
+    if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.0015);
+    return;
+  }
+
+  e.angle = Math.atan2(dy, dx);
+  if (e.attackCooldown <= 0) {
+    const key = chooseBossAttack(e, dist);
+    if (key) {
+      e.isMoving = false;
+      startBossAttack(e, key);
+      return;
+    }
+  }
+
+  e.isMoving = dist > 95;
+  if (e.isMoving) {
+    const nx = e.x + (dx / dist) * speed;
+    const ny = e.y + (dy / dist) * speed;
+    if (!checkBuildingCollision(nx, e.y, e.radius)) e.x = nx;
+    if (!checkBuildingCollision(e.x, ny, e.radius)) e.y = ny;
+  }
+
+  // Тело босса непроходимое: выталкиваем Василия, а не наносим контактный урон
+  const overlap = e.radius + player.radius - dist;
+  if (overlap > 0 && dist > 0.01 && !player.isRolling) {
+    const px = player.x + (dx / dist) * overlap;
+    const py = player.y + (dy / dist) * overlap;
+    if (!checkBuildingCollision(px, py, player.radius)) {
+      player.x = px;
+      player.y = py;
+    }
+  }
+}
+
+function onBossDefeated(e) {
+  bossRef = null;
+  createParticles(e.x, e.y, '#facc15', 40);
+  spawnDirectionalSparks(e.x, e.y - 30, -Math.PI / 2, Math.PI * 2, 30, '#fde047', 5, 14, 22);
+  cameraKickX += (Math.random() - 0.5) * 20;
+  cameraKickY += (Math.random() - 0.5) * 20;
+  SoundFX.bossSwing(true);
+  addFloatingText(e.x - 110, e.y - 80, t('boss_defeated'), '#facc15');
+
+  // Разовая крупная награда, раскиданная вокруг тела
+  const reward = [
+    ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4],
+    ['scrap', 20], ['scrap', 20], ['bottle', 12], ['bottle', 12],
+    ['ammo_12g', 12], ['ammo_9x18', 24], ['vodka', 2], ['bandage', 3]
+  ];
+  reward.forEach(([type, val], i) => {
+    const a = (i / reward.length) * Math.PI * 2;
+    spawn3DLootItem(e.x + Math.cos(a) * 56, e.y + Math.sin(a) * 40, type, val);
+  });
+}
+
+function drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  if (BOSS_HOME.x + 220 < viewMinX || BOSS_HOME.x - 220 > viewMaxX || BOSS_HOME.y + 170 < viewMinY || BOSS_HOME.y - 170 > viewMaxY) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(14, 9, 6, 0.38)';
+  ctx.strokeStyle = 'rgba(234, 179, 8, 0.3)';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 10]);
+  ctx.beginPath();
+  ctx.ellipse(BOSS_HOME.x, BOSS_HOME.y + 10, 205, 150, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// Красная зона будущего удара: заливка растёт с замахом, после фиксации прицела контур светлеет
+function drawBossTelegraph(ctx, e) {
+  const a = e.attack;
+  if (!a || a.phase !== 'windup') return;
+  const def = BOSS_ATTACKS[a.key];
+  const p = Math.min(1, a.t / a.windup);
+  const locked = a.windup - a.t <= BOSS_AIM_LOCK_FRAMES;
+  const lungeHalfW = e.radius + 34;
+
+  const shape = (scale) => {
+    ctx.beginPath();
+    if (a.key === 'slash') {
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, def.range * scale, -def.arc, def.arc);
+      ctx.closePath();
+    } else if (a.key === 'chop') {
+      ctx.rect(0, -def.width / 2, def.range * scale, def.width);
+    } else if (a.key === 'spin') {
+      ctx.arc(0, 0, def.range * scale, 0, Math.PI * 2);
+    } else {
+      ctx.rect(0, -lungeHalfW, (def.range + e.radius) * scale, lungeHalfW * 2);
+    }
+  };
+
+  ctx.save();
+  ctx.translate(e.x, e.y);
+  ctx.rotate(a.aim);
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+  ctx.strokeStyle = locked ? 'rgba(254, 226, 226, 0.95)' : 'rgba(239, 68, 68, 0.6)';
+  ctx.lineWidth = locked ? 3 : 2;
+  shape(1);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = `rgba(239, 68, 68, ${0.18 + 0.2 * p})`;
+  shape(p);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Угол тесака для временной 2D-отрисовки (пока нет 3D-модели); lift — насколько клинок поднят над головой
+function bossSwordPose(e) {
+  const a = e.attack;
+  const rest = (a ? a.aim : e.angle) + 1.1 + Math.sin(e.animTimer * 0.08) * 0.08;
+  if (!a) return { angle: rest, lift: 0 };
+  const def = BOSS_ATTACKS[a.key];
+  const aim = a.aim;
+  const wp = Math.min(1, a.t / a.windup);
+  const ap = Math.min(1, a.t / def.active);
+  const rp = Math.min(1, a.t / a.recover);
+  const ease = (x) => 1 - Math.pow(1 - x, 3);
+  const lerp = (from, to, k) => from + (to - from) * k;
+
+  if (a.key === 'slash') {
+    if (a.phase === 'windup') return { angle: lerp(rest, aim - 1.7, ease(wp)), lift: 0 };
+    if (a.phase === 'active') return { angle: lerp(aim - 1.5, aim + 1.5, ease(ap)), lift: 0 };
+    return { angle: lerp(aim + 1.5, rest, rp), lift: 0 };
+  }
+  if (a.key === 'chop') {
+    if (a.phase === 'windup') return { angle: lerp(rest, aim + Math.PI, ease(wp)), lift: ease(wp) };
+    if (a.phase === 'active') return { angle: aim, lift: 1 - ap };
+    return { angle: lerp(aim, rest, rp * rp), lift: 0 };
+  }
+  if (a.key === 'spin') {
+    if (a.phase === 'windup') return { angle: lerp(rest, aim - 2.2, ease(wp)), lift: 0 };
+    if (a.phase === 'active') return { angle: aim - 2.2 + ap * Math.PI * 4, lift: 0 };
+    return { angle: lerp(aim - 2.2, rest, rp), lift: 0 };
+  }
+  if (a.phase === 'windup') return { angle: lerp(rest, aim + Math.PI * 0.85, ease(wp)), lift: 0 };
+  if (a.phase === 'active') return { angle: aim, lift: 0 };
+  return { angle: lerp(aim, rest, rp), lift: 0 };
+}
+
+function drawBossSword(ctx, pose) {
+  const len = 118 * (1 - pose.lift * 0.6);
+  ctx.save();
+  ctx.rotate(pose.angle);
+  ctx.fillStyle = '#3b2f25';
+  ctx.fillRect(-4, -4, 26, 8);
+  ctx.fillStyle = '#57534e';
+  ctx.fillRect(20, -9, 5, 18);
+  ctx.fillStyle = '#7c4a2d';
+  ctx.beginPath();
+  ctx.moveTo(25, -9);
+  ctx.lineTo(25 + len, -12);
+  ctx.lineTo(25 + len, 10);
+  ctx.lineTo(25, 7);
+  ctx.closePath();
+  ctx.fill();
+  // Зубья пилы по обуху
+  ctx.fillStyle = '#5b3a24';
+  for (let x = 32; x < 18 + len; x += 9) {
+    ctx.beginPath();
+    ctx.moveTo(x, -9.5);
+    ctx.lineTo(x + 4, -15);
+    ctx.lineTo(x + 8, -9.5);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(214, 211, 209, 0.55)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(27, 6);
+  ctx.lineTo(23 + len, 9);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Временная 2D-фигура босса; заменяется 3D-моделью, когда она загружена (window.threeBoss)
+function drawBossPlaceholder(ctx, e) {
+  const aim = e.attack ? e.attack.aim : e.angle;
+  const flip = Math.cos(aim) < 0 ? -1 : 1;
+  const bob = e.isMoving ? Math.sin(e.animTimer * 0.25) * 2 : Math.sin(e.animTimer * 0.06) * 1.2;
+  const step = e.isMoving ? Math.sin(e.animTimer * 0.25) * 5 : 0;
+  const pose = bossSwordPose(e);
+  const swordBehind = Math.sin(pose.angle) < -0.2 || pose.lift > 0.5;
+
+  ctx.save();
+  ctx.translate(e.x, e.y);
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.beginPath();
+  ctx.ellipse(0, 14, 46, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (e.enraged) {
+    ctx.strokeStyle = `rgba(249, 115, 22, ${0.45 + Math.sin(e.animTimer * 0.2) * 0.2})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(0, 12, 54, 22, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const handX = flip * 30;
+  const handY = -34 + bob;
+  if (swordBehind) {
+    ctx.save();
+    ctx.translate(handX, handY);
+    drawBossSword(ctx, pose);
+    ctx.restore();
+  }
+
+  ctx.save();
+  ctx.scale(flip, 1);
+  // Ноги в армейских штанах и ботинки
+  ctx.fillStyle = '#3f4a2e';
+  ctx.beginPath(); ctx.ellipse(-12, 2 + step, 11, 18, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(12, 2 - step, 11, 18, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2a2420';
+  ctx.beginPath(); ctx.ellipse(-12, 17 + step, 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(12, 17 - step, 12, 7, 0, 0, Math.PI * 2); ctx.fill();
+  // Золотой торс
+  ctx.fillStyle = '#c9a227';
+  ctx.beginPath(); ctx.ellipse(0, -30 + bob, 30, 30, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8c547';
+  ctx.beginPath(); ctx.ellipse(-7, -38 + bob, 13, 11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3b2f25';
+  ctx.fillRect(-28, -8 + bob, 56, 8);
+  // Цепи крест-накрест
+  ctx.strokeStyle = '#4b5563';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-24, -52 + bob); ctx.lineTo(22, -12 + bob);
+  ctx.moveTo(24, -52 + bob); ctx.lineTo(-22, -12 + bob);
+  ctx.stroke();
+  // Руки, наручи и шипастый наплечник
+  ctx.fillStyle = '#c9a227';
+  ctx.beginPath(); ctx.ellipse(-33, -30 + bob, 9, 16, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(31, -32 + bob, 9, 15, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#6b5b4b';
+  ctx.fillRect(-40, -24 + bob, 14, 9);
+  ctx.fillRect(24, -26 + bob, 14, 9);
+  ctx.fillStyle = '#57493d';
+  ctx.beginPath(); ctx.ellipse(-28, -52 + bob, 15, 11, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#a8a29e';
+  for (const sx of [-38, -28, -18]) {
+    ctx.beginPath();
+    ctx.moveTo(sx - 4, -58 + bob);
+    ctx.lineTo(sx, -70 + bob);
+    ctx.lineTo(sx + 4, -58 + bob);
+    ctx.fill();
+  }
+  // Голова с бородой
+  ctx.fillStyle = '#d4ae2f';
+  ctx.beginPath(); ctx.arc(0, -68 + bob, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8a6d1d';
+  ctx.beginPath(); ctx.ellipse(2, -59 + bob, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+  if (e.hitFlash > 0) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath(); ctx.ellipse(0, -36 + bob, 34, 42, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  if (!swordBehind) {
+    ctx.save();
+    ctx.translate(handX, handY);
+    drawBossSword(ctx, pose);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawBoss(ctx, e) {
+  if (window.threeBoss && window.threeBoss.draw(ctx, e)) return;
+  drawBossPlaceholder(ctx, e);
 }
 
 let _lastPromptKey = '';
@@ -3408,7 +3961,7 @@ function update() {
         e.hitFlash = 5;
 
         const hitAngle = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
-        const bloodColor = e.type === 'brute' ? '#a855f7' : '#22c55e';
+        const bloodColor = e.type === 'brute' ? '#a855f7' : (e.type === 'boss' ? '#facc15' : '#22c55e');
         spawnDirectionalSparks(b.x, b.y, hitAngle, 0.85, 5, b.weaponType === 'plasma' ? '#38bdf8' : '#fde047', 4, 10, 9);
         for (let k = 0; k < 4; k++) {
           const spA = hitAngle + (Math.random() - 0.5) * 0.9;
@@ -3456,6 +4009,10 @@ function update() {
 
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
+    if (e.type === 'boss') {
+      updateBoss(e, inSafe, hasFumeAura);
+      continue;
+    }
     const dxP = player.x - e.x;
     const dyP = player.y - e.y;
 
@@ -3819,6 +4376,58 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.lineTo(0, 3 * s);
       ctx.closePath();
       ctx.fill();
+
+    } else if (mf.type === 'boss_slash') {
+      // Широкий росчерк тесака Золотого Мясника (серп как у биты, но крупнее)
+      const prog = 1.0 - t;
+      const fade = Math.sin(prog * Math.PI);
+      const leadAngle = 1.2 - prog * 2.4;
+      const trailAngle = Math.min(1.2, leadAngle + 1.2 * Math.sin(prog * Math.PI + 0.25));
+      const rOuter = 54 * mf.scale;
+      const rInner = 36 * mf.scale;
+
+      ctx.fillStyle = `rgba(254, 215, 170, ${0.5 * fade})`;
+      ctx.beginPath();
+      ctx.arc(0, 0, rOuter, leadAngle, trailAngle, false);
+      ctx.arc(0, 0, rInner, trailAngle, leadAngle, true);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(239, 68, 68, ${0.8 * fade})`;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, rOuter + 3, leadAngle, trailAngle, false);
+      ctx.stroke();
+
+    } else if (mf.type === 'boss_spin') {
+      // Два оборота вихря: яркий хвост бежит по окружности
+      const sweep = (1.0 - t) * Math.PI * 4;
+      const r = 54 * mf.scale;
+      ctx.strokeStyle = 'rgba(254, 215, 170, 0.55)';
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      ctx.arc(0, 0, r * 0.85, sweep - 1.8, sweep);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, r, sweep - 1.4, sweep);
+      ctx.stroke();
+
+    } else if (mf.type === 'boss_chop') {
+      // Трещина в асфальте по линии удара сверху (ось X — направление удара)
+      ctx.strokeStyle = `rgba(20, 16, 12, ${0.85 * t})`;
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(24, 0);
+      for (let x = 40; x <= mf.range; x += 16) {
+        ctx.lineTo(x, Math.sin(x * 0.37) * 7);
+      }
+      ctx.stroke();
+      ctx.fillStyle = `rgba(168, 162, 158, ${0.22 * t})`;
+      ctx.beginPath();
+      ctx.ellipse(mf.range * 0.55, 0, mf.range * 0.5, 26, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
@@ -3898,10 +4507,19 @@ function render() {
     }
   }
 
+  // 6.5. Логово босса и красные зоны его ударов (под фигурами)
+  drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  if (bossRef) drawBossTelegraph(ctx, bossRef);
+
   // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
+
+    if (e.type === 'boss') {
+      drawBoss(ctx, e);
+      continue;
+    }
 
     // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела
     if (e.type === 'sniper' && e.isAggroed && e.shootCooldown > 0 && e.shootCooldown < 32) {
