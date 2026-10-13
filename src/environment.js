@@ -64,6 +64,9 @@ class EnvironmentRenderer {
       { key: 'autumn_tree_2', path: 'assets/sprites/props/autumn_tree_2.png?v=1025', type: 'prop' },
       { key: 'courtyard_bush', path: 'assets/sprites/props/courtyard_bush.png?v=1025', type: 'prop' },
       { key: 'courtyard_bush_2', path: 'assets/sprites/props/courtyard_bush_2.png?v=1025', type: 'prop' },
+      { key: 'bio_puddle_eggs', path: 'assets/sprites/props/bio_puddle_eggs.webp?v=1', type: 'prop' },
+      { key: 'bio_puddle_vents', path: 'assets/sprites/props/bio_puddle_vents.webp?v=1', type: 'prop' },
+      { key: 'bio_puddle_pod', path: 'assets/sprites/props/bio_puddle_pod.webp?v=1', type: 'prop' },
 
       // Здания
       { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png?v=1024', type: 'building' },
@@ -637,6 +640,9 @@ class EnvironmentRenderer {
     // 3. ДОРОЖНЫЕ ДЕТАЛИ (Люки, лужи и трафаретные указатели районов)
     this.drawRoadProps(ctx, camera, screenW, screenH);
 
+    // 3.5. БИО-ЛУЖИ КВАКО-ГНЁЗД (под всем, что стоит на земле)
+    this.drawBioPuddles(ctx, camera, screenW, screenH);
+
     // 4. БЕЗОПАСНАЯ ЗОНА (Магазин Михалыча на бетонной площади, защитный купол)
     this.drawSafeZone(ctx, camera, screenW, screenH, safeZone);
 
@@ -654,7 +660,6 @@ class EnvironmentRenderer {
   }
 
   drawDistrictAtmosphere(ctx, camera, screenW, screenH) {
-    const time = Date.now() * 0.0025;
 
     // A. Текстурное и цветовое тонирование кварталов по специализации
     const zones = [
@@ -705,21 +710,34 @@ class EnvironmentRenderer {
           ctx.arc(cx, cy, 18, 0, Math.PI * 2);
           ctx.fill();
         }
-      } else if (z.type === 'nest') {
-        for (let i = 0; i < 5; i++) {
-          const bx = z.x + 160 + ((i * 149) % (z.w - 300));
-          const by = z.y + 160 + ((i * 179) % (z.h - 300));
-          const pulseR = 36 + Math.sin(time + i * 1.4) * 4;
-          ctx.fillStyle = 'rgba(34, 197, 94, 0.18)';
-          ctx.beginPath();
-          ctx.arc(bx, by, pulseR, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.fillStyle = 'rgba(74, 222, 128, 0.38)';
-          ctx.beginPath();
-          ctx.arc(bx, by, pulseR * 0.45, 0, Math.PI * 2);
-          ctx.fill();
-        }
       }
+      // Био-лужи гнёзд рисует drawBioPuddles (их места и действие — в game.js)
+    }
+  }
+
+  // Лужи слизи с икрой, отдушинами и коконом — спрайты из концептов (tools/make_bio_puddle_sprites.py)
+  drawBioPuddles(ctx, camera, screenW, screenH) {
+    const list = this.bioPuddles;
+    if (!list) return;
+    const W = 170;
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      if (!this.isVisible(p.x - W / 2, p.y - W / 2, W, W, camera, screenW, screenH)) continue;
+      const img = this.props[p.sprite];
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (p.flip) ctx.scale(-1, 1);
+      if (img) {
+        const h = W * img.height / img.width;
+        ctx.drawImage(img, -W / 2, -h / 2, W, h);
+      } else {
+        // Спрайт ещё грузится: тёмное пятно слизи без яркого центра
+        ctx.fillStyle = 'rgba(54, 83, 20, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 58, 38, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
   }
 

@@ -53,7 +53,8 @@
 
 - **Hyper3D Rodin через Blender MCP** — основной путь (`generate_3d` в MCP). Пробный ключ аддона (`vibecoding`) общий и с дневным лимитом: при `API_INSUFFICIENT_FUNDS` ждём сброса или ставим свой ключ.
   - ⚠️ В рабочей сети крупные загрузки обрываются (SSL EOF): **картинку перед отправкой ужимаем до WebP ≤ 14 КБ** (как `prepare_14k_webp()` в `tools/process_*_pipeline.py`).
-  - ⚠️ Готовый GLB с `file.hyper3d.com` по той же причине скачивается с «Read timed out»: качаем кусками по 14336 байт (`curl.exe -r start-end`, 16 потоков) и склеиваем. Ссылку даёт `POST https://hyperhuman.deemos.com/api/v2/download` с `{"task_uuid": …}` и заголовком `Authorization: Bearer <ключ>`.
+  - ⚠️ Готовый GLB с `file.hyper3d.com` по той же причине скачивается с «Read timed out» (и `generate_3d` в MCP падает на этом шаге, хотя модель готова): `python tools/rodin_download.py <task_uuid> <out.glb>` качает её кусками по 14 КБ в 16 потоков. `task_uuid` — в handle задачи `hyper3d:main:<task_uuid>|…`.
+  - Плоские предметы (лужи, пятна, коврики) Rodin превращает в кольца и «медальоны». Для них 3D не нужно: концепт в ракурсе 3/4 сверху берётся спрайтом — см. `tools/make_bio_puddle_sprites.py` (фон в прозрачность, края растворяются в землю).
   - Настройки Rodin в аддоне хранятся **в каждой сцене отдельно**: если генератор «выключен», а галочка стоит — значит, активна другая сцена (скопируйте `blendermcp_use_hyper3d`, `blendermcp_hyper3d_mode`, `blendermcp_hyper3d_api_key`).
 - **Hunyuan3D 2.1** — бесплатно, по картинке: https://huggingface.co/spaces/tencent/Hunyuan3D-2.1 → «Gen Textured Shape» → Export: `glb`, *Simplify Mesh* выключить → Transform → Download. Без входа в аккаунт Hugging Face квота GPU маленькая.
 - **Tripo** — бесплатный тариф ограничивает число скачиваний, модели публичные (CC BY 4.0 — при публикации нужно указать автора).

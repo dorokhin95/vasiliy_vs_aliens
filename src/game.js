@@ -840,6 +840,7 @@ const LANGS = {
     game_over: "ПОТРАЧЕНО",
     game_over_sub: "Василий не вернулся с вылазки в Новохмуринск...",
     status_drunk: "ПОД МУХОЙ (+Урон, -Точность!)",
+    status_slime: "В СЛИЗИ: −40% скорости, кислота −6 HP/с",
     safe_zone: "БЕЗОПАСНАЯ ЗОНА: У МИХАЛЫЧА",
     prompt_shop: "[E] Открыть лавку и верстак Михалыча",
     prompt_search: "[E] Обыскать тайник",
@@ -886,6 +887,7 @@ const LANGS = {
     game_over: "WASTED",
     game_over_sub: "Vasiliy never returned from the raid...",
     status_drunk: "DRUNK BERSERK (+DMG, -Accuracy!)",
+    status_slime: "IN SLIME: −40% speed, acid −6 HP/s",
     safe_zone: "SAFE ZONE: MIKHALYCH'S SCRAP",
     prompt_shop: "[E] Open Mikhalych's Workbench",
     prompt_search: "[E] Scavenge stash",
@@ -1458,6 +1460,7 @@ function generateWorld() {
   ].forEach(r => buildings.push(Object.assign({ type: 'border_fence' }, r)));
 
   buildObstacles();
+  generateBioPuddles();
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   spawnBoss();
   levelEnemyTotal = enemies.filter(e => e.type !== 'boss').length;
@@ -3394,6 +3397,79 @@ function slideMove(ent, dx, dy, radius, steer = false) {
   if (!checkWalkCollision(ent.x, ty, radius, fo)) ent.y = ty;
 }
 
+// --- БИО-ЛУЖИ КВАКО-ГНЁЗД ---
+// Слизь жжёт и замедляет Василия, а жаб в ней подлечивает. По пять луж в каждом угловом гнезде;
+// места одинаковы при каждом запуске и не лезут под дома, тайники и в центр логова Мясника.
+// Спрайты — assets/sprites/props/bio_puddle_*.webp (tools/make_bio_puddle_sprites.py)
+const BIO_PUDDLE_SPRITES = ['bio_puddle_eggs', 'bio_puddle_vents', 'bio_puddle_pod'];
+const BIO_PUDDLE_W = 170;             // ширина спрайта в мире, px
+const BIO_PUDDLE_RX = 56;             // зона слизи — эллипс в центре спрайта
+const BIO_PUDDLE_RY = 38;
+const BIO_PUDDLE_SLOW = 0.6;          // скорость Василия в слизи
+const BIO_PUDDLE_DPS = 6;             // кислота, HP в секунду
+const BIO_PUDDLE_HEAL = 0.015;        // жабы лечатся: доля здоровья в секунду
+const BIO_PUDDLES_PER_NEST = 5;
+const BIO_NESTS = [
+  { x: 0, y: 0, w: 800, h: 800 },
+  { x: 3240, y: 0, w: 760, h: 800 },
+  { x: 0, y: 3240, w: 800, h: 760 },
+  { x: 3240, y: 3240, w: 760, h: 760 }
+];
+let bioPuddles = [];
+
+function generateBioPuddles() {
+  bioPuddles = [];
+  BIO_NESTS.forEach((z, zi) => {
+    let seed = 1234567 + zi * 7919; // свой генератор у каждого гнезда — раскладка не плывёт
+    const rnd = () => {
+      seed = (seed * 16807) % 2147483647;
+      return seed / 2147483647;
+    };
+    let placed = 0;
+    for (let tries = 0; tries < 300 && placed < BIO_PUDDLES_PER_NEST; tries++) {
+      const x = Math.round(z.x + 110 + rnd() * (z.w - 220));
+      const y = Math.round(z.y + 110 + rnd() * (z.h - 220));
+      if (checkBuildingCollision(x, y, 70)) continue;
+      if (containers.some(c => Math.hypot(c.x - x, c.y - y) < 110)) continue;
+      if (bioPuddles.some(p => Math.hypot(p.x - x, p.y - y) < 200)) continue;
+      if (Math.hypot(x - BOSS_HOME.x, y - BOSS_HOME.y) < 160) continue;
+      bioPuddles.push({ x, y, sprite: BIO_PUDDLE_SPRITES[(zi + placed) % BIO_PUDDLE_SPRITES.length], flip: rnd() < 0.5 });
+      placed++;
+    }
+  });
+  if (window.environmentRenderer) window.environmentRenderer.bioPuddles = bioPuddles;
+}
+
+// (x, y) — точка ступней
+function inBioPuddle(x, y) {
+  if (!((x < 870 || x > 3130) && (y < 870 || y > 3130))) return false; // лужи только в угловых гнёздах
+  for (let i = 0; i < bioPuddles.length; i++) {
+    const dx = (x - bioPuddles[i].x) / BIO_PUDDLE_RX;
+    const dy = (y - bioPuddles[i].y) / BIO_PUDDLE_RY;
+    if (dx * dx + dy * dy < 1) return true;
+  }
+  return false;
+}
+
+// Пузыри над видимыми лужами — чтобы было видно, что слизь живая
+function spawnBioPuddleBubbles() {
+  if (bioPuddles.length === 0 || Math.random() > 0.35) return;
+  const p = bioPuddles[Math.floor(Math.random() * bioPuddles.length)];
+  if (Math.abs(p.x - player.x) > canvas.width * 0.6 || Math.abs(p.y - player.y) > canvas.height * 0.6) return;
+  const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.8;
+  particles.push({
+    x: p.x + Math.cos(a) * BIO_PUDDLE_RX * r,
+    y: p.y + Math.sin(a) * BIO_PUDDLE_RY * r,
+    vx: (Math.random() - 0.5) * 0.2,
+    vy: -0.35 - Math.random() * 0.3,
+    radius: 1.6 + Math.random() * 2,
+    color: Math.random() < 0.5 ? '#a3e635' : '#4ade80',
+    drag: 0.99,
+    life: 34,
+    maxLife: 34
+  });
+}
+
 // --- ГРОМИЛЫ МЕТАЮТ ПРЕДМЕТЫ ---
 // Громила подходит к баку, ящику или урне (элитный из гнезда — ещё и к машине), поднимает над головой
 // и швыряет туда, где Василий. Место падения заранее подсвечено красным кругом — от броска уходят
@@ -3800,6 +3876,12 @@ function updateHUD(forceWeaponRefresh = false) {
     if (el) el.innerText = player.resources.alien_core;
   }
 
+  if (_hudCache.inSlime !== !!player.inSlime) {
+    _hudCache.inSlime = !!player.inSlime;
+    const slimeBadge = document.getElementById('slime-badge');
+    slimeBadge.textContent = t('status_slime');
+    slimeBadge.style.display = player.inSlime ? 'block' : 'none';
+  }
   if (_hudCache.isDrunk !== player.isDrunk) {
     _hudCache.isDrunk = player.isDrunk;
     const statusBadge = document.getElementById('status-badge');
@@ -4550,6 +4632,15 @@ function update() {
   if (player.hasPerk('shaman_carpet') && player.hp < player.maxHp) {
     player.hp = Math.min(player.maxHp, player.hp + 0.018);
   }
+  // Био-лужа: кислота жжёт (перекат проскакивает без урона), скорость режется ниже
+  player.inSlime = inBioPuddle(player.x, player.y + footDY(player));
+  if (player.inSlime && !player.isRolling) {
+    player.hp -= BIO_PUDDLE_DPS / 60;
+    player.slimeTick = (player.slimeTick || 0) + 1;
+    if (player.slimeTick % 10 === 0) createParticles(player.x, player.y + 24, '#84cc16', 2);
+    if (player.hp <= 0) gameOver();
+  }
+  spawnBioPuddleBubbles();
   if (player.itemCooldown > 0) player.itemCooldown--;
   if (player.healLeft > 0) {
     const h = Math.min(player.healLeft, BANDAGE_HEAL / BANDAGE_HEAL_FRAMES);
@@ -4600,6 +4691,7 @@ function update() {
 
   let currentSpeed = player.speed;
   if (player.hasPerk('slime_skin')) currentSpeed *= 1.22;
+  if (player.inSlime) currentSpeed *= BIO_PUDDLE_SLOW;
 
   if (player.rollCooldown > 0) player.rollCooldown--;
   // Страховка: если Василия всё же вытолкнуло внутрь препятствия, даём из него выйти, а не запираем
@@ -4879,6 +4971,11 @@ function update() {
     if (!e.animTimer) e.animTimer = 0;
     e.animTimer += 0.15;
     if (e.hitFlash > 0) e.hitFlash--;
+    // Жабам слизь гнезда в радость: стоя в луже, они понемногу лечатся
+    if (e.hp < e.maxHp && inBioPuddle(e.x, e.y + footDY(e))) {
+      e.hp = Math.min(e.maxHp, e.hp + e.maxHp * BIO_PUDDLE_HEAL / 60);
+      if (Math.random() < 0.06) createParticles(e.x, e.y - 10, '#4ade80', 1);
+    }
 
     if (e.isAggroed) {
       const angle = Math.atan2(player.y - e.y, player.x - e.x);
