@@ -756,6 +756,27 @@
       display: inline-block;
       white-space: nowrap;
     }
+    /* Купленное оружие: взять с собой / оставить у Михалыча */
+    .shop-buy-btn.equip {
+      background: #15803d;
+      border-color: #4ade80;
+    }
+    .shop-buy-btn.equip:hover:not(:disabled) { background: #16a34a; }
+    .shop-buy-btn.unequip {
+      background: #334155;
+      border-color: #64748b;
+    }
+    .shop-buy-btn.unequip:hover:not(:disabled) { background: #475569; }
+    .shop-buy-btn .equip-tag {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 1px;
+      opacity: 0.8;
+    }
+    .shop-card.stashed {
+      border-color: #475569;
+      background: rgba(51, 65, 85, 0.25);
+    }
     .shop-buy-btn:hover:not(:disabled) {
       background: #3b82f6;
     }
@@ -1442,7 +1463,7 @@
         <span id="menu-ctrl-aim">ЛКМ — Удар битой / Стрельба | R — Перезарядка</span><br>
         <span id="menu-ctrl-roll">ПРОБЕЛ — Перекат (тратит выносливость)</span> | 
         <span id="menu-ctrl-interact">E — Обыскать тайник / Лавка Михалыча | ESC — Пауза и настройки</span><br>
-        <span id="menu-ctrl-items">1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Следующее оружие</span>
+        <span id="menu-ctrl-items">1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Ближнее ↔ дальнее | Колесо — следующее оружие</span>
       </div>
     </div>
 
@@ -1538,14 +1559,14 @@
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1082"></script>
-  <script src="src/three_character.js?v=1082"></script>
-  <script src="src/three_enemies.js?v=1082"></script>
-  <script src="src/three_props.js?v=1082"></script>
-  <script src="src/three_boss.js?v=1082"></script>
-  <script src="src/game.js?v=1082"></script>
-  <script src="src/menu.js?v=1082"></script>
-  <script src="src/comic.js?v=1082"></script>
-  <script src="src/cards.js?v=1082"></script>
+  <script src="src/environment.js?v=1084"></script>
+  <script src="src/three_character.js?v=1084"></script>
+  <script src="src/three_enemies.js?v=1084"></script>
+  <script src="src/three_props.js?v=1084"></script>
+  <script src="src/three_boss.js?v=1084"></script>
+  <script src="src/game.js?v=1084"></script>
+  <script src="src/menu.js?v=1084"></script>
+  <script src="src/comic.js?v=1084"></script>
+  <script src="src/cards.js?v=1084"></script>
 </body>
 </html>

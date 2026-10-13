@@ -249,6 +249,7 @@ window.Menu = (() => {
         weapons: Object.keys(player.unlockedWeapons).filter(k => player.unlockedWeapons[k]),
         ammo: { makarov: ammo('makarov'), shotgun: ammo('shotgun') },
         currentWeapon: player.currentWeapon,
+        equipped: Object.keys(player.equipped || {}).filter(k => player.equipped[k]),
         perks: Array.from(player.unlockedPerks),
         blockedPerks: Array.from(player.blockedPerks),
         cards: Object.assign({}, player.cards),
@@ -345,7 +346,17 @@ window.Menu = (() => {
       player.ammo[k].clip = Math.floor(num(a.clip, player.ammo[k].clip, 0, player.ammo[k].maxClip));
       player.ammo[k].reserve = Math.floor(num(a.reserve, player.ammo[k].reserve, 0, 99999));
     });
-    if (player.unlockedWeapons[p.currentWeapon]) player.currentWeapon = p.currentWeapon;
+    // Что с собой: в старых сохранениях этого нет — тогда всё купленное
+    player.equipped = {};
+    const carried = Array.isArray(p.equipped) ? p.equipped : Object.keys(player.unlockedWeapons);
+    for (const k in player.unlockedWeapons) {
+      if (player.unlockedWeapons[k] && carried.includes(k)) player.equipped[k] = true;
+    }
+    if (player.unlockedWeapons[p.currentWeapon] && player.equipped[p.currentWeapon]) {
+      player.currentWeapon = p.currentWeapon;
+    } else {
+      player.currentWeapon = Object.keys(player.equipped)[0] || null;
+    }
     const knownPerk = id => Object.values(UPGRADE_TREES).some(tree => tree.perks[id]);
     (Array.isArray(p.perks) ? p.perks : []).filter(knownPerk).forEach(id => player.unlockedPerks.add(id));
     (Array.isArray(p.blockedPerks) ? p.blockedPerks : []).filter(knownPerk).forEach(id => player.blockedPerks.add(id));

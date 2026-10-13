@@ -389,6 +389,8 @@ class ThreeCharacterManager {
   }
 
   setWeapon(weaponId) {
+    // 'none' — всё оружие оставлено у Михалыча: руки как с битой, но пустые
+    const unarmed = (weaponId === 'none');
     const isBat = (weaponId === 'bat');
     const isMakarov = (weaponId === 'makarov');
     const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma');
@@ -400,8 +402,8 @@ class ThreeCharacterManager {
     if (this.plasmaObj) this.plasmaObj.visible = (weaponId === 'plasma');
 
     // Switch arm postures: one-handed (bat / pistol) vs two-handed (shotgun / drill / plasma)
-    if (this.armLDown) this.armLDown.visible = (isBat || isMakarov);
-    if (this.armRBat) this.armRBat.visible = isBat;
+    if (this.armLDown) this.armLDown.visible = (isBat || isMakarov || unarmed);
+    if (this.armRBat) this.armRBat.visible = (isBat || unarmed);
     if (this.armRPistol) this.armRPistol.visible = isMakarov;
     if (this.armsTwoHanded) this.armsTwoHanded.visible = isTwoHanded;
   }
@@ -419,7 +421,7 @@ class ThreeCharacterManager {
     this.lastY = player.y;
 
     // 1. Weapon Selection (hide weapon briefly during tight somersault roll so barrel doesn't poke ground)
-    const currentWeapon = player.currentWeapon || 'bat';
+    const currentWeapon = player.currentWeapon || 'none';
     if (player.isRolling) {
       if (this.batObj) this.batObj.visible = false;
       if (this.makarovObj) this.makarovObj.visible = false;

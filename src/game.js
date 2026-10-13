@@ -821,7 +821,13 @@ const LANGS = {
     controls_aim: "ЛКМ — Удар / Стрельба | R — Перезарядка",
     controls_roll: "ПРОБЕЛ — Перекат (-25 выносливости)",
     controls_interact: "E — Обыскать тайник / Лавка Михалыча | ESC — Пауза и настройки",
-    controls_items: "1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Следующее оружие",
+    controls_items: "1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Ближнее ↔ дальнее | Колесо — следующее оружие",
+    equip_btn: "Экипировать",
+    unequip_btn: "Снять",
+    equipped_tag: "С СОБОЙ",
+    stashed_tag: "У МИХАЛЫЧА",
+    left_at_shop: "🎒 ОСТАВЛЕНО У МИХАЛЫЧА",
+    unarmed: "✊ НЕЧЕМ БИТЬ — ВОЗЬМИ ОРУЖИЕ У МИХАЛЫЧА",
     hp: "ЗДОРОВЬЕ",
     stamina: "ВЫНОСЛИВ.",
     vodka: "Водка",
@@ -886,7 +892,13 @@ const LANGS = {
     controls_aim: "LMB — Attack / Shoot | R — Reload",
     controls_roll: "SPACE — Dodge Roll (-25 Stamina)",
     controls_interact: "E — Scavenge / Shop | ESC — Pause & settings",
-    controls_items: "1–8 — Hotbar slots (drag to reorder) | Q — Next weapon",
+    controls_items: "1–8 — Hotbar slots (drag to reorder) | Q — Melee ↔ ranged | Wheel — next weapon",
+    equip_btn: "Equip",
+    unequip_btn: "Unequip",
+    equipped_tag: "CARRIED",
+    stashed_tag: "AT MIKHALYCH",
+    left_at_shop: "🎒 LEFT AT MIKHALYCH",
+    unarmed: "✊ NOTHING TO FIGHT WITH — TAKE A WEAPON AT MIKHALYCH",
     hp: "HEALTH",
     stamina: "STAMINA",
     vodka: "Vodka",
@@ -1083,6 +1095,7 @@ const player = {
   plasmaOverheated: false,
   plasmaOverheatTimer: 0,
   currentWeapon: 'bat',
+  equipped: { bat: true }, // что из купленного Василий носит с собой (остальное — у Михалыча)
   unlockedPerks: new Set(),
   blockedPerks: new Set(),
   hasPerk(id) {
@@ -1635,6 +1648,15 @@ window.addEventListener('mousemove', (e) => {
   mouseScreen.y = e.clientY;
 });
 window.addEventListener('mousedown', (e) => { if (e.button === 0) mouseDown = true; });
+// Колесо — следующее/предыдущее взятое оружие (не чаще раза в 120 мс: колёса шлют пачку событий)
+let lastWheelAt = 0;
+window.addEventListener('wheel', (e) => {
+  if (gameState !== 'PLAYING' || e.deltaY === 0) return;
+  const now = performance.now();
+  if (now - lastWheelAt < 120) return;
+  lastWheelAt = now;
+  stepWeapon(e.deltaY > 0 ? 1 : -1);
+}, { passive: true });
 
 // --- ХОТБАР: слоты перетаскиваются мышью, клавиши 1–8 идут по видимому порядку, порядок сохраняется ---
 const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma'];
@@ -1657,9 +1679,9 @@ function saveHotbarOrder() {
   try { localStorage.setItem(HOTBAR_STORAGE_KEY, JSON.stringify(hotbarOrder)); } catch (e) { /* не критично */ }
 }
 
-// Ещё не купленное оружие в хотбаре скрыто и номера не занимает
+// Ещё не купленное и оставленное у Михалыча оружие в хотбаре скрыто и номера не занимает
 function visibleHotbarSlots() {
-  return hotbarOrder.filter(id => !HOTBAR_WEAPONS.has(id) || player.unlockedWeapons[id]);
+  return hotbarOrder.filter(id => !HOTBAR_WEAPONS.has(id) || isEquipped(id));
 }
 
 function activateHotbarSlot(id) {
@@ -1771,6 +1793,9 @@ function startGame(save = null) {
   player.plasmaOverheated = false;
   player.plasmaOverheatTimer = 0;
   player.currentWeapon = 'bat';
+  player.equipped = { bat: true };
+  player.lastMelee = 'bat';
+  player.lastRanged = null;
   player.baseDamage = 24;
   player.critChance = 0.05;
   player.critMult = 1.6;
@@ -1781,7 +1806,7 @@ function startGame(save = null) {
   generateWorld();
   if (save && window.Menu) window.Menu.applyRun(save);
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
-  if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon);
+  if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon || 'none');
   applyHotbarOrder();
   updateHUD(true);
 }
@@ -1914,6 +1939,21 @@ function scavengeContainer(c) {
 
 // --- КАТАЛОГ ОРУЖИЯ, ПАТРОНОВ И ПРИПАСОВ МИХАЛЫЧА (С PNG-РЕНДЕРАМИ) ---
 const SHOP_ARSENAL_ITEMS = [
+  // Бита своя с самого начала: в лавке её можно только взять с собой или оставить у Михалыча
+  {
+    id: 'bat',
+    type: 'weapon',
+    weaponKey: 'bat',
+    slotKey: '',
+    img: 'assets/sprites/weapons/weapon_bat.png?v=1026',
+    name_ru: 'Бита с гвоздями',
+    name_en: 'Spiked Bat',
+    desc_ru: 'Урон: 26 | Тратит 18 выносливости за удар. Отбрасывает жаб; удар во время замаха сбивает выпад языком.',
+    desc_en: 'DMG: 26 | Costs 18 stamina per swing. Knocks toads back; a hit during the windup stops a tongue lash.',
+    zone_ru: '🏚 Своя, с самого начала',
+    zone_en: '🏚 Your own, from the start',
+    cost: {}
+  },
   {
     id: 'makarov',
     type: 'weapon',
@@ -2122,8 +2162,9 @@ function renderArsenalAndSupplies() {
       if (item.weaponKey === 'plasma' && !canSeePlasma) return;
 
       const isOwnedWeapon = item.type === 'weapon' && player.unlockedWeapons[item.weaponKey];
+      const carried = isOwnedWeapon && isEquipped(item.weaponKey);
       const card = document.createElement('div');
-      card.className = `shop-card ${isOwnedWeapon ? 'owned' : ''}`;
+      card.className = `shop-card ${isOwnedWeapon ? 'owned' : ''} ${isOwnedWeapon && !carried ? 'stashed' : ''}`;
 
       const ammoInfo = item.type === 'ammo'
         ? ` (Запас: ${player.ammo[item.ammoKey].clip}/${player.ammo[item.ammoKey].reserve})`
@@ -2143,11 +2184,11 @@ function renderArsenalAndSupplies() {
       const btn = document.createElement('button');
       btn.className = 'shop-buy-btn';
       if (isOwnedWeapon) {
-        btn.disabled = true;
-        btn.style.background = '#166534';
-        btn.style.borderColor = '#22c55e';
-        btn.style.color = '#fff';
-        btn.innerHTML = currentLang === 'ru' ? `✅ КУПЛЕНО ${item.slotKey}` : `✅ OWNED ${item.slotKey}`;
+        // Купленное: взять с собой или оставить у Михалыча
+        btn.className = `shop-buy-btn ${carried ? 'unequip' : 'equip'}`;
+        btn.innerHTML = `<span class="equip-tag">${carried ? t('equipped_tag') : t('stashed_tag')}</span>` +
+          `<span>${carried ? t('unequip_btn') : t('equip_btn')}</span>`;
+        btn.onclick = () => window.setEquipped(item.weaponKey, !carried);
       } else {
         btn.disabled = !canAffordCost(item.cost);
         btn.innerHTML = formatCostHTML(item.cost);
@@ -2197,6 +2238,7 @@ function buyArsenalItem(item) {
   payCost(item.cost);
   if (item.type === 'weapon') {
     player.unlockedWeapons[item.weaponKey] = true;
+    player.equipped[item.weaponKey] = true; // купленное сразу с собой, снять можно в той же карточке
     if (item.weaponKey === 'makarov') {
       player.ammo.makarov.clip = 8;
       player.ammo.makarov.reserve += 16;
@@ -2409,6 +2451,43 @@ function performRoll() {
   }
 }
 
+// --- СНАРЯЖЕНИЕ: что Василий носит с собой ---
+// Купленное оружие лежит у Михалыча; с собой — то, что игрок экипировал в лавке (хоть всё, хоть
+// ничего). В хотбаре, на Q и на колесе — только взятое. Q меняет ближнее и дальнее: к последнему
+// дальнему из ближнего и обратно, колесо перебирает всё взятое по порядку хотбара
+const MELEE_WEAPONS = new Set(['bat', 'drill']);
+
+function isEquipped(w) {
+  return !!(player.unlockedWeapons[w] && player.equipped && player.equipped[w]);
+}
+
+function equippedWeapons() {
+  return hotbarOrder.filter(w => HOTBAR_WEAPONS.has(w) && isEquipped(w));
+}
+
+window.setEquipped = function(w, on) {
+  if (!player.unlockedWeapons[w]) return;
+  player.equipped[w] = on;
+  if (on) {
+    // Взял оружие, а руки пустые — сразу в руки
+    if (!player.currentWeapon) window.switchWeapon(w);
+  } else if (player.currentWeapon === w) {
+    // Снял то, что в руках: взять другое того же вида, иначе любое, иначе — пустые руки
+    const rest = equippedWeapons();
+    const same = rest.filter(x => MELEE_WEAPONS.has(x) === MELEE_WEAPONS.has(w));
+    const next = same[0] || rest[0] || null;
+    if (player.reloadingWeapon === w) {
+      player.reloadingWeapon = null;
+      player.reloadTimer = 0;
+    }
+    if (next) window.switchWeapon(next);
+    else player.currentWeapon = null;
+  }
+  applyHotbarOrder();
+  updateHUD(true);
+  renderArsenalAndSupplies();
+};
+
 window.switchWeapon = function(weaponKey) {
   const allWeapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
   if (!allWeapons.includes(weaponKey)) return;
@@ -2418,6 +2497,13 @@ window.switchWeapon = function(weaponKey) {
     addFloatingText(player.x, player.y - 38, currentLang === 'ru' ? '🔒 КУПИТЕ В ЛАВКЕ МИХАЛЫЧА!' : '🔒 BUY AT MIKHALYCH SHOP!', '#f87171');
     return;
   }
+  if (!isEquipped(weaponKey)) {
+    SoundFX.emptyClick();
+    addFloatingText(player.x, player.y - 38, t('left_at_shop'), '#94a3b8');
+    return;
+  }
+  if (MELEE_WEAPONS.has(weaponKey)) player.lastMelee = weaponKey;
+  else player.lastRanged = weaponKey;
 
   if (player.reloadingWeapon && player.reloadingWeapon !== weaponKey) {
     player.reloadingWeapon = null;
@@ -2437,14 +2523,29 @@ window.switchWeapon = function(weaponKey) {
   updateHUD(true);
 };
 
+// Q: ближнее ↔ дальнее (к тому, что было в руках последним). Если всё взятое одного вида — по кругу
 window.cycleWeapon = function() {
-  // Q перебирает открытое оружие в порядке хотбара
-  const weapons = hotbarOrder.filter(w => HOTBAR_WEAPONS.has(w) && player.unlockedWeapons[w]);
-  if (weapons.length <= 1) return;
-  const curIdx = weapons.indexOf(player.currentWeapon);
-  const nextIdx = (curIdx + 1) % weapons.length;
-  window.switchWeapon(weapons[nextIdx]);
+  const weapons = equippedWeapons();
+  if (weapons.length === 0) return;
+  const cur = player.currentWeapon;
+  const toMelee = !cur || !MELEE_WEAPONS.has(cur);
+  const pool = weapons.filter(w => MELEE_WEAPONS.has(w) === toMelee);
+  if (pool.length === 0) {
+    stepWeapon(1);
+    return;
+  }
+  const last = toMelee ? player.lastMelee : player.lastRanged;
+  window.switchWeapon(pool.includes(last) ? last : pool[0]);
 };
+
+// Колесо: следующее (dir = 1) или предыдущее взятое оружие по порядку хотбара
+function stepWeapon(dir) {
+  const weapons = equippedWeapons();
+  if (weapons.length === 0) return;
+  const i = weapons.indexOf(player.currentWeapon);
+  const next = weapons[((i < 0 ? (dir > 0 ? -1 : 0) : i) + dir + weapons.length) % weapons.length];
+  if (next !== player.currentWeapon) window.switchWeapon(next);
+}
 
 function startReload() {
   const wKey = player.currentWeapon;
@@ -2959,8 +3060,15 @@ function spawnShellCasing(x, y, weaponAngle, shellType = 'shotgun') {
 function shootPlayerWeapon() {
   if (shootCooldown > 0) return;
 
-  const wKey = player.currentWeapon || 'bat';
-  if (!player.unlockedWeapons[wKey]) return;
+  const wKey = player.currentWeapon;
+  if (!wKey || !isEquipped(wKey)) {
+    // Всё оружие оставлено у Михалыча — напомнить, но не чаще раза в пару секунд
+    if (!wKey && !(player.unarmedHintCd > 0)) {
+      player.unarmedHintCd = 120;
+      addFloatingText(player.x - 60, player.y - 40, t('unarmed'), '#94a3b8');
+    }
+    return;
+  }
 
   // Если оружие сейчас перезаряжается — ждём окончания перезарядки
   if (player.reloadingWeapon === wKey) return;
@@ -4921,7 +5029,7 @@ function updateHUD(forceWeaponRefresh = false) {
     const slotEl = document.getElementById(`slot-w-${w}`);
     if (!slotEl) return;
 
-    const unlocked = !!player.unlockedWeapons[w];
+    const unlocked = isEquipped(w);
     setHudStyle(slotEl, 'display', unlocked ? 'flex' : 'none');
     if (!unlocked) return;
 
@@ -5946,6 +6054,7 @@ function update() {
   }
   spawnBioPuddleBubbles();
   if (player.itemCooldown > 0) player.itemCooldown--;
+  if (player.unarmedHintCd > 0) player.unarmedHintCd--;
   if (player.healLeft > 0) {
     const h = Math.min(player.healLeft, BANDAGE_HEAL / BANDAGE_HEAL_FRAMES);
     player.healLeft -= h;
