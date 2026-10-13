@@ -3624,11 +3624,11 @@ function footDY(ent) {
 // footOffset — на сколько ступни ниже точки (x, y), см. footDY()
 function checkWalkCollision(x, y, radius, footOffset = 0) {
   y += footOffset;
-  const b = checkBuildingCollision(x, y, radius);
-  if (b) return b;
-  // С мелкими препятствиями сталкиваются ступни, а не плечи: с полным радиусом урна или столб
-  // посреди тротуара перекрывали его целиком, и мимо них нельзя было пройти
+  // Сталкиваются ступни, а не плечи: с полным радиусом урна или столб посреди тротуара перекрывали
+  // его целиком, а к дому нельзя было подойти вплотную — ступни вставали в 20 px от стены и края крыши
   const feet = radius * 0.5;
+  const b = checkBuildingCollision(x, y, feet);
+  if (b) return b;
   for (let cx = Math.floor((x - feet) / OBSTACLE_CELL); cx <= Math.floor((x + feet) / OBSTACLE_CELL); cx++) {
     for (let cy = Math.floor((y - feet) / OBSTACLE_CELL); cy <= Math.floor((y + feet) / OBSTACLE_CELL); cy++) {
       const cell = obstacleGrid.get(cx * 4096 + cy);
@@ -3646,7 +3646,7 @@ const SLIDE_CORNER = 12;
 function walkBlockerNormal(shape, x, y, radius) {
   let nx, ny;
   if (shape.w !== undefined || shape.rect) {
-    const pad = shape.w !== undefined ? radius : radius * 0.5;
+    const pad = radius * 0.5;
     const x1 = (shape.w !== undefined ? shape.x : shape.x1) - pad;
     const y1 = (shape.w !== undefined ? shape.y : shape.y1) - pad;
     const x2 = (shape.w !== undefined ? shape.x + shape.w : shape.x2) + pad;
@@ -7216,7 +7216,7 @@ function render() {
 
   // 9.2. Машины, деревья, фонари и прочее, за чем стоит Василий или враг, — поверх фигур
   if (window.environmentRenderer) {
-    window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height);
+    window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height, buildings);
     // 9.25. Предметы в руках громил и в полёте
     drawAirborneProps(ctx);
     // 9.3. Плафоны фонарей, ореолы и конусы света — поверх персонажей

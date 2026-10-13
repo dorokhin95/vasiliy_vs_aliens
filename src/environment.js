@@ -88,6 +88,8 @@ class EnvironmentRenderer {
     this.courtyardTrees = [];
     // Машины, баки и ящики, за которыми в этом кадре стоит персонаж (см. planDeferredContainers)
     this.deferredContainers = new Set();
+    // Насколько прозрачен дом, за которым скрыт Василий: 0..1, плавно (drawOccludingProps)
+    this.buildingFade = new Map();
 
     this.initAssets();
     this.generateDecorations();
@@ -1386,9 +1388,30 @@ class EnvironmentRenderer {
    * Здесь же рисуются отложенные контейнеры (planDeferredContainers). Всё — в порядке глубины.
    * actors: [{x, y, h}] — точка ног и высота спрайта.
    */
-  drawOccludingProps(ctx, actors, camera, screenW, screenH) {
+  drawOccludingProps(ctx, actors, camera, screenW, screenH, buildings) {
     const items = [];
     const behind = (baseY, r) => actors.some(a => a.y < baseY && this.actorOverlaps(r, a));
+
+    // Дома и гаражи: за домом крыша, будки и трубы закрывают персонажа — иначе Василий «стоит на крыше».
+    // Если Василий скрыт больше чем на 60%, дом плавно становится полупрозрачным. Поля кадра прозрачные,
+    // перерисовка там ничего не меняет
+    const tp = window.threeProps;
+    if (tp && buildings) {
+      const p = actors[0];
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
+        if (b.type !== 'panel' && b.type !== 'boiler_house' && b.type !== 'military_hq' && b.type !== 'garage') continue;
+        const f = tp.buildingFrame(b);
+        if (!f || !this.isVisible(f.x, f.y, f.w, f.h, camera, screenW, screenH)) continue;
+        const base = b.y + b.h;
+        const hidden = p.y < base && this.actorOverlaps(f, p) && tp.buildingCover(b, p) > 0.6;
+        const was = this.buildingFade.get(b) || 0;
+        const fade = Math.abs((hidden ? 1 : 0) - was) < 0.02 ? (hidden ? 1 : 0) : was + ((hidden ? 1 : 0) - was) * 0.15;
+        if (fade > 0) this.buildingFade.set(b, fade);
+        else this.buildingFade.delete(b);
+        if (behind(base, f)) items.push({ y: base, draw: () => tp.drawBuildingSprite(ctx, b, 1 - 0.85 * fade) });
+      }
+    }
 
     this.deferredContainers.forEach(c => items.push({ y: c.y, draw: () => this.drawContainer(ctx, c) }));
     for (let i = 0; i < this.courtyardBushes.length; i++) {

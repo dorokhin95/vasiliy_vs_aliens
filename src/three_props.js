@@ -63,6 +63,7 @@ class ThreePropsManager {
     this.modelHeights = {};
     this.frameSizes = {}; // свой размер кадра у крупных моделей (дома), см. getFrameCanvas
     this.silhouettes = {}; // где модель непрозрачна на кадре — для коллизий (silhouette)
+    this.masks = {}; // попиксельная маска непрозрачности кадра { size, solid } — сколько фигуры закрыто домом (buildingCover)
     this.yaws = {};        // доворот модели, чтобы она смотрела как парная (открытые тайники)
 
     // Cache: Map<`${propKey}_${dirIdx}`, HTMLCanvasElement → HTMLImageElement once decoded (see promoteFrameToImage)>
@@ -460,6 +461,7 @@ class ThreePropsManager {
         bottom = y;
       }
     }
+    this.masks[propKey] = { size, solid };
     if (top < 0) return null;
     const rects = [];
     const stripH = Math.max(2, Math.round(size * 0.008));
@@ -509,13 +511,58 @@ class ThreePropsManager {
       const r = rects[i];
       rects[i] = { x: r.x0min / size, y: r.y0 / size, w: (r.x1max - r.x0min + 1) / size, h: (r.y1 - r.y0) / size };
     }
-    this.silhouettes[propKey] = rects;
-    return rects;
+    // Будки и трубы на крыше стоят на ней, а не на земле: за них можно зайти (дом тогда становится
+    // полупрозрачным, environment.drawOccludingProps), упираешься в край крыши — иначе у будки лифта
+    // брежневки стена вставала на ~60 px раньше
+    const body = rects.reduce((m, r) => (r.w * r.h > m.w * m.h ? r : m), rects[0]);
+    const onRoof = r => r !== body && r.y + r.h <= body.y + 0.01 && r.x >= body.x - 0.01 && r.x + r.w <= body.x + body.w + 0.01;
+    const shape = rects.filter(r => !onRoof(r));
+    this.silhouettes[propKey] = shape;
+    return shape;
+  }
+
+  // Кадр модели дома или гаража на карте: { propKey, x, y, w, h } или null
+  buildingFrame(b) {
+    return b.type === 'garage' ? this.garageFrame(b) : this.majorBuildingFrame(b);
+  }
+
+  // Только модель дома или гаража, без отмостки и контактной тени — для перерисовки поверх персонажа,
+  // стоящего за домом (environment.drawOccludingProps): иначе тень легла бы на фигуру
+  drawBuildingSprite(ctx, b, alpha = 1) {
+    const f = this.buildingFrame(b);
+    if (!f || !this.isLoaded[f.propKey]) return false;
+    const frame = this.getFrameCanvas(f.propKey, 0);
+    if (!frame) return false;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(frame, f.x, f.y, f.w, f.h);
+    ctx.restore();
+    return true;
+  }
+
+  // Какая доля фигуры (a: ступни x, y и высота h) закрыта моделью дома — по маске непрозрачных пикселей кадра.
+  // Фигура Василия на спрайте — от 8 px ниже точки ступней до ~80 px над ней, по ширине ±15
+  buildingCover(b, a) {
+    const f = this.buildingFrame(b);
+    if (!f || !this.isLoaded[f.propKey]) return 0;
+    if (!this.masks[f.propKey]) this.silhouette(f.propKey);
+    const m = this.masks[f.propKey];
+    if (!m) return 0;
+    let hit = 0, n = 0;
+    for (let i = 0; i < 5; i++) {
+      const u = Math.floor((a.x - 14 + i * 7 - f.x) / f.w * m.size);
+      for (let j = 0; j < 10; j++) {
+        const v = Math.floor((a.y + 8 - a.h * (j + 0.5) / 10 - f.y) / f.h * m.size);
+        n++;
+        if (u >= 0 && v >= 0 && u < m.size && v < m.size && m.solid[v * m.size + u]) hit++;
+      }
+    }
+    return hit / n;
   }
 
   // Коллизия здания или гаража по силуэту его модели, в координатах карты; null — модель ещё грузится
   silhouetteRects(b) {
-    const f = b.type === 'garage' ? this.garageFrame(b) : this.majorBuildingFrame(b);
+    const f = this.buildingFrame(b);
     if (!f || !this.isLoaded[f.propKey]) return null;
     const sil = this.silhouette(f.propKey);
     if (!sil) return null;
