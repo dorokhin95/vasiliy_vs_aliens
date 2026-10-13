@@ -6,8 +6,9 @@
 //  - пишется само: раз в 30 секунд вне боя, сразу после магазина и победы над боссом, при паузе,
 //    сворачивании и закрытии вкладки; во время боя не пишется;
 //  - карта строится одинаково при каждом запуске, поэтому хранится только прогресс: статы и инвентарь
-//    Василия, перки, обысканные тайники (по координатам), побеждён ли босс, лут на земле;
-//  - после загрузки Василий стоит у ларька Михалыча, враги расставляются заново;
+//    Василия, перки, обысканные тайники (по координатам), побеждён ли босс, лут на земле и живые
+//    враги (респауна нет — убитые не должны возвращаться);
+//  - после загрузки Василий стоит у ларька Михалыча, живые враги — там, где были;
 //  - смерть стирает сохранение (рогалик);
 //  - «код сохранения» — то же сохранение одной строкой, чтобы перенести забег в другой браузер или на
 //    другой компьютер (сервера у игры нет).
@@ -16,8 +17,10 @@
 window.Menu = (() => {
   const SAVE_KEY = 'vasiliy.run';
   const SETTINGS_KEY = 'vasiliy.settings';
-  // Меняя состав сохранения, увеличьте номер и добавьте перевод старого формата в loadSave()
-  const SAVE_FORMAT = 1;
+  // Меняя состав сохранения, увеличьте номер и научите applyRun() читать старые форматы.
+  // 1 — без врагов (тогда враги расставляются заново), 2 — с живыми врагами
+  const SAVE_FORMAT = 2;
+  const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute']);
   const CODE_PREFIX = 'VVA1';
   const AUTOSAVE_INTERVAL_MS = 30000;
   const AUTOSAVE_CHECK_MS = 3000;
@@ -43,7 +46,8 @@ window.Menu = (() => {
       saved_now: 'Сохранено ✓',
       not_saved: 'Прогресс ещё не сохранялся',
       combat: 'Идёт бой — игра сохранится, когда враги отстанут',
-      run_summary: 'Забег от {d} · ❤ {hp}/{maxHp} · оружие: {w} · перки: {p}',
+      run_summary: 'Забег от {d} · ❤ {hp}/{maxHp} · оружие: {w} · перки: {p}{toads}',
+      toads_left: ' · жаб осталось: {n}',
       sec_sound: 'Звук',
       volume: 'Громкость',
       sec_lang: 'Язык',
@@ -100,7 +104,8 @@ window.Menu = (() => {
       saved_now: 'Saved ✓',
       not_saved: 'Progress has not been saved yet',
       combat: 'In combat — the game will save once enemies back off',
-      run_summary: 'Run from {d} · ❤ {hp}/{maxHp} · weapons: {w} · perks: {p}',
+      run_summary: 'Run from {d} · ❤ {hp}/{maxHp} · weapons: {w} · perks: {p}{toads}',
+      toads_left: ' · toads left: {n}',
       sec_sound: 'Sound',
       volume: 'Volume',
       sec_lang: 'Language',
@@ -246,12 +251,18 @@ window.Menu = (() => {
       world: {
         searched: containers.filter(c => c.searched).map(c => c.x + ',' + c.y),
         bossDefeated: !bossRef,
-        loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val])
+        loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
+        enemyTotal: levelEnemyTotal,
+        enemies: enemies.filter(e => e.type !== 'boss').map(e => ({
+          type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
+          radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
+          tier: e.tier, districtId: e.districtId, bounds: e.bounds
+        }))
       }
     };
   }
 
-  const isSave = s => !!(s && s.format === SAVE_FORMAT && s.player && s.world);
+  const isSave = s => !!(s && (s.format === 1 || s.format === SAVE_FORMAT) && s.player && s.world);
 
   function loadSave() {
     const s = readJSON(SAVE_KEY);
@@ -322,6 +333,38 @@ window.Menu = (() => {
       if (!Array.isArray(it) || !LOOT_TYPES.has(it[2])) return;
       spawn3DLootItem(num(it[0], safeZone.x, 0, WORLD_WIDTH), num(it[1], safeZone.y, 0, WORLD_HEIGHT), it[2], num(it[3], 1, 1, 9999));
     });
+    // Живые враги (формат 2). В формате 1 их нет — остаются только что расставленные
+    if (Array.isArray(w.enemies)) {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        if (enemies[i].type !== 'boss') enemies.splice(i, 1);
+      }
+      w.enemies.forEach(d => {
+        if (!d || !ENEMY_TYPES.has(d.type)) return;
+        const maxHp = num(d.maxHp, 100, 1, 100000);
+        const x = num(d.x, 0, 60, WORLD_WIDTH - 60), y = num(d.y, 0, 60, WORLD_HEIGHT - 60);
+        const b = d.bounds || {};
+        enemies.push({
+          x, y, startX: x, startY: y,
+          bounds: { x1: num(b.x1, x - 300), y1: num(b.y1, y - 300), x2: num(b.x2, x + 300), y2: num(b.y2, y + 300) },
+          districtId: typeof d.districtId === 'string' ? d.districtId : 'courtyards',
+          tier: num(d.tier, 1, 0, 9),
+          radius: num(d.radius, 22, 8, 60),
+          hp: num(d.hp, maxHp, 1, maxHp),
+          maxHp,
+          speed: num(d.speed, 2.5, 0.5, 6),
+          type: d.type,
+          color: typeof d.color === 'string' ? d.color : '#22c55e',
+          aggroRadius: num(d.aggroRadius, 300, 50, 1000),
+          isAggroed: false,
+          hitFlash: 0,
+          patrolAngle: Math.random() * Math.PI * 2,
+          patrolTimer: Math.random() * 120 + 60,
+          shootCooldown: Math.random() * 70 + 45
+        });
+      });
+      levelEnemyTotal = Math.round(num(w.enemyTotal, enemies.length, 0, 1000));
+    }
+    levelCleared = enemies.length === 0 && levelEnemyTotal > 0;
     lastSaveAt = Date.now();
     saveRequested = false;
   }
@@ -475,7 +518,8 @@ window.Menu = (() => {
         hp: Math.ceil(num(p.hp, 0)),
         maxHp: Math.round(num(p.maxHp, 0)),
         w: Array.isArray(p.weapons) ? p.weapons.length : 1,
-        p: Array.isArray(p.perks) ? p.perks.length : 0
+        p: Array.isArray(p.perks) ? p.perks.length : 0,
+        toads: Array.isArray(save.world.enemies) ? tr('toads_left', { n: save.world.enemies.length }) : ''
       });
       if (!btnStart.dataset.armed) btnStart.textContent = tr('new_run');
     }

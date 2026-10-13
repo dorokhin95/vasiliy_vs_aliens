@@ -848,7 +848,7 @@ const LANGS = {
     tab_weapons: "Арсенал и Патроны",
     tab_supplies: "Припасы",
     tab_upgrades: "Ветки прокачки",
-    shop_bandage: "Бинты (+45 HP)",
+    shop_bandage: "Бинты (+45 HP за 3 с)",
     shop_stew: "Тушенка (+65 Вынослив.)",
     shop_vodka: "Водка (+Урон берсерка)",
     shop_close: "ВЕРНУТЬСЯ В ГОРОД [ESC]",
@@ -858,7 +858,13 @@ const LANGS = {
     cost_bottles: "бут.",
     boss_name: "ЗОЛОТОЙ МЯСНИК",
     boss_enraged: "ЯРОСТЬ!",
-    boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!"
+    boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!",
+    toads_left: "Жаб осталось",
+    boss_alive: "☠ Мясник жив",
+    boss_dead: "✓ Мясник повержен",
+    cleared_hud: "✅ ЛОКАЦИЯ ЗАЧИЩЕНА",
+    level_cleared: "ЛОКАЦИЯ ЗАЧИЩЕНА",
+    level_cleared_sub: "В Новохмуринске не осталось ни одной жабы. Пора искать путь дальше."
   },
   en: {
     game_title: "Vasiliy vs Aliens",
@@ -887,7 +893,7 @@ const LANGS = {
     tab_weapons: "Arsenal & Ammo",
     tab_supplies: "Supplies",
     tab_upgrades: "Skill Trees",
-    shop_bandage: "Bandages (+45 HP)",
+    shop_bandage: "Bandages (+45 HP over 3s)",
     shop_stew: "Stew (+65 Stamina)",
     shop_vodka: "Vodka (+Berserk DMG)",
     shop_close: "RETURN TO CITY [ESC]",
@@ -897,7 +903,13 @@ const LANGS = {
     cost_bottles: "bot.",
     boss_name: "THE GOLDEN BUTCHER",
     boss_enraged: "ENRAGED!",
-    boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!"
+    boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!",
+    toads_left: "Toads left",
+    boss_alive: "☠ Butcher alive",
+    boss_dead: "✓ Butcher down",
+    cleared_hud: "✅ AREA CLEARED",
+    level_cleared: "AREA CLEARED",
+    level_cleared_sub: "Not a single toad left in Novokhmurinsk. Time to find the way further."
   }
 };
 
@@ -1005,6 +1017,8 @@ const player = {
   critMult: 1.6,
   isDrunk: false,
   drunkTimer: 0,
+  itemCooldown: 0, // общая перезарядка расходников, кадры
+  healLeft: 0,     // сколько ещё долечит наложенный бинт
   items: {
     vodka: 0,
     stew: 1,
@@ -1061,10 +1075,15 @@ let muzzleFlashes = [];
 let shellCasings = [];
 let floatingTexts = [];
 let lootItems = [];
+// Зачистка локации: сколько жаб было при генерации и перебиты ли все (включая босса)
+let levelEnemyTotal = 0;
+let levelCleared = false;
 let cameraKickX = 0;
 let cameraKickY = 0;
 
 // --- СИСТЕМА РАЙОНОВ НОВОХМУРИНСКА И МАТРИЦА ЗАВИСИМОСТЕЙ (TIER 0 -> TIER 4) ---
+// bottleMult / scrapMult — множители стеклотары и чермета с тайников и врагов района.
+// Врагов конечное число, поэтому весь доход локации посчитан заранее: docs/BALANCE.md
 const DISTRICTS = {
   hub: {
     id: 'hub',
@@ -1074,7 +1093,8 @@ const DISTRICTS = {
     meta_ru: 'Угроза: Безопасно | Лавка Оружия, Патронов и Верстак',
     meta_en: 'Threat: Safe | Arsenal, Ammo & Workbench',
     color: '#10b981',
-    lootMult: 1.0
+    bottleMult: 1.0,
+    scrapMult: 1.0
   },
   courtyards: {
     id: 'courtyards',
@@ -1084,7 +1104,8 @@ const DISTRICTS = {
     meta_ru: 'Угроза: ★☆☆☆ (Болотные Прыгуны) | Ресурс: Стеклотара, Бинты',
     meta_en: 'Threat: ★☆☆☆ (Swamp Leapers) | Loot: Bottles, Bandages',
     color: '#eab308',
-    lootMult: 1.0
+    bottleMult: 1.0,
+    scrapMult: 0.8
   },
   garages: {
     id: 'garages',
@@ -1094,7 +1115,8 @@ const DISTRICTS = {
     meta_ru: 'Угроза: ★★☆☆ (Плевальщики и Пехота) | Ресурс: Чермет ×1.5 (на ПМ и Дрель)',
     meta_en: 'Threat: ★★☆☆ (Spitters & Grunts) | Loot: Scrap ×1.5 (for PM & Drill)',
     color: '#f97316',
-    lootMult: 1.5
+    bottleMult: 1.3,
+    scrapMult: 1.5
   },
   heating: {
     id: 'heating',
@@ -1104,7 +1126,8 @@ const DISTRICTS = {
     meta_ru: 'Угроза: ★★☆☆ (Засады у труб) | Ресурс: Чермет, Водка, Тушёнка ×1.5',
     meta_en: 'Threat: ★★☆☆ (Pipe Ambushes) | Loot: Scrap, Vodka, Stew ×1.5',
     color: '#38bdf8',
-    lootMult: 1.5
+    bottleMult: 1.6,
+    scrapMult: 1.0
   },
   cordon: {
     id: 'cordon',
@@ -1114,7 +1137,8 @@ const DISTRICTS = {
     meta_ru: 'Угроза: ★★★☆ (Штурмовики и Громилы) | Особый ресурс: Оружейные детали (на Обрез)',
     meta_en: 'Threat: ★★★☆ (Troopers & Brutes) | Special Loot: Gun Parts (for Shotgun)',
     color: '#ef4444',
-    lootMult: 1.9
+    bottleMult: 2.0,
+    scrapMult: 1.2
   },
   nest: {
     id: 'nest',
@@ -1124,7 +1148,8 @@ const DISTRICTS = {
     meta_ru: 'Угроза: ★★★★ (Элитные Квако-Танки) | Особый ресурс: Квако-ядра (на Плазмаган)',
     meta_en: 'Threat: ★★★★ (Elite Toad Tanks) | Special Loot: Alien Cores (for Plasma Gun)',
     color: '#a855f7',
-    lootMult: 2.5
+    bottleMult: 2.6,
+    scrapMult: 1.2
   }
 };
 
@@ -1327,7 +1352,7 @@ function generateWorld() {
         tryAddContainer(x2 - 110, y2 - 110, 'box', null, 1);
 
         // Враги: Пехотинцы + Снайперы в засадах между гаражами
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 4; i++) {
           pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
@@ -1357,7 +1382,7 @@ function generateWorld() {
         tryAddContainer(x2 - 110, bcy + 40, 'car', 'zhiguli', 8);
 
         // Враги: Снайперы и Штурмовики вдоль труб
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 4; i++) {
           pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
@@ -1381,7 +1406,7 @@ function generateWorld() {
         tryAddContainer(x1 + 60, y2 - 70, 'trash', null, 0);
 
         // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
-        for (let i = 0; i < 6; i++) {
+        for (let i = 0; i < 5; i++) {
           pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
         }
 
@@ -1411,7 +1436,7 @@ function generateWorld() {
 
         // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы);
         // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
-        const packSize = isBossLair ? 3 : 8;
+        const packSize = isBossLair ? 3 : 6;
         for (let i = 0; i < packSize; i++) {
           pendingSpawns.push([x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist]);
         }
@@ -1432,7 +1457,12 @@ function generateWorld() {
   buildObstacles();
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   spawnBoss();
+  levelEnemyTotal = enemies.filter(e => e.type !== 'boss').length;
+  levelCleared = false;
 }
+
+// Респауна нет, врагов на локации меньше (69 вместо 83) — зато каждый крепче
+const ENEMY_HP_SCALE = 1.3;
 
 function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -1503,6 +1533,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     }
     // Ступни этого типа тоже должны стоять на свободном месте (см. footDY)
     if (checkWalkCollision(ex, ey, radius, FOOT_DY[type])) continue;
+    hp = Math.round(hp * ENEMY_HP_SCALE);
 
     enemies.push({
       x: ex,
@@ -1528,18 +1559,6 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     return true;
   }
   return false;
-}
-
-function spawnPatrolEnemy(deadEnemy = null) {
-  if (deadEnemy && deadEnemy.bounds) {
-    const b = deadEnemy.bounds;
-    const dist = DISTRICTS[deadEnemy.districtId] || getDistrictAt((b.x1 + b.x2) * 0.5, (b.y1 + b.y2) * 0.5);
-    if (Math.hypot(player.x - (b.x1 + b.x2) * 0.5, player.y - (b.y1 + b.y2) * 0.5) > 550) {
-      spawnEnemyInRect(b.x1, b.y1, b.x2, b.y2, dist);
-    }
-    return;
-  }
-  spawnEnemyInRect(200, 200, WORLD_WIDTH - 200, WORLD_HEIGHT - 200, null);
 }
 
 // --- УПРАВЛЕНИЕ ---
@@ -1686,6 +1705,8 @@ function startGame(save = null) {
   player.stamina = player.maxStamina;
   player.isDrunk = false;
   player.drunkTimer = 0;
+  player.itemCooldown = 0;
+  player.healLeft = 0;
   player.items = { vodka: 0, stew: 1, bandage: 2 };
   player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0 };
   player.unlockedWeapons = {
@@ -1761,7 +1782,8 @@ function scavengeContainer(c) {
   c.searched = true;
 
   const dist = getDistrictAt(c.x, c.y);
-  const mult = dist.lootMult || 1.0;
+  const bMult = dist.bottleMult || 1.0;
+  const sMult = dist.scrapMult || 1.0;
   const toPlayerAngle = Math.atan2(player.y - c.y, player.x - c.x);
 
   let bottleRoll = 1;
@@ -1770,7 +1792,7 @@ function scavengeContainer(c) {
 
   if (c.type === 'trash') {
     // Мусорный бак ЖЭК-4: в спальных дворах — главный источник стеклотары и бинтов
-    bottleRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 2)) * mult));
+    bottleRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 2)) * bMult));
     scrapRoll = Math.floor(Math.random() * 2);
     const r = Math.random();
     if (dist.id === 'heating' && r < 0.55) {
@@ -1783,33 +1805,33 @@ function scavengeContainer(c) {
   } else if (c.type === 'car' && c.subType !== 'uaz') {
     // ВАЗ-2101 Жигули: источник чермета (особенно в Гаражном кооперативе «Восток»)
     const garageBonus = dist.id === 'garages' ? 2 : 0;
-    scrapRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 3) + garageBonus) * mult));
-    bottleRoll = 1 + Math.floor(Math.random() * 2);
+    scrapRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 3) + garageBonus) * sMult));
+    bottleRoll = Math.round((1 + Math.floor(Math.random() * 2)) * bMult);
     const r = Math.random();
     if (r < 0.38) bonusDrops.push('stew');
     else if (r < 0.62) bonusDrops.push('ammo_9x18');
   } else if (c.type === 'car' && c.subType === 'uaz') {
     // Санитарный УАЗ-452 «Буханка»: чермет + медицина, а на Кордоне — Оружейные детали!
-    scrapRoll = Math.round((3 + Math.floor(Math.random() * 3)) * mult);
-    bottleRoll = 1 + Math.floor(Math.random() * 2);
+    scrapRoll = Math.round((3 + Math.floor(Math.random() * 3)) * sMult);
+    bottleRoll = Math.round((1 + Math.floor(Math.random() * 2)) * bMult);
     bonusDrops.push('bandage');
-    if (dist.id === 'cordon' || dist.id === 'nest') {
+    if (dist.id === 'cordon') {
       bonusDrops.push('mil_parts');
     }
     if (Math.random() < 0.5) bonusDrops.push('ammo_12g');
   } else {
     // Армейский ящик (Военторг / Спецхран):
-    scrapRoll = Math.round((4 + Math.floor(Math.random() * 3)) * mult);
-    bottleRoll = 1 + Math.floor(Math.random() * 2);
+    scrapRoll = Math.round((4 + Math.floor(Math.random() * 3)) * sMult);
+    bottleRoll = Math.round((1 + Math.floor(Math.random() * 2)) * bMult);
     bonusDrops.push('stew');
     if (dist.id === 'cordon') {
       // На Военном Кордоне гарантированно падают Оружейные детали!
       bonusDrops.push('mil_parts');
       if (Math.random() < 0.55) bonusDrops.push('ammo_12g');
     } else if (dist.id === 'nest') {
-      // В Квако-Гнезде падают Квако-ядра и Оружейные детали!
+      // В Квако-Гнезде падают Квако-ядра и иногда Оружейные детали
       bonusDrops.push('alien_core');
-      if (Math.random() < 0.65) bonusDrops.push('mil_parts');
+      if (Math.random() < 0.25) bonusDrops.push('mil_parts');
     } else {
       bonusDrops.push('ammo_9x18');
     }
@@ -1927,10 +1949,10 @@ const SHOP_SUPPLY_ITEMS = [
   {
     id: 'bandage',
     img: 'assets/sprites/loot/loot_bandage.png?v=1026',
-    name_ru: 'Стерильный бинт (+45 HP)',
-    name_en: 'Sterile Bandage (+45 HP)',
-    desc_ru: 'Перевязка ран после укусов и кислотных плевков (клавиша [3]).',
-    desc_en: 'Restores 45 Health in combat (key [3]).',
+    name_ru: 'Стерильный бинт (+45 HP за 3 с)',
+    name_en: 'Sterile Bandage (+45 HP over 3s)',
+    desc_ru: 'Перевязка ран: лечит постепенно, 3 секунды. Следующий расходник — не раньше чем через 3 с.',
+    desc_en: 'Heals gradually over 3 seconds. Next consumable only after 3s.',
     cost: { bottles: 3 }
   },
   {
@@ -2255,11 +2277,22 @@ function buyPerk(perk) {
   renderUpgradeTrees();
 }
 
+// Расходники: общая перезарядка, а бинт лечит постепенно. Раньше бинт лечил мгновенно и без
+// перезарядки, и спамом бинтов можно было перекрыть любой урон (так стояли против Мясника)
+const CONSUMABLE_COOLDOWN = 180; // кадров при 60 Гц — 3 с
+const BANDAGE_HEAL = 45;
+const BANDAGE_HEAL_FRAMES = 180;
+
 window.useItem = function(itemType) {
   if (gameState !== 'PLAYING') return;
   if (player.items[itemType] <= 0) return;
+  if (player.itemCooldown > 0) {
+    addFloatingText(player.x, player.y - 30, currentLang === 'ru' ? '⏳ ЕЩЁ НЕ ВРЕМЯ' : '⏳ NOT YET', '#94a3b8');
+    return;
+  }
 
   player.items[itemType]--;
+  player.itemCooldown = CONSUMABLE_COOLDOWN;
   if (itemType === 'vodka') {
     player.isDrunk = true;
     player.drunkTimer = 600;
@@ -2270,8 +2303,8 @@ window.useItem = function(itemType) {
     addFloatingText(player.x, player.y - 30, "+65 ВЫНОСЛИВ.", '#38bdf8');
     createParticles(player.x, player.y, '#38bdf8', 10);
   } else if (itemType === 'bandage') {
-    player.hp = Math.min(player.maxHp, player.hp + 45);
-    addFloatingText(player.x, player.y - 30, "+45 HP", '#22c55e');
+    player.healLeft += BANDAGE_HEAL; // лечение идёт в update(), BANDAGE_HEAL за BANDAGE_HEAL_FRAMES
+    addFloatingText(player.x, player.y - 30, currentLang === 'ru' ? `+${BANDAGE_HEAL} HP за 3 с` : `+${BANDAGE_HEAL} HP over 3s`, '#22c55e');
     createParticles(player.x, player.y, '#22c55e', 12);
   }
   updateHUD(true);
@@ -3370,6 +3403,20 @@ function updateHUD(forceWeaponRefresh = false) {
     _hudCache.bandage = player.items.bandage;
     document.getElementById('count-bandage').innerText = player.items.bandage;
   }
+  const toadsLeft = enemies.length - (bossRef ? 1 : 0);
+  const clearKey = levelCleared ? 'cleared' + currentLang : `${toadsLeft}/${levelEnemyTotal}/${bossRef ? 1 : 0}/${currentLang}`;
+  if (_hudCache.clearKey !== clearKey) {
+    _hudCache.clearKey = clearKey;
+    const el = document.getElementById('clear-counter');
+    el.classList.toggle('done', levelCleared);
+    el.textContent = levelCleared ? t('cleared_hud')
+      : `🐸 ${t('toads_left')}: ${toadsLeft} / ${levelEnemyTotal}  ·  ${bossRef ? t('boss_alive') : t('boss_dead')}`;
+  }
+  const cdPct = Math.ceil(player.itemCooldown / CONSUMABLE_COOLDOWN * 20) * 5;
+  if (_hudCache.cdPct !== cdPct) {
+    _hudCache.cdPct = cdPct;
+    document.querySelectorAll('.slot-cd').forEach(el => { el.style.height = cdPct + '%'; });
+  }
   if (_hudCache.scrap !== player.resources.scrap) {
     _hudCache.scrap = player.resources.scrap;
     document.getElementById('res-scrap').innerText = player.resources.scrap;
@@ -3516,48 +3563,49 @@ function spawnLootDrop(enemyOrX, yOpt) {
   const y = isEnemyObj ? enemyOrX.y : yOpt;
   const eType = isEnemyObj ? (enemyOrX.type || 'grunt') : 'grunt';
   const dist = getDistrictAt(x, y);
-  const mult = dist.lootMult || 1.0;
+  const bMult = dist.bottleMult || 1.0;
+  const sMult = dist.scrapMult || 1.0;
 
   if (eType === 'brute') {
-    const scrapVal = Math.round((2 + Math.floor(Math.random() * 3)) * mult);
-    const bottleVal = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+    const scrapVal = Math.round((2 + Math.floor(Math.random() * 3)) * sMult);
+    const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * bMult);
     spawn3DLootItem(x - 16, y - 6, 'scrap', scrapVal);
     spawn3DLootItem(x + 16, y - 6, 'bottle', bottleVal);
 
     if (dist.id === 'cordon') {
-      spawn3DLootItem(x, y + 16, 'mil_parts', 1);
+      if (Math.random() < 0.7) spawn3DLootItem(x, y + 16, 'mil_parts', 1);
     } else if (dist.id === 'nest') {
-      spawn3DLootItem(x - 12, y + 16, 'alien_core', 1);
-      if (Math.random() < 0.65) spawn3DLootItem(x + 14, y + 16, 'mil_parts', 1);
+      if (Math.random() < 0.25) spawn3DLootItem(x - 12, y + 16, 'alien_core', 1);
+      if (Math.random() < 0.2) spawn3DLootItem(x + 14, y + 16, 'mil_parts', 1);
     } else if (Math.random() < 0.55) {
       const supplyPool = ['vodka', 'stew', 'bandage'];
       spawn3DLootItem(x, y + 16, supplyPool[Math.floor(Math.random() * supplyPool.length)], 1);
     }
   } else if (eType === 'sniper') {
-    const bottleVal = Math.round((1 + Math.floor(Math.random() * 2)) * mult);
+    const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * bMult);
     spawn3DLootItem(x - 10, y, 'bottle', bottleVal);
-    if (dist.id === 'nest' && Math.random() < 0.55) {
+    if (dist.id === 'nest' && Math.random() < 0.2) {
       spawn3DLootItem(x + 12, y + 6, 'alien_core', 1);
-    } else if (dist.id === 'cordon' && Math.random() < 0.50) {
+    } else if (dist.id === 'cordon' && Math.random() < 0.3) {
       spawn3DLootItem(x + 12, y + 6, 'mil_parts', 1);
     } else if (Math.random() < 0.42) {
       spawn3DLootItem(x + 12, y + 6, Math.random() < 0.5 ? 'bandage' : 'ammo_9x18', 6);
     } else if (dist.id === 'garages') {
-      spawn3DLootItem(x + 12, y + 6, 'scrap', Math.round(2 * mult));
+      spawn3DLootItem(x + 12, y + 6, 'scrap', Math.round(2 * sMult));
     }
   } else {
     const r = Math.random();
     const scrapBias = dist.id === 'garages' ? 0.78 : (dist.id === 'courtyards' ? 0.30 : 0.58);
     if (r < scrapBias) {
-      const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * (dist.id === 'courtyards' ? 0.8 : mult)));
+      const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * sMult));
       spawn3DLootItem(x, y, 'scrap', val);
     } else {
-      const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * mult));
+      const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * bMult));
       spawn3DLootItem(x, y, 'bottle', val);
     }
-    if (dist.id === 'cordon' && Math.random() < 0.28) {
+    if (dist.id === 'cordon' && Math.random() < 0.15) {
       spawn3DLootItem(x + 14, y - 8, 'mil_parts', 1);
-    } else if (dist.id === 'nest' && Math.random() < 0.30) {
+    } else if (dist.id === 'nest' && Math.random() < 0.1) {
       spawn3DLootItem(x + 14, y - 8, 'alien_core', 1);
     }
   }
@@ -3575,7 +3623,7 @@ function handleEnemyKilled(index) {
   createParticles(dead.x, dead.y, dead.type === 'brute' ? '#a855f7' : '#16a34a', 22);
   spawnLootDrop(dead);
   enemies.splice(index, 1);
-  setTimeout(() => spawnPatrolEnemy(dead), 12000);
+  // Респауна нет: цель локации — перебить всех (см. checkLevelCleared)
 }
 
 // --- БОСС «ЗОЛОТОЙ МЯСНИК» (логово в СВ Квако-гнезде, появляется один раз за забег) ---
@@ -3820,6 +3868,13 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   }
 }
 
+// Разовая крупная награда за Мясника (учтена в расчёте экономики, docs/BALANCE.md)
+const BOSS_REWARD = [
+  ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4],
+  ['scrap', 20], ['scrap', 20], ['bottle', 20], ['bottle', 20],
+  ['ammo_12g', 12], ['ammo_9x18', 24], ['vodka', 2], ['bandage', 3]
+];
+
 function onBossDefeated(e) {
   bossRef = null;
   if (window.Menu) window.Menu.requestSave();
@@ -3831,13 +3886,8 @@ function onBossDefeated(e) {
   addFloatingText(e.x - 110, e.y - 80, t('boss_defeated'), '#facc15');
 
   // Разовая крупная награда, раскиданная вокруг тела
-  const reward = [
-    ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4],
-    ['scrap', 20], ['scrap', 20], ['bottle', 12], ['bottle', 12],
-    ['ammo_12g', 12], ['ammo_9x18', 24], ['vodka', 2], ['bandage', 3]
-  ];
-  reward.forEach(([type, val], i) => {
-    const a = (i / reward.length) * Math.PI * 2;
+  BOSS_REWARD.forEach(([type, val], i) => {
+    const a = (i / BOSS_REWARD.length) * Math.PI * 2;
     spawn3DLootItem(e.x + Math.cos(a) * 56, e.y + Math.sin(a) * 40, type, val);
   });
 }
@@ -4072,6 +4122,12 @@ function update() {
 
   if (player.hasPerk('shaman_carpet') && player.hp < player.maxHp) {
     player.hp = Math.min(player.maxHp, player.hp + 0.018);
+  }
+  if (player.itemCooldown > 0) player.itemCooldown--;
+  if (player.healLeft > 0) {
+    const h = Math.min(player.healLeft, BANDAGE_HEAL / BANDAGE_HEAL_FRAMES);
+    player.healLeft -= h;
+    player.hp = Math.min(player.maxHp, player.hp + h);
   }
 
   // Восстановление выносливости (медленнее, чтобы в бою на битах нужно было следить за дыханием и пить тушёнку!)
@@ -4328,6 +4384,7 @@ function update() {
       handleEnemyKilled(i);
     }
   }
+  checkLevelCleared();
 
   const hasFumeAura = player.hasPerk('fume_aura');
   const activeSimRadius = Math.max(canvas.width, canvas.height) * 0.72 + 220;
@@ -4370,7 +4427,8 @@ function update() {
         e.isAggroed = true;
         addFloatingText(e.x, e.y - 25, '!', '#ef4444');
       }
-    } else if (distToPlayer > e.aggroRadius * 1.5) {
+    } else if (inSafe || distToPlayer > e.aggroRadius * 1.5) {
+      // Под куполом Михалыча Василия не видно: жабы теряют цель, снайперы перестают стрелять
       e.isAggroed = false;
     }
 
@@ -4461,6 +4519,13 @@ function update() {
     eb.x += eb.vx; eb.y += eb.vy;
     if (checkBuildingCollision(eb.x, eb.y, eb.radius)) {
       spawnDirectionalSparks(eb.x, eb.y, (eb.angle || 0) + Math.PI, 1.0, 5, '#84cc16', 3, 7, 9);
+      enemyBullets.splice(i, 1);
+      continue;
+    }
+    // Купол Михалыча гасит выстрелы жаб: вспышка на поверхности купола
+    if (Math.hypot(eb.x - safeZone.x, eb.y - safeZone.y) < safeZone.radius) {
+      spawnDirectionalSparks(eb.x, eb.y, (eb.angle || 0) + Math.PI, 1.6, 10, '#34d399', 3, 9, 14);
+      createParticles(eb.x, eb.y, '#6ee7b7', 4);
       enemyBullets.splice(i, 1);
       continue;
     }
@@ -5057,6 +5122,65 @@ function render() {
 
   ctx.restore();
   ctx.restore();
+
+  drawLastEnemyMarkers();
+}
+
+// Когда жаб осталось мало, у края экрана стрелки показывают, где они: иначе последнюю
+// приходится искать по всей карте
+const LAST_ENEMIES_MARKED = 5;
+function drawLastEnemyMarkers() {
+  if (gameState !== 'PLAYING' || levelCleared || enemies.length === 0 || enemies.length > LAST_ENEMIES_MARKED) return;
+  const w = canvas.width, h = canvas.height;
+  // Рамка для стрелок: сверху — полоски здоровья и плашка района, снизу — хотбар
+  const left = 34, right = w - 34, top = 72, bottom = h - 104;
+  const cx = (left + right) / 2, cy = (top + bottom) / 2;
+  const t = performance.now() / 1000;
+  ctx.save();
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    const sx = e.x - camera.x, sy = e.y - camera.y;
+    if (sx > 0 && sx < w && sy > 0 && sy < h) continue; // и так видно
+    const dx = sx - cx, dy = sy - cy;
+    const k = Math.min((right - cx) / Math.max(1e-3, Math.abs(dx)), (bottom - cy) / Math.max(1e-3, Math.abs(dy)));
+    const ax = cx + dx * k, ay = cy + dy * k;
+    const a = Math.atan2(dy, dx);
+    ctx.translate(ax, ay);
+    ctx.rotate(a);
+    ctx.globalAlpha = 0.75 + Math.sin(t * 5 + i) * 0.2;
+    ctx.fillStyle = e.type === 'boss' ? '#facc15' : '#ef4444';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(14, 0);
+    ctx.lineTo(-9, -10);
+    ctx.lineTo(-4, 0);
+    ctx.lineTo(-9, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  ctx.restore();
+}
+
+// Все жабы и босс перебиты — локация зачищена (дальше здесь откроется пролом в заборе)
+function checkLevelCleared() {
+  if (levelCleared || levelEnemyTotal === 0 || enemies.length > 0) return;
+  levelCleared = true;
+  showToast(t('level_cleared'), t('level_cleared_sub'));
+  SoundFX.reload();
+  if (window.Menu) window.Menu.requestSave();
+}
+
+let toastTimer = 0;
+function showToast(title, sub) {
+  const el = document.getElementById('toast');
+  document.getElementById('toast-title').textContent = title;
+  document.getElementById('toast-sub').textContent = sub || '';
+  el.classList.add('shown');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('shown'), 5000);
 }
 
 // --- ОВЕРЛЕЙ ПРОИЗВОДИТЕЛЬНОСТИ (F3 или ?perf в адресе) ---
