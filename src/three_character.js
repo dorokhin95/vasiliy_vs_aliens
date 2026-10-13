@@ -80,8 +80,7 @@ class ThreeCharacterManager {
     this.rollAction = null;
     this.activeActionName = '';
     this.recoil = 0;
-    this.swingTimer = 0;
-    this.swingDir = 1;
+    this.swingP = 1; // bat strike progress 0..1 (1 = idle)
     this.rollAngle = 0;
     this.lastX = null;
     this.lastY = null;
@@ -153,8 +152,15 @@ class ThreeCharacterManager {
           this.makarovObj.position.set(-0.14, 1.25, 0.44);
           this.makarovObj.rotation.set(0, 0, 0);
           this.model.add(this.makarovObj);
+          // The pistol follows the pistol arm (arm swing and torso motion), keeping its world placement
+          if (this.armRPistol) {
+            this.model.updateMatrixWorld(true);
+            this.armRPistol.attach(this.makarovObj);
+          }
           this.setWeapon(this.currentWeaponId || 'bat');
         });
+
+        this.setupUpperBody();
 
         // Texture filtering
         this.model.traverse((child) => {
@@ -206,6 +212,146 @@ class ThreeCharacterManager {
         console.error('[ThreeCharacter] Failed to load vasiliy.glb:', err);
       }
     );
+  }
+
+  /**
+   * The arms are separate rigid meshes parented to the rig, not to the chest bone, so they used to hang
+   * still while the torso bobbed and twisted. They now live in an "upper body" group that copies the chest
+   * bone's motion every frame (relative to its bind pose), and they pivot at the shoulder (their origin).
+   */
+  setupUpperBody() {
+    this.rig = this.model.getObjectByName('Vasiliy_Rig');
+    this.spineBone = this.model.getObjectByName('Spine');
+    this.chestBone = this.model.getObjectByName('Chest');
+    this.headBone = this.model.getObjectByName('Head');
+    this.legBones = ['ThighL', 'ShinL', 'ThighR', 'ShinR'].map(n => this.model.getObjectByName(n));
+    if (!this.rig || !this.chestBone || !this.spineBone || this.legBones.some(b => !b)) return;
+
+    let skinned = null;
+    this.model.traverse(o => { if (o.isSkinnedMesh && !skinned) skinned = o; });
+    if (skinned) skinned.skeleton.pose();
+    this.model.updateMatrixWorld(true);
+    this.chestRestInv = this.boneInRig(this.chestBone, new THREE.Matrix4()).invert();
+
+    this.upperBody = new THREE.Group();
+    this.upperBody.matrixAutoUpdate = false;
+    this.rig.add(this.upperBody);
+    [this.armLDown, this.armRBat, this.armRPistol, this.armsTwoHanded].forEach(arm => {
+      if (arm) this.upperBody.add(arm); // same parent space (rig), so local transforms stay valid
+    });
+
+    // Bat strike keyframes in model space (Vasiliy faces +Z, right side is -X): direction shoulder→hand,
+    // direction of the bat (grip→tip) and torso twist (+ turns the chest to his left). The strike crosses
+    // the front at p≈0.3 (~0.1 s), together with the 2D slash and the moment the hit is applied.
+    const v = (x, y, z) => new THREE.Vector3(x, y, z).normalize();
+    this.handRestDir = v(-0.02, -0.18, 0.32);
+    this.batRestQ = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.80, -0.35, 0));
+    this.batRestDir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.batRestQ);
+    const keys = [
+      { p: 0.00, twist: 0.00, hand: null, tip: null, lunge: 0.00, ease: 'inout' },
+      { p: 0.15, twist: -0.60, hand: v(-0.60, 0.55, -0.20), tip: v(-0.45, 0.60, -0.65), lunge: -0.02, ease: 'in' },
+      { p: 0.27, twist: -0.20, hand: v(-0.50, -0.05, 0.85), tip: v(-0.75, 0.00, 0.65), lunge: 0.03, ease: 'linear' },
+      { p: 0.37, twist: 0.25, hand: v(-0.05, -0.15, 1.00), tip: v(0.00, -0.05, 1.00), lunge: 0.07, ease: 'linear' },
+      { p: 0.48, twist: 0.65, hand: v(0.45, -0.20, 0.85), tip: v(0.80, -0.10, 0.60), lunge: 0.08, ease: 'out' },
+      { p: 0.64, twist: 0.80, hand: v(0.70, -0.45, 0.45), tip: v(0.80, -0.35, -0.45), lunge: 0.05, ease: 'inout' },
+      { p: 1.00, twist: 0.00, hand: null, tip: null, lunge: 0.00, ease: 'inout' }
+    ];
+    const yAxis = new THREE.Vector3(0, 1, 0);
+    this.swingKeys = keys.map(k => {
+      // Targets are given in model space; the arm lives in the twisted chest frame, so undo the twist
+      const unTwist = new THREE.Quaternion().setFromAxisAngle(yAxis, -k.twist);
+      const armQ = new THREE.Quaternion();
+      if (k.hand) armQ.setFromUnitVectors(this.handRestDir, k.hand.clone().applyQuaternion(unTwist));
+      let batQ = this.batRestQ.clone();
+      if (k.tip) {
+        const tipInArm = k.tip.clone().applyQuaternion(unTwist).applyQuaternion(armQ.clone().invert());
+        batQ = new THREE.Quaternion().setFromUnitVectors(this.batRestDir, tipInArm).multiply(this.batRestQ);
+      }
+      return { p: k.p, twist: k.twist, lunge: k.lunge, ease: k.ease, armQ, batQ };
+    });
+    this.swingDuration = 0.34;
+    this.swingP = 1;
+    this._q = new THREE.Quaternion();
+    this._m = new THREE.Matrix4();
+    this._v1 = new THREE.Vector3();
+    this._v2 = new THREE.Vector3();
+  }
+
+  // Bone transform relative to the rig object
+  boneInRig(bone, out) {
+    return out.copy(this.rig.matrixWorld).invert().multiply(bone.matrixWorld);
+  }
+
+  // > 0 when the left leg is in front. Read from the knees of the playing clip, so the arm swing stays in
+  // sync at any cadence and when backpedalling (the walk clip then plays in reverse)
+  legSwing() {
+    const [thighL, shinL, thighR, shinR] = this.legBones;
+    const fwd = (hip, knee) => {
+      this._v1.setFromMatrixPosition(hip.matrixWorld);
+      this._v2.setFromMatrixPosition(knee.matrixWorld);
+      this.model.worldToLocal(this._v1);
+      this.model.worldToLocal(this._v2);
+      return this._v2.z - this._v1.z;
+    };
+    return Math.max(-1, Math.min(1, (fwd(thighL, shinL) - fwd(thighR, shinR)) / 0.4));
+  }
+
+  // Interpolated bat strike pose at progress p (0..1)
+  swingPose(p) {
+    const keys = this.swingKeys;
+    let i = 0;
+    while (i < keys.length - 2 && p > keys[i + 1].p) i++;
+    const a = keys[i], b = keys[i + 1];
+    let t = Math.max(0, Math.min(1, (p - a.p) / (b.p - a.p)));
+    if (b.ease === 'inout') t = t * t * (3 - 2 * t);
+    else if (b.ease === 'in') t = t * t;
+    else if (b.ease === 'out') t = 1 - (1 - t) * (1 - t);
+    return {
+      twist: a.twist + (b.twist - a.twist) * t,
+      lunge: a.lunge + (b.lunge - a.lunge) * t,
+      armQ: a.armQ.clone().slerp(b.armQ, t),
+      batQ: a.batQ.clone().slerp(b.batQ, t)
+    };
+  }
+
+  // Torso twist, arm swing while walking and the bat strike. Runs after the clip has posed the skeleton
+  animateUpperBody(player, currentWeapon, dt) {
+    if (!this.upperBody) return;
+    const swinging = this.swingP < 1 && currentWeapon === 'bat' && !player.isRolling;
+    if (this.swingP < 1) this.swingP = Math.min(1, this.swingP + dt / this.swingDuration);
+    const pose = swinging ? this.swingPose(this.swingP) : null;
+
+    // 1. Torso twist through the spine bones (the clip rewrites them every frame, so this never accumulates)
+    if (pose && pose.twist !== 0) {
+      const yAxis = this._v1.set(0, 1, 0);
+      this.spineBone.quaternion.multiply(this._q.setFromAxisAngle(yAxis, pose.twist * 0.55));
+      this.chestBone.quaternion.multiply(this._q.setFromAxisAngle(yAxis, pose.twist * 0.45));
+      if (this.headBone) this.headBone.quaternion.multiply(this._q.setFromAxisAngle(yAxis, -pose.twist * 0.6));
+    }
+    if (pose) this.rollPivot.position.z += pose.lunge;
+
+    // 2. Upper body follows the chest bone
+    this.characterRoot.updateMatrixWorld(true);
+    this.boneInRig(this.chestBone, this.upperBody.matrix).multiply(this.chestRestInv);
+    this.upperBody.matrixWorldNeedsUpdate = true;
+
+    // 3. Arms: counter-swing to the legs while walking; the bat arm follows the strike keyframes
+    const swing = player.isRolling ? 0 : this.legSwing();
+    if (this.armLDown) {
+      // +X rotation swings an arm backwards: the left arm goes back when the left leg is in front
+      const counter = pose ? (pose.twist < 0 ? -0.35 : 0.45) * Math.abs(pose.twist) : 0;
+      this.armLDown.rotation.set(swing * 0.55 + counter, 0, 0);
+    }
+    if (this.armRPistol) this.armRPistol.rotation.set(-swing * 0.06, 0, 0);
+    if (this.armRBat && this.batObj) {
+      if (pose) {
+        this.armRBat.quaternion.copy(pose.armQ);
+        this.batObj.quaternion.copy(pose.batQ);
+      } else {
+        this.armRBat.rotation.set(-swing * 0.35, 0, 0);
+        this.batObj.quaternion.copy(this.batRestQ);
+      }
+    }
   }
 
   switchAction(name) {
@@ -346,72 +492,19 @@ class ThreeCharacterManager {
       this.rollPivot.position.z = 0;
     }
 
-    // 4. Drill Vibration & Connected Right-Handed Bat Melee Swing Animation
+    // 4. Drill vibration
     if (currentWeapon === 'drill' && this.drillObj && !player.isRolling) {
       this.drillObj.rotation.z = Math.sin(Date.now() * 0.08) * 0.04;
     }
-    if (this.batObj && this.armRBat) {
-      if (this.swingTimer > 0 && !player.isRolling) {
-        this.swingTimer = Math.max(0, this.swingTimer - dt * 3.85);
-        const p = 1.0 - this.swingTimer; // 0 -> 1
 
-        let armPitch = 0;
-        let armYaw = 0;
-        let batPitch = -0.80;
-        let batYaw = -0.35;
-        let torsoYaw = 0;
-        let lungeZ = 0;
-
-        if (p < 0.20) {
-          // Phase 1: Wind-up (cock right arm and bat back on the right side)
-          const t = p / 0.20;
-          armPitch = -0.12 * t;
-          armYaw = -0.32 * t;
-          batPitch = -0.80 + 0.35 * t;
-          batYaw = -0.35 - 0.22 * t;
-          torsoYaw = -0.22 * t;
-          lungeZ = -0.03 * t;
-        } else if (p < 0.65) {
-          // Phase 2: Horizontal Power Cleave (whip right arm + bat from Right to Left across the front!)
-          const t = (p - 0.20) / 0.45;
-          const s = 1.0 - Math.pow(1.0 - t, 2.2); // explosive ease-out
-          armPitch = -0.12 + 0.30 * s;
-          armYaw = -0.32 + 1.02 * s; // -18° -> +40° shoulder sweep
-          batPitch = -0.45 + 0.28 * Math.sin(t * Math.PI * 0.85); // levels bat horizontally
-          batYaw = -0.57 + 1.05 * s; // -33° -> +27° wrist whip (total ~67° forward-left)
-          torsoYaw = -0.22 + 0.58 * s; // torso twists into the strike
-          lungeZ = 0.09 * Math.sin(t * Math.PI);
-        } else {
-          // Phase 3: Smooth Recovery back to one-handed ready stance on right side
-          const t = (p - 0.65) / 0.35;
-          const s = t * t * (3.0 - 2.0 * t);
-          armPitch = 0.18 * (1.0 - s);
-          armYaw = 0.70 * (1.0 - s);
-          batPitch = -0.22 * (1.0 - s) + (-0.80) * s;
-          batYaw = 0.48 * (1.0 - s) + (-0.35) * s;
-          torsoYaw = 0.36 * (1.0 - s);
-          lungeZ = 0;
-        }
-
-        this.armRBat.rotation.set(armPitch, armYaw, 0);
-        this.batObj.rotation.set(batPitch, batYaw, 0);
-        this.rollPivot.rotation.y = torsoYaw;
-        this.rollPivot.position.z += lungeZ;
-      } else {
-        // One-handed ready stance: bat held in right hand on right side, cocked upward at 46°
-        this.armRBat.rotation.set(0, 0, 0);
-        this.batObj.rotation.set(-0.80, -0.35, 0);
-        this.rollPivot.rotation.y = 0;
-      }
-    } else {
-      if (this.armRBat) this.armRBat.rotation.set(0, 0, 0);
-      this.rollPivot.rotation.y = 0;
-    }
+    // 5. Torso twist, arm swing while walking and the bat strike (see animateUpperBody)
+    this.rollPivot.rotation.y = 0;
+    this.animateUpperBody(player, currentWeapon, dt);
 
     // Render to offscreen canvas. Standing still and aiming at the same spot only changes the subtle
     // idle breathing, so re-rendering every 3rd frame (20 fps) is enough; the canvas keeps the last
     // image (preserveDrawingBuffer). Moving, rolling, recoil, swings and the drill render every frame.
-    const isIdle = !player.isMoving && !player.isRolling && this.recoil <= 0 && this.swingTimer <= 0 && currentWeapon !== 'drill';
+    const isIdle = !player.isMoving && !player.isRolling && this.recoil <= 0 && this.swingP >= 1 && currentWeapon !== 'drill';
     const stateKey = `${currentWeapon}|${Math.round(player.angle * 180)}`;
     if (isIdle && stateKey === this.lastRenderState && (++this.idleFrameCounter % 3) !== 0) {
       return;
@@ -425,7 +518,7 @@ class ThreeCharacterManager {
   }
 
   triggerSwing() {
-    this.swingTimer = 1.0;
+    this.swingP = 0;
   }
 
   /**
