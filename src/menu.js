@@ -6,8 +6,8 @@
 //  - пишется само: раз в 30 секунд вне боя, сразу после магазина и победы над боссом, при паузе,
 //    сворачивании и закрытии вкладки; во время боя не пишется;
 //  - карта строится одинаково при каждом запуске, поэтому хранится только прогресс: статы и инвентарь
-//    Василия, перки, обысканные тайники (по координатам), побеждён ли босс, лут на земле и живые
-//    враги (респауна нет — убитые не должны возвращаться);
+//    Василия, перки, обысканные тайники и переброшенные громилами предметы (по номеру в списке),
+//    здоровье Мясника, лут на земле и живые враги (респауна нет — убитые не должны возвращаться);
 //  - после загрузки Василий стоит у ларька Михалыча, живые враги — там, где были;
 //  - смерть стирает сохранение (рогалик);
 //  - «код сохранения» — то же сохранение одной строкой, чтобы перенести забег в другой браузер или на
@@ -18,8 +18,9 @@ window.Menu = (() => {
   const SAVE_KEY = 'vasiliy.run';
   const SETTINGS_KEY = 'vasiliy.settings';
   // Меняя состав сохранения, увеличьте номер и научите applyRun() читать старые форматы.
-  // 1 — без врагов (тогда враги расставляются заново), 2 — с живыми врагами
-  const SAVE_FORMAT = 2;
+  // 1 — без врагов (тогда враги расставляются заново), 2 — с живыми врагами,
+  // 3 — тайники по номеру (громилы их переставляют), броня врагов, здоровье Мясника
+  const SAVE_FORMAT = 3;
   const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute']);
   const CODE_PREFIX = 'VVA1';
   const AUTOSAVE_INTERVAL_MS = 30000;
@@ -249,12 +250,18 @@ window.Menu = (() => {
         blockedPerks: Array.from(player.blockedPerks)
       },
       world: {
-        searched: containers.filter(c => c.searched).map(c => c.x + ',' + c.y),
+        // [номер, обыскан, x, y, поворот] — только обысканные и переброшенные
+        containers: containers.map((c, i) => (c.searched || c.moved)
+          ? [i, c.searched ? 1 : 0, Math.round(c.x), Math.round(c.y), typeof c.dirIdx === 'number' ? c.dirIdx : -1]
+          : null).filter(Boolean),
+        bins: movedBins(),
         bossDefeated: !bossRef,
+        boss: bossRef ? { hp: Math.ceil(bossRef.hp), enraged: !!bossRef.enraged } : null,
         loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
         enemyTotal: levelEnemyTotal,
         enemies: enemies.filter(e => e.type !== 'boss').map(e => ({
           type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
+          armor: e.armor || 0,
           radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
           tier: e.tier, districtId: e.districtId, bounds: e.bounds
         }))
@@ -262,7 +269,20 @@ window.Menu = (() => {
     };
   }
 
-  const isSave = s => !!(s && (s.format === 1 || s.format === SAVE_FORMAT) && s.player && s.world);
+  const isSave = s => !!(s && s.format >= 1 && s.format <= SAVE_FORMAT && s.player && s.world);
+
+  // Урны, которые громилы переставили: [список (0 — во дворах, 1 — на тротуарах), номер, x, y]
+  function binLists() {
+    const env = window.environmentRenderer;
+    return env ? [env.courtyardBins, env.staticSidewalkBins] : [];
+  }
+  function movedBins() {
+    const out = [];
+    binLists().forEach((list, li) => list.forEach((b, i) => {
+      if (b.moved) out.push([li, i, Math.round(b.x), Math.round(b.y)]);
+    }));
+    return out;
+  }
 
   function loadSave() {
     const s = readJSON(SAVE_KEY);
@@ -322,12 +342,44 @@ window.Menu = (() => {
     (Array.isArray(p.blockedPerks) ? p.blockedPerks : []).filter(knownPerk).forEach(id => player.blockedPerks.add(id));
 
     const w = s.world || {};
-    const searched = new Set(Array.isArray(w.searched) ? w.searched : []);
-    containers.forEach(c => { if (searched.has(c.x + ',' + c.y)) c.searched = true; });
+    if (Array.isArray(w.containers)) {
+      // Формат 3: по номеру тайника
+      w.containers.forEach(d => {
+        const c = Array.isArray(d) && containers[d[0]];
+        if (!c) return;
+        c.searched = !!d[1];
+        const x = num(d[2], c.x, 60, WORLD_WIDTH - 60), y = num(d[3], c.y, 60, WORLD_HEIGHT - 60);
+        if (x !== c.x || y !== c.y) {
+          c.x = x;
+          c.y = y;
+          if (d[4] >= 0 && d[4] < 16) c.dirIdx = Math.floor(d[4]);
+          c.moved = true;
+          placeObstacleFor(c, throwableKind(c));
+        }
+      });
+    } else {
+      // Форматы 1–2: обысканные тайники по координатам
+      const searched = new Set(Array.isArray(w.searched) ? w.searched : []);
+      containers.forEach(c => { if (searched.has(c.x + ',' + c.y)) c.searched = true; });
+    }
+    if (Array.isArray(w.bins)) {
+      const lists = binLists();
+      w.bins.forEach(d => {
+        const b = Array.isArray(d) && lists[d[0]] && lists[d[0]][d[1]];
+        if (!b) return;
+        b.x = num(d[2], b.x, 60, WORLD_WIDTH - 60);
+        b.y = num(d[3], b.y, 60, WORLD_HEIGHT - 60);
+        b.moved = true;
+        placeObstacleFor(b, 'bin');
+      });
+    }
     if (w.bossDefeated && bossRef) {
       const i = enemies.indexOf(bossRef);
       if (i >= 0) enemies.splice(i, 1);
       bossRef = null;
+    } else if (w.boss && bossRef) {
+      bossRef.hp = num(w.boss.hp, bossRef.maxHp, 1, bossRef.maxHp);
+      bossRef.enraged = !!w.boss.enraged; // подмога из капсул уже вылезала — второй раз не будет
     }
     (Array.isArray(w.loot) ? w.loot : []).slice(0, LOOT_LIMIT).forEach(it => {
       if (!Array.isArray(it) || !LOOT_TYPES.has(it[2])) return;
@@ -349,6 +401,8 @@ window.Menu = (() => {
           districtId: typeof d.districtId === 'string' ? d.districtId : 'courtyards',
           tier: num(d.tier, 1, 0, 9),
           radius: num(d.radius, 22, 8, 60),
+          armor: num(d.armor, d.type === 'brute' ? 0.6 : 0, 0, 0.9),
+          throwCooldown: 120 + Math.floor(Math.random() * 240),
           hp: num(d.hp, maxHp, 1, maxHp),
           maxHp,
           speed: num(d.speed, 2.5, 0.5, 6),

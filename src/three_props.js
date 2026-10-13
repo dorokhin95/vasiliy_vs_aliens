@@ -591,10 +591,13 @@ class ThreePropsManager {
     ctx.translate(c.x, c.y);
 
     // 1. Soft elliptical ground contact shadow aligned with 3D model rotation
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-    ctx.beginPath();
-    ctx.ellipse(0, 8, shadowRx, shadowRy, -rotAngle, 0, Math.PI * 2);
-    ctx.fill();
+    // (у предмета в руках громилы или в полёте тень рисует game.js — на земле, а не под ним)
+    if (!c.airborne) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(0, 8, shadowRx, shadowRy, -rotAngle, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // 2. Render 3D WebGL model
     if (c.searched) {

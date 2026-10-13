@@ -859,6 +859,7 @@ const LANGS = {
     boss_name: "ЗОЛОТОЙ МЯСНИК",
     boss_enraged: "ЯРОСТЬ!",
     boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!",
+    boss_adds: "🥚 Капсулы лопаются — подмога!",
     toads_left: "Жаб осталось",
     boss_alive: "☠ Мясник жив",
     boss_dead: "✓ Мясник повержен",
@@ -904,6 +905,7 @@ const LANGS = {
     boss_name: "THE GOLDEN BUTCHER",
     boss_enraged: "ENRAGED!",
     boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!",
+    boss_adds: "🥚 The pods burst — reinforcements!",
     toads_left: "Toads left",
     boss_alive: "☠ Butcher alive",
     boss_dead: "✓ Butcher down",
@@ -1195,6 +1197,7 @@ function generateWorld() {
   shellCasings = [];
   floatingTexts = [];
   lootItems = [];
+  thrownProps = [];
   cameraKickX = 0;
   cameraKickY = 0;
 
@@ -1538,6 +1541,9 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     enemies.push({
       x: ex,
       y: ey,
+      // Громилы в железе: спереди броня гасит большую часть урона (см. damageEnemy)
+      armor: type === 'brute' ? (dist.id === 'nest' ? 0.65 : 0.6) : 0,
+      throwCooldown: 120 + Math.floor(Math.random() * 240),
       startX: ex,
       startY: ey,
       bounds: { x1, y1, x2, y2 },
@@ -1707,6 +1713,8 @@ function startGame(save = null) {
   player.drunkTimer = 0;
   player.itemCooldown = 0;
   player.healLeft = 0;
+  player.stunTimer = 0;
+  player.knockFrames = 0;
   player.items = { vodka: 0, stew: 1, bandage: 2 };
   player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0 };
   player.unlockedWeapons = {
@@ -1867,8 +1875,8 @@ const SHOP_ARSENAL_ITEMS = [
     img: 'assets/sprites/weapons/weapon_makarov.png?v=1026',
     name_ru: 'Пистолет Макарова (ПМ 9×18)',
     name_en: 'Makarov Pistol (PM 9×18)',
-    desc_ru: 'Урон: 34 | Магазин: 8 патр. (+24 в комплекте). Надёжное табельное оружие против плевальщиков.',
-    desc_en: 'DMG: 34 | Mag: 8 rds (+24 included). Reliable sidearm against ranged spitters.',
+    desc_ru: 'Урон: 36 | Магазин: 8 патр. (+24 в комплекте). Надёжное табельное оружие против плевальщиков.',
+    desc_en: 'DMG: 36 | Mag: 8 rds (+24 included). Reliable sidearm against ranged spitters.',
     zone_ru: '📍 Ресурсы: Дворы (Стеклотара) + Гаражи (Чермет)',
     zone_en: '📍 Loot in: Courtyards (Bottles) + Garages (Scrap)',
     cost: { bottles: 12, scrap: 10 }
@@ -1895,8 +1903,8 @@ const SHOP_ARSENAL_ITEMS = [
     img: 'assets/sprites/weapons/weapon_drill.png?v=1026',
     name_ru: 'Ударная дрель ИЭ-1035',
     name_en: 'Soviet Impact Drill IE-1035',
-    desc_ru: 'Урон: 36/тик | Тратит выносливость (-4.5/тик). Перемалывает жаб в ближнем бою без патронов.',
-    desc_en: 'DMG: 36/tick | Drains stamina (-4.5/tick). Shreds armor at close range.',
+    desc_ru: 'Урон: 24/тик, лучше всех пробивает броню громил | Тратит выносливость (-4.5/тик). Перемалывает жаб в ближнем бою без патронов.',
+    desc_en: 'DMG: 24/tick, best against brute armor | Drains stamina (-4.5/tick). Shreds armor at close range.',
     zone_ru: '📍 Ресурсы: Гаражный кооператив и Теплосеть',
     zone_en: '📍 Loot in: Garages & Heating Pipeline',
     cost: { bottles: 15, scrap: 22 }
@@ -2313,7 +2321,7 @@ window.useItem = function(itemType) {
 function performRoll() {
   const stamMult = player.hasPerk('third_frog_eye') ? 0.75 : 1.0;
   const rollCost = Math.round(25 * stamMult);
-  if (player.isRolling || player.rollCooldown > 0 || player.stamina < rollCost) return;
+  if (player.isRolling || player.rollCooldown > 0 || player.stamina < rollCost || player.stunTimer > 0) return;
   
   let dx = 0, dy = 0;
   if (keys['KeyW']) dy -= 1;
@@ -2341,8 +2349,8 @@ function performRoll() {
     createParticles(player.x, player.y, '#eab308', 15);
     enemies.forEach(e => {
       if (Math.hypot(player.x - e.x, player.y - e.y) < 75) {
-        e.hp -= 35;
-        addFloatingText(e.x, e.y - 20, '-35 УДАР', '#eab308');
+        const hit = damageEnemy(e, 35, 'shock', player.x, player.y);
+        addFloatingText(e.x, e.y - 20, damageLabel(hit, `-${Math.round(hit.dealt)} УДАР`), '#eab308');
       }
     });
   }
@@ -2404,6 +2412,62 @@ function startReload() {
   SoundFX.reload();
   addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'ПЕРЕЗАРЯДКА [R]...' : 'RELOADING [R]...', '#facc15');
   updateHUD(true);
+}
+
+// --- ОРУЖИЕ: УРОН, СКОРОСТРЕЛЬНОСТЬ, ПРОБИТИЕ ---
+// dmg(b) — урон за удар / выстрел / тик дрели от базового урона Василия b (у обреза — за одну дробину).
+// cooldown — кадры между атаками. pen — пробитие брони (0 — броня гасит всё, 1 — броня не мешает).
+// Те же числа показывает таблица баланса (F4), так что править — только здесь
+const WEAPONS = {
+  bat: { dmg: b => b + 2, cooldown: 22, pen: 0.2 },
+  makarov: { dmg: b => b + 12, cooldown: 14, pen: 0.25 },
+  // Дрель лучше всех пробивает броню, но тиков меньше и урон за тик ниже: раньше она давала втрое
+  // больше урона в секунду, чем остальное оружие, и разбирала Мясника за полминуты
+  drill: { dmg: b => b * 0.75 + 6, cooldown: 14, pen: 0.7 },
+  shotgun: { dmg: b => b * 0.72, cooldown: 26, pen: 0.4, pellets: 7, clip: 2, reload: 110 },
+  plasma: { dmg: b => b + 24, cooldown: 10, pen: 0.8 },
+  chain: { pen: 1.0 },  // цепная молния перка «Аккумулятор от КАМАЗа»
+  shock: { pen: 0.5 },  // ударная волна переката перка «Рука-перфоратор»
+  thrown: { pen: 1.0 }  // предмет, брошенный громилой (бьёт и по своим)
+};
+
+// --- БРОНЯ И УДАРЫ В СПИНУ ---
+// e.armor — доля урона, которую броня гасит при ударе спереди (громилы, Мясник).
+// Удар со спины (сзади от того, куда враг смотрит) броню не замечает и бьёт сильнее
+const BACK_ARC = 1.95;       // дальше этого угла от взгляда врага — уже спина (~112°)
+const BACKSTAB_MULT = 1.25;
+
+function armorFactor(armor, weapon) {
+  const pen = (WEAPONS[weapon] && WEAPONS[weapon].pen !== undefined) ? WEAPONS[weapon].pen : 0.5;
+  return 1 - armor * (1 - pen);
+}
+
+// Единственное место, где враг получает урон. fromX/fromY — откуда пришёл удар.
+// Возвращает фактический урон и как он прошёл, чтобы место вызова показало цифру
+function damageEnemy(e, dmg, weapon, fromX, fromY) {
+  const armor = e.armor || 0;
+  let fromBehind = false;
+  if (armor > 0) {
+    let diff = Math.abs(Math.atan2(fromY - e.y, fromX - e.x) - (e.angle || 0));
+    while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+    fromBehind = diff > BACK_ARC;
+  }
+  const dealt = armor > 0 ? dmg * (fromBehind ? BACKSTAB_MULT : armorFactor(armor, weapon)) : dmg;
+  e.hp -= dealt;
+  e.isAggroed = true;
+  if (armor > 0 && !fromBehind && dealt < dmg * 0.8) {
+    // Звонкий удар по железу: серые искры навстречу удару
+    spawnDirectionalSparks(e.x, e.y - 22, Math.atan2(fromY - e.y, fromX - e.x), 1.3, 6, '#cbd5e1', 3, 9, 9);
+    if (Math.random() < 0.25) SoundFX.ricochet();
+  }
+  return { dealt, fromBehind, armored: armor > 0 && !fromBehind };
+}
+
+// Подпись к цифре урона: «БРОНЯ», если броня съела урон, «В СПИНУ», если удар зашёл сзади
+function damageLabel(hit, base) {
+  if (hit.fromBehind) return base + (currentLang === 'ru' ? ' В СПИНУ' : ' BACKSTAB');
+  if (hit.armored) return base + (currentLang === 'ru' ? ' БРОНЯ' : ' ARMOR');
+  return base;
 }
 
 // --- ПРОЦЕДУРНЫЙ АУДИО-СИНТЕЗАТОР ВЫСТРЕЛОВ И УДАРОВ (WebAudio API, 0 внешних файлов) ---
@@ -2776,7 +2840,7 @@ function shootPlayerWeapon() {
       addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'ВЫДОХСЯ! (-УРОН)' : 'EXHAUSTED!', '#f97316');
     } else {
       player.stamina = Math.max(0, player.stamina - batStamCost);
-      shootCooldown = 22;
+      shootCooldown = WEAPONS.bat.cooldown;
     }
 
     if (window.threeCharacter && typeof window.threeCharacter.triggerSwing === 'function') {
@@ -2806,13 +2870,12 @@ function shootPlayerWeapon() {
 
         if (angleDiff < 1.18) {
           hitAny = true;
-          let dmg = (player.baseDamage + 2) * (player.isDrunk ? 1.8 : 1.0);
+          let dmg = WEAPONS.bat.dmg(player.baseDamage) * (player.isDrunk ? 1.8 : 1.0);
           if (isExhausted) dmg *= 0.45;
           const isCrit = !isExhausted && (Math.random() < player.critChance);
           if (isCrit) dmg *= player.critMult;
 
-          e.hp -= dmg;
-          e.isAggroed = true;
+          const hit = damageEnemy(e, dmg, 'bat', player.x, player.y);
           e.hitFlash = 6;
 
           // Отбрасывание жабы шипованной битой (чтобы можно было держать дистанцию в стартовой зоне!)
@@ -2826,7 +2889,7 @@ function shootPlayerWeapon() {
 
           spawnDirectionalSparks(e.x, e.y - 8, toEnemyAngle, 1.0, 9, '#ef4444', 4, 11, 12);
           createParticles(e.x, e.y, '#22c55e', 6);
-          addFloatingText(e.x, e.y - 20, `${isCrit ? 'КРИТ! ' : ''}-${Math.round(dmg)}`, isCrit ? '#ef4444' : '#f8fafc');
+          addFloatingText(e.x, e.y - 20, damageLabel(hit, `${isCrit ? 'КРИТ! ' : ''}-${Math.round(hit.dealt)}`), isCrit ? '#ef4444' : '#f8fafc');
         }
       }
     });
@@ -2852,7 +2915,7 @@ function shootPlayerWeapon() {
     }
 
     pmAmmo.clip--;
-    shootCooldown = 14;
+    shootCooldown = WEAPONS.makarov.cooldown;
     SoundFX.makarov();
     if (window.threeCharacter) {
       window.threeCharacter.triggerRecoil(0.65);
@@ -2862,7 +2925,7 @@ function shootPlayerWeapon() {
     const angle = player.angle + (Math.random() - 0.5) * spread;
     const speed = 25;
     const isCrit = Math.random() < (player.critChance + 0.05);
-    let dmg = (player.baseDamage + 12) * (player.isDrunk ? 1.6 : 1.0) * (isCrit ? player.critMult : 1.0);
+    let dmg = WEAPONS.makarov.dmg(player.baseDamage) * (player.isDrunk ? 1.6 : 1.0) * (isCrit ? player.critMult : 1.0);
 
     cameraKickX -= Math.cos(angle) * 2.1;
     cameraKickY -= Math.sin(angle) * 2.1;
@@ -2925,7 +2988,7 @@ function shootPlayerWeapon() {
     }
 
     player.stamina = Math.max(0, player.stamina - drillStamCost);
-    shootCooldown = 12;
+    shootCooldown = WEAPONS.drill.cooldown;
     const drillReach = 88;
     SoundFX.drill();
     if (window.threeCharacter) {
@@ -2956,13 +3019,12 @@ function shootPlayerWeapon() {
         angleDiff = Math.abs(angleDiff);
 
         if (angleDiff < 1.05) {
-          const dmg = (player.baseDamage + 14) * (player.isDrunk ? 1.8 : 1.0);
-          e.hp -= dmg;
-          e.isAggroed = true;
+          const dmg = WEAPONS.drill.dmg(player.baseDamage) * (player.isDrunk ? 1.8 : 1.0);
+          const hit = damageEnemy(e, dmg, 'drill', player.x, player.y);
           e.hitFlash = 5;
           spawnDirectionalSparks(e.x, e.y - 8, toEnemyAngle, 1.1, 10, '#f97316', 5, 12, 12);
           createParticles(e.x, e.y, '#22c55e', 6);
-          addFloatingText(e.x, e.y - 20, `-${Math.round(dmg)} БУР`, '#eab308');
+          addFloatingText(e.x, e.y - 20, damageLabel(hit, `-${Math.round(hit.dealt)} БУР`), '#eab308');
         }
       }
     });
@@ -2981,7 +3043,7 @@ function shootPlayerWeapon() {
       return;
     }
 
-    shootCooldown = 10;
+    shootCooldown = WEAPONS.plasma.cooldown;
     SoundFX.plasma();
     if (window.threeCharacter) {
       window.threeCharacter.triggerRecoil(0.7);
@@ -2996,7 +3058,7 @@ function shootPlayerWeapon() {
       addFloatingText(player.x, player.y - 42, currentLang === 'ru' ? '🔥 ПЕРЕГРЕВ ПЛАЗМЫ (3 СЕК)!' : '🔥 PLASMA OVERHEAT (3s)!', '#ef4444');
     }
 
-    let dmg = (player.baseDamage + 24) * (player.isDrunk ? 1.5 : 1.0);
+    let dmg = WEAPONS.plasma.dmg(player.baseDamage) * (player.isDrunk ? 1.5 : 1.0);
     let isCrit = Math.random() < player.critChance;
     if (isCrit) dmg *= player.critMult;
 
@@ -3055,7 +3117,7 @@ function shootPlayerWeapon() {
   }
 
   sgAmmo.clip--;
-  shootCooldown = 26;
+  shootCooldown = WEAPONS.shotgun.cooldown;
   SoundFX.shotgun();
   if (window.threeCharacter) {
     window.threeCharacter.triggerRecoil(1.25);
@@ -3074,8 +3136,8 @@ function shootPlayerWeapon() {
     scale: 1.05 + Math.random() * 0.25
   });
 
-  const pellets = 7;
-  const basePelletDmg = (player.baseDamage * 0.72) * (player.isDrunk ? 1.85 : 1.0);
+  const pellets = WEAPONS.shotgun.pellets;
+  const basePelletDmg = WEAPONS.shotgun.dmg(player.baseDamage) * (player.isDrunk ? 1.85 : 1.0);
 
   for (let p = 0; p < pellets; p++) {
     const conePos = (p / (pellets - 1)) - 0.5;
@@ -3188,6 +3250,22 @@ function addObstacle(o) {
       const key = cx * 4096 + cy;
       if (!obstacleGrid.has(key)) obstacleGrid.set(key, []);
       obstacleGrid.get(key).push(o);
+    }
+  }
+}
+
+function removeObstacle(o) {
+  const ext = o.rect ? 0 : Math.max(o.rx, o.ry);
+  const x1 = o.rect ? o.x1 : o.x - ext;
+  const x2 = o.rect ? o.x2 : o.x + ext;
+  const y1 = o.rect ? o.y1 : o.y - ext;
+  const y2 = o.rect ? o.y2 : o.y + ext;
+  for (let cx = Math.floor(x1 / OBSTACLE_CELL); cx <= Math.floor(x2 / OBSTACLE_CELL); cx++) {
+    for (let cy = Math.floor(y1 / OBSTACLE_CELL); cy <= Math.floor(y2 / OBSTACLE_CELL); cy++) {
+      const cell = obstacleGrid.get(cx * 4096 + cy);
+      if (!cell) continue;
+      const i = cell.indexOf(o);
+      if (i >= 0) cell.splice(i, 1);
     }
   }
 }
@@ -3316,19 +3394,302 @@ function slideMove(ent, dx, dy, radius, steer = false) {
   if (!checkWalkCollision(ent.x, ty, radius, fo)) ent.y = ty;
 }
 
+// --- ГРОМИЛЫ МЕТАЮТ ПРЕДМЕТЫ ---
+// Громила подходит к баку, ящику или урне (элитный из гнезда — ещё и к машине), поднимает над головой
+// и швыряет туда, где Василий. Место падения заранее подсвечено красным кругом — от броска уходят
+// перекатом. Предмет остаётся там, где упал (тайник можно обыскать там же), и задевает жаб тоже.
+// o.airborne — предмет поднят или летит: тогда он рисуется поверх фигур, а его препятствие снято
+const THROWABLE = {
+  bin: { dmg: 26, radius: 40, weight: 0.6 },
+  trash: { dmg: 42, radius: 56, weight: 1.0 },
+  box: { dmg: 38, radius: 50, weight: 0.9 },
+  car: { dmg: 64, radius: 84, weight: 1.6 }
+};
+const THROW_RANGE_MIN = 170;
+const THROW_RANGE_MAX = 520;
+const THROW_SEEK_RADIUS = 240;    // ищет предмет не дальше этого от себя
+const THROW_LIFT_FRAMES = 34;     // замах с предметом над головой
+const THROW_COOLDOWN = 420;       // ~7 с между бросками одного громилы
+const BRUTE_TURN_RATE = 0.035;    // рад/кадр: громила разворачивается ~1,5 с — за спину успевают зайти
+let thrownProps = [];             // летящие предметы
+
+function angleDelta(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function turnToward(cur, target, rate) {
+  const d = angleDelta(target, cur);
+  return cur + Math.max(-rate, Math.min(rate, d));
+}
+
+function throwableKind(o) {
+  return o.type === 'trash' || o.type === 'box' || o.type === 'car' ? o.type : 'bin';
+}
+
+function findThrowable(e) {
+  const env = window.environmentRenderer;
+  const pool = containers.concat(env ? env.courtyardBins.concat(env.staticSidewalkBins) : []);
+  let best = null, bestD = THROW_SEEK_RADIUS;
+  for (let i = 0; i < pool.length; i++) {
+    const o = pool[i];
+    if (o.airborne || o.claimedBy) continue;
+    if (o.type === 'car' && (e.tier || 0) < 4) continue; // машины поднимают только элитные громилы
+    if (Math.hypot(o.x - safeZone.x, o.y - safeZone.y) < safeZone.radius + 40) continue;
+    const d = Math.hypot(o.x - e.x, o.y - e.y);
+    if (d < bestD) {
+      bestD = d;
+      best = o;
+    }
+  }
+  return best;
+}
+
+// Отменить бросок: поднятый предмет падает к ногам громилы, без урона
+function cancelThrow(e) {
+  const st = e.throwState;
+  if (!st) return;
+  st.obj.claimedBy = null;
+  if (st.phase === 'lift') {
+    st.obj.x = Math.round(e.x);
+    st.obj.y = Math.round(e.y + e.radius * 0.6);
+    st.obj.z = 0;
+    st.obj.airborne = false;
+    st.obj.moved = true;
+    placeObstacleFor(st.obj, st.kind);
+  }
+  e.throwState = null;
+}
+
+// true — в этом кадре громила занят броском (подходит к предмету или замахивается)
+function updateBruteThrow(e, distToPlayer, eSpeed) {
+  if (e.throwCooldown > 0) e.throwCooldown--;
+  const st = e.throwState;
+  if (!st) {
+    if (e.throwCooldown > 0 || distToPlayer < THROW_RANGE_MIN || distToPlayer > THROW_RANGE_MAX) return false;
+    const o = findThrowable(e);
+    if (!o) {
+      e.throwCooldown = 90;
+      return false;
+    }
+    o.claimedBy = e;
+    e.throwState = { phase: 'seek', obj: o, kind: throwableKind(o), t: 0 };
+    return false;
+  }
+  st.t++;
+  const o = st.obj;
+  if (st.phase === 'seek') {
+    if (o.airborne || st.t > 200 || distToPlayer < 110) {
+      cancelThrow(e);
+      e.throwCooldown = 120;
+      return false;
+    }
+    const reach = e.radius + THROWABLE[st.kind].radius * 0.45 + 18;
+    const d = Math.hypot(o.x - e.x, o.y - e.y);
+    if (d > reach) {
+      const a = Math.atan2(o.y - e.y, o.x - e.x);
+      e.angle = turnToward(e.angle, a, BRUTE_TURN_RATE * 2);
+      slideMove(e, Math.cos(a) * eSpeed, Math.sin(a) * eSpeed, e.radius, true);
+      return true;
+    }
+    // Поднимает
+    removeObstacle(o.obstacle);
+    o.airborne = true;
+    o.z = 0;
+    st.phase = 'lift';
+    st.t = 0;
+    SoundFX.reload();
+    return true;
+  }
+  // Замах: предмет над головой, громила доворачивается к Василию
+  const k = Math.min(1, st.t / THROW_LIFT_FRAMES);
+  o.x = e.x;
+  o.y = e.y + 2;
+  o.z = 40 + 75 * k;
+  e.angle = turnToward(e.angle, Math.atan2(player.y - e.y, player.x - e.x), BRUTE_TURN_RATE);
+  if (st.t >= THROW_LIFT_FRAMES) {
+    launchThrowable(e, o, st.kind);
+    e.throwState = null;
+    e.throwCooldown = THROW_COOLDOWN + Math.floor(Math.random() * 180);
+  }
+  return true;
+}
+
+function launchThrowable(e, o, kind) {
+  const def = THROWABLE[kind];
+  // Цель — где Василий будет через полсекунды, если продолжит идти
+  let tx = player.x + (player.lastDx || 0) * player.speed * 30;
+  let ty = player.y + (player.lastDy || 0) * player.speed * 30;
+  const maxRange = THROW_RANGE_MAX / Math.sqrt(def.weight);
+  let dx = tx - o.x, dy = ty - o.y;
+  const len = Math.hypot(dx, dy) || 1;
+  if (len > maxRange) {
+    tx = o.x + dx / len * maxRange;
+    ty = o.y + dy / len * maxRange;
+  }
+  // Купол Михалыча предметы не пропускает: падают у его края
+  const sd = Math.hypot(tx - safeZone.x, ty - safeZone.y);
+  const minSafe = safeZone.radius + def.radius * 0.5;
+  if (sd < minSafe) {
+    const a = Math.atan2(ty - safeZone.y, tx - safeZone.x);
+    tx = safeZone.x + Math.cos(a) * minSafe;
+    ty = safeZone.y + Math.sin(a) * minSafe;
+  }
+  const dist = Math.hypot(tx - o.x, ty - o.y);
+  thrownProps.push({
+    o, kind, thrower: e,
+    x0: o.x, y0: o.y, z0: o.z,
+    x1: tx, y1: ty,
+    t: 0,
+    T: Math.max(30, Math.round(dist / (8.5 / Math.pow(def.weight, 0.3)))),
+    peak: 70 + dist * 0.2,
+    spin: (Math.random() < 0.5 ? -1 : 1) * (0.06 + Math.random() * 0.05)
+  });
+  o.claimedBy = null;
+  SoundFX.bossSwing(kind === 'car');
+}
+
+function updateThrownProps() {
+  for (let i = thrownProps.length - 1; i >= 0; i--) {
+    const f = thrownProps[i];
+    f.t++;
+    const s = Math.min(1, f.t / f.T);
+    f.o.x = f.x0 + (f.x1 - f.x0) * s;
+    f.o.y = f.y0 + (f.y1 - f.y0) * s;
+    f.o.z = f.z0 * (1 - s) + 4 * f.peak * s * (1 - s);
+    f.o.tilt = f.spin * f.t;
+    if (s >= 1) {
+      landThrowable(f);
+      thrownProps.splice(i, 1);
+    }
+  }
+}
+
+function landThrowable(f) {
+  const o = f.o;
+  const def = THROWABLE[f.kind];
+  // В стену не влетает: если место занято зданием, предмет падает раньше по траектории
+  let x = f.x1, y = f.y1;
+  for (let k = 0; k < 12 && checkBuildingCollision(x, y, def.radius * 0.45); k++) {
+    x -= (f.x1 - f.x0) / 12;
+    y -= (f.y1 - f.y0) / 12;
+  }
+  o.x = Math.round(x);
+  o.y = Math.round(y);
+  o.z = 0;
+  o.tilt = 0;
+  o.airborne = false;
+  o.moved = true;
+  if (f.kind === 'car' || f.kind === 'box') o.dirIdx = Math.floor(Math.random() * 16);
+  placeObstacleFor(o, f.kind);
+
+  const hitR = def.radius + 26;
+  if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR) {
+    player.hp -= def.dmg;
+    const a = Math.atan2(player.y - y, player.x - x);
+    slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
+    createParticles(player.x, player.y, '#ef4444', 12);
+    addFloatingText(player.x, player.y - 30, `-${def.dmg}`, '#ef4444');
+    if (player.hp <= 0) gameOver();
+  }
+  // По своим тоже прилетает
+  enemies.forEach(en => {
+    if (en === f.thrower || en.type === 'boss') return;
+    if (Math.hypot(en.x - x, en.y + footDY(en) - y) < hitR) {
+      const hit = damageEnemy(en, def.dmg, 'thrown', x, y);
+      en.hitFlash = 6;
+      addFloatingText(en.x, en.y - 22, `-${Math.round(hit.dealt)}`, '#fbbf24');
+    }
+  });
+  createParticles(x, y, '#78716c', 14 + Math.round(def.weight * 10));
+  spawnGunpowderSmoke(x, y, -Math.PI / 2, 4 + Math.round(def.weight * 3));
+  cameraKickX += (Math.random() - 0.5) * 10 * def.weight;
+  cameraKickY += (Math.random() - 0.5) * 10 * def.weight;
+  SoundFX.batSwing(true);
+}
+
+// Красные круги на земле там, куда упадёт брошенное — рисуются под фигурами
+function drawThrowTargets(ctx) {
+  const t = performance.now() / 1000;
+  for (let i = 0; i < thrownProps.length; i++) {
+    const f = thrownProps[i];
+    const r = THROWABLE[f.kind].radius + 26;
+    const s = Math.min(1, f.t / f.T);
+    ctx.save();
+    ctx.globalAlpha = 0.25 + 0.35 * s;
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 2 + Math.sin(t * 14) * 0.8;
+    ctx.beginPath();
+    ctx.ellipse(f.x1, f.y1, r, r * 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(f.x1, f.y1, r * s, r * 0.62 * s, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Поднятые и летящие предметы — поверх фигур, с тенью на земле
+function drawAirborneProps(ctx) {
+  const env = window.environmentRenderer;
+  if (!env) return;
+  const draw = (o, isBin) => {
+    if (!o.airborne) return;
+    const z = o.z || 0;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0.15, 0.4 - z / 600);
+    ctx.fillStyle = '#000';
+    const w = isBin ? 14 : (o.type === 'car' ? 62 : 26);
+    ctx.beginPath();
+    ctx.ellipse(o.x, o.y + 8, w * (1 - Math.min(0.5, z / 400)), w * 0.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(o.x, o.y - z);
+    ctx.rotate(o.tilt || 0);
+    ctx.translate(-o.x, -o.y);
+    if (isBin) env.drawBin(ctx, o);
+    else env.drawContainer(ctx, o);
+    ctx.restore();
+  };
+  for (let i = 0; i < containers.length; i++) draw(containers[i], false);
+  env.courtyardBins.forEach(b => draw(b, true));
+  env.staticSidewalkBins.forEach(b => draw(b, true));
+}
+
 // Размеры — по нижней части спрайтов (крыша машины и крона дерева рисуются выше и не мешают ходить за ними)
+// Препятствие под машиной, баком или ящиком. Ссылка хранится в c.obstacle: громила может поднять
+// предмет и бросить — тогда препятствие снимается и ставится заново на месте падения
+function containerObstacle(c) {
+  const rot = typeof c.dirIdx === 'number' ? -(c.dirIdx / 16) * Math.PI * 2 : 0;
+  if (c.type === 'car') {
+    const isUaz = c.subType === 'uaz';
+    return { x: c.x, y: c.y + 6, rx: isUaz ? 80 : 76, ry: isUaz ? 36 : 30, rot };
+  }
+  if (c.type === 'trash') return { x: c.x, y: c.y + 6, rx: 24, ry: 22, rot: 0 };
+  return { x: c.x, y: c.y + 4, rx: 26, ry: 16, rot };
+}
+
+function binObstacle(b) {
+  return { x: b.x, y: b.y + 4, rx: 10, ry: 8, rot: 0 };
+}
+
+// Переставить предмет: снять старое препятствие и поставить новое на текущем месте
+function placeObstacleFor(o, kind) {
+  if (o.obstacle) removeObstacle(o.obstacle);
+  o.obstacle = kind === 'bin' ? binObstacle(o) : containerObstacle(o);
+  addObstacle(o.obstacle);
+}
+
 function buildObstacles() {
   obstacleGrid = new Map();
   containers.forEach(c => {
-    const rot = typeof c.dirIdx === 'number' ? -(c.dirIdx / 16) * Math.PI * 2 : 0;
-    if (c.type === 'car') {
-      const isUaz = c.subType === 'uaz';
-      addObstacle({ x: c.x, y: c.y + 6, rx: isUaz ? 80 : 76, ry: isUaz ? 36 : 30, rot });
-    } else if (c.type === 'trash') {
-      addObstacle({ x: c.x, y: c.y + 6, rx: 24, ry: 22, rot: 0 });
-    } else {
-      addObstacle({ x: c.x, y: c.y + 4, rx: 26, ry: 16, rot });
-    }
+    c.obstacle = containerObstacle(c);
+    addObstacle(c.obstacle);
   });
   // Ларёк Михалыча: тело киоска; подойти к прилавку для торговли можно спереди
   addObstacle({ rect: true, x1: safeZone.shopX - 100, y1: safeZone.shopY - 80, x2: safeZone.shopX + 100, y2: safeZone.shopY + 45 });
@@ -3339,7 +3700,10 @@ function buildObstacles() {
   env.courtyardTrees.forEach(t => addObstacle({ x: t.x, y: t.y + 2, rx: 16, ry: 12, rot: 0 }));
   env.staticStreetLamps.forEach(l => addObstacle({ x: l.x, y: l.y, rx: 7, ry: 6, rot: 0 }));
   env.courtyardBenches.forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 30, ry: 12, rot: 0 }));
-  env.courtyardBins.concat(env.staticSidewalkBins).forEach(b => addObstacle({ x: b.x, y: b.y + 4, rx: 10, ry: 8, rot: 0 }));
+  env.courtyardBins.concat(env.staticSidewalkBins).forEach(b => {
+    b.obstacle = binObstacle(b);
+    addObstacle(b.obstacle);
+  });
   env.courtyardBushes.forEach(b => addObstacle({ x: b.x, y: b.y + 6, rx: 28 * b.scale, ry: 14 * b.scale, rot: 0 }));
 }
 
@@ -3620,6 +3984,7 @@ function handleEnemyKilled(index) {
     onBossDefeated(dead);
     return;
   }
+  if (dead.throwState) cancelThrow(dead);
   createParticles(dead.x, dead.y, dead.type === 'brute' ? '#a855f7' : '#16a34a', 22);
   spawnLootDrop(dead);
   enemies.splice(index, 1);
@@ -3629,14 +3994,25 @@ function handleEnemyKilled(index) {
 // --- БОСС «ЗОЛОТОЙ МЯСНИК» (логово в СВ Квако-гнезде, появляется один раз за забег) ---
 const BOSS_HOME = { x: 3680, y: 330 };
 const BOSS_LEASH_RADIUS = 720;
-const BOSS_MAX_HP = 4200;
+const BOSS_MAX_HP = 6000;
+// Золотая кожа: спереди гасит почти половину урона; со спины — только во время его ударов,
+// пока он не доворачивается (см. damageEnemy)
+const BOSS_ARMOR = 0.45;
 // Тайминги — в кадрах симуляции (60 в секунду); arc — половина угла сектора в радианах
 const BOSS_ATTACKS = {
-  slash: { windup: 34, active: 8, recover: 30, range: 165, arc: 1.2, damage: 30 },
-  chop: { windup: 52, active: 6, recover: 50, range: 235, width: 56, damage: 55 },
-  spin: { windup: 38, active: 30, recover: 44, range: 150, damage: 22 },
-  lunge: { windup: 40, active: 14, recover: 36, range: 300, damage: 34 }
+  slash: { windup: 34, active: 8, recover: 30, range: 165, arc: 1.2, damage: 36 },
+  chop: { windup: 52, active: 6, recover: 50, range: 235, width: 56, damage: 62 },
+  spin: { windup: 38, active: 30, recover: 44, range: 150, damage: 26 },
+  lunge: { windup: 40, active: 14, recover: 36, range: 300, damage: 40 },
+  // Захват — наказание за стояние вплотную: хватает и швыряет
+  grab: { windup: 24, active: 6, recover: 40, range: 125, damage: 48 }
 };
+// Сколько кадров можно стоять рядом с Мясником, прежде чем он схватит (накапливается вблизи,
+// убывает вдали)
+const BOSS_GRAB_AFTER = 120;
+const BOSS_GRAB_NEAR = 140;
+// На половине здоровья из капсул логова вылезает подмога
+const BOSS_ADDS = 4;
 // За столько кадров до удара босс перестаёт доворачиваться — окно, чтобы уйти перекатом
 const BOSS_AIM_LOCK_FRAMES = 14;
 let bossRef = null;
@@ -3649,6 +4025,8 @@ function spawnBoss() {
     radius: 40,
     hp: BOSS_MAX_HP,
     maxHp: BOSS_MAX_HP,
+    armor: BOSS_ARMOR,
+    closeFrames: 0,
     speed: 1.9,
     aggroRadius: 360,
     isAggroed: false,
@@ -3736,6 +4114,21 @@ function updateBossStrike(e, a, def) {
     }
   } else if (a.key === 'spin') {
     if ((a.t === 4 || a.t === 19) && dist < def.range + player.radius) bossHitPlayer(e, def.damage);
+  } else if (a.key === 'grab') {
+    if (a.t === 1 && !player.isRolling && dist < def.range + player.radius) {
+      // Схватил: урон и бросок на пару шагов, Василий оглушён
+      player.hp -= def.damage;
+      const ang = Math.atan2(dy, dx);
+      player.stunTimer = 42;
+      player.knockFrames = 18;
+      player.knockVx = Math.cos(ang) * 14;
+      player.knockVy = Math.sin(ang) * 14;
+      cameraKickX += Math.cos(ang) * 16;
+      cameraKickY += Math.sin(ang) * 16;
+      createParticles(player.x, player.y, '#ef4444', 16);
+      addFloatingText(player.x - 30, player.y - 40, `${currentLang === 'ru' ? 'ЗАХВАТ!' : 'GRABBED!'} -${def.damage}`, '#f97316');
+      if (player.hp <= 0) gameOver();
+    }
   } else if (a.key === 'lunge') {
     const step = def.range / def.active;
     const nx = e.x + Math.cos(a.aim) * step;
@@ -3781,6 +4174,10 @@ function advanceBossAttack(e) {
 }
 
 function chooseBossAttack(e, dist) {
+  if (e.closeFrames >= BOSS_GRAB_AFTER) {
+    e.closeFrames = 0;
+    return 'grab';
+  }
   if (dist < 175) {
     const r = Math.random();
     const spinChance = e.enraged ? 0.38 : 0.22;
@@ -3803,7 +4200,12 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
     addFloatingText(e.x - 30, e.y - 96, `🔥 ${t('boss_enraged')}`, '#f97316');
     spawnDirectionalSparks(e.x, e.y - 30, -Math.PI / 2, Math.PI * 2, 24, '#f97316', 4, 11, 18);
     SoundFX.bossSwing(true);
+    spawnBossAdds();
   }
+
+  // Шкала «стоит вплотную» копится и во время его ударов: кто стоит рядом и бьёт — того схватят
+  const near = Math.hypot(player.x - e.x, player.y - e.y) < BOSS_GRAB_NEAR;
+  e.closeFrames = near ? e.closeFrames + 1 : Math.max(0, e.closeFrames - 2);
 
   if (e.attack) {
     e.isMoving = false;
@@ -3868,6 +4270,31 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   }
 }
 
+// Капсулы логова лопаются: рядом с Мясником появляются жабы-пехотинцы гнезда (один раз за бой)
+function spawnBossAdds() {
+  let spawned = 0;
+  for (let i = 0; i < BOSS_ADDS * 6 && spawned < BOSS_ADDS; i++) {
+    const a = (i / BOSS_ADDS) * Math.PI * 2 + Math.random() * 0.6;
+    const x = BOSS_HOME.x + Math.cos(a) * (150 + Math.random() * 90);
+    const y = BOSS_HOME.y + Math.sin(a) * (110 + Math.random() * 70);
+    if (x < 80 || y < 80 || x > WORLD_WIDTH - 80 || checkWalkCollision(x, y, 24, FOOT_DY.grunt)) continue;
+    const hp = Math.round(230 * ENEMY_HP_SCALE);
+    enemies.push({
+      x, y, startX: x, startY: y,
+      bounds: { x1: BOSS_HOME.x - 400, y1: 80, x2: WORLD_WIDTH - 80, y2: BOSS_HOME.y + 400 },
+      districtId: 'nest', tier: 4, radius: 24, armor: 0, throwCooldown: 0,
+      hp, maxHp: hp, speed: 2.92, type: 'grunt', color: '#22c55e', aggroRadius: 600,
+      isAggroed: true, hitFlash: 0,
+      patrolAngle: Math.random() * Math.PI * 2, patrolTimer: 90, shootCooldown: 60
+    });
+    createParticles(x, y, '#84cc16', 18);
+    spawnGunpowderSmoke(x, y, -Math.PI / 2, 5);
+    spawned++;
+  }
+  levelEnemyTotal += spawned;
+  if (spawned) addFloatingText(BOSS_HOME.x - 90, BOSS_HOME.y - 140, t('boss_adds'), '#84cc16');
+}
+
 // Разовая крупная награда за Мясника (учтена в расчёте экономики, docs/BALANCE.md)
 const BOSS_REWARD = [
   ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4],
@@ -3924,7 +4351,7 @@ function drawBossTelegraph(ctx, e) {
       ctx.closePath();
     } else if (a.key === 'chop') {
       ctx.rect(0, -def.width / 2, def.range * scale, def.width);
-    } else if (a.key === 'spin') {
+    } else if (a.key === 'spin' || a.key === 'grab') {
       ctx.arc(0, 0, def.range * scale, 0, Math.PI * 2);
     } else {
       ctx.rect(0, -lungeHalfW, (def.range + e.radius) * scale, lungeHalfW * 2);
@@ -4177,7 +4604,17 @@ function update() {
   if (player.rollCooldown > 0) player.rollCooldown--;
   // Страховка: если Василия всё же вытолкнуло внутрь препятствия, даём из него выйти, а не запираем
   const playerStuck = checkWalkCollision(player.x, player.y, player.radius, footDY(player));
-  if (player.isRolling) {
+  if (player.stunTimer > 0) {
+    // Захват Мясника: Василия швырнуло, пару мгновений он не управляем
+    player.stunTimer--;
+    player.isMoving = false;
+    if (player.knockFrames > 0) {
+      player.knockFrames--;
+      slideMove(player, player.knockVx, player.knockVy, player.radius);
+      player.knockVx *= 0.86;
+      player.knockVy *= 0.86;
+    }
+  } else if (player.isRolling) {
     if (playerStuck) {
       player.x += player.rollDx * 9;
       player.y += player.rollDy * 9;
@@ -4239,7 +4676,7 @@ function update() {
 
   const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
   if (shootCooldown > 0) shootCooldown--;
-  if (mouseDown && !player.isRolling && !inSafe) {
+  if (mouseDown && !player.isRolling && !inSafe && !(player.stunTimer > 0)) {
     shootPlayerWeapon();
   }
 
@@ -4250,7 +4687,7 @@ function update() {
   } else {
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
-      if (!c.searched && Math.abs(player.x - c.x) < 80 && Math.abs(player.y - c.y) < 80) {
+      if (!c.searched && !c.airborne && Math.abs(player.x - c.x) < 80 && Math.abs(player.y - c.y) < 80) {
         if (Math.hypot(player.x - c.x, player.y - c.y) < c.radius + player.radius + 20) {
           nearbyInteractable = { type: 'container', target: c };
           break;
@@ -4337,8 +4774,8 @@ function update() {
       if (Math.abs(b.x - e.x) > b.radius + e.radius + 10 || Math.abs(b.y - e.y) > b.radius + e.radius + 10) continue;
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
-        e.hp -= b.damage;
-        e.isAggroed = true;
+        // Удар пришёл оттуда, откуда летела пуля
+        const hit = damageEnemy(e, b.damage, b.weaponType, b.x - b.vx * 4, b.y - b.vy * 4);
         e.hitFlash = 5;
 
         const hitAngle = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
@@ -4360,13 +4797,12 @@ function update() {
           });
         }
 
-        addFloatingText(e.x + (Math.random() - 0.5) * 14, e.y - 16, `${b.isCrit ? 'CRIT! ' : ''}-${Math.round(b.damage)}`, b.isCrit ? '#ef4444' : '#f87171');
+        addFloatingText(e.x + (Math.random() - 0.5) * 14, e.y - 16, damageLabel(hit, `${b.isCrit ? 'CRIT! ' : ''}-${Math.round(hit.dealt)}`), b.isCrit ? '#ef4444' : '#f87171');
         
         if (player.hasPerk('car_battery')) {
           enemies.forEach(otherE => {
             if (otherE !== e && Math.hypot(e.x - otherE.x, e.y - otherE.y) < 140) {
-              otherE.hp -= 22;
-              otherE.isAggroed = true;
+              damageEnemy(otherE, 22, 'chain', e.x, e.y);
               otherE.hitFlash = 5;
               addFloatingText(otherE.x, otherE.y - 15, '-22 ⚡', '#38bdf8');
             }
@@ -4379,6 +4815,7 @@ function update() {
     }
   }
 
+  updateThrownProps();
   for (let i = enemies.length - 1; i >= 0; i--) {
     if (enemies[i].hp <= 0) {
       handleEnemyKilled(i);
@@ -4426,6 +4863,8 @@ function update() {
       if (!e.isAggroed) {
         e.isAggroed = true;
         addFloatingText(e.x, e.y - 25, '!', '#ef4444');
+        // Заметив Василия издалека, громила первым делом ищет, чем швырнуть
+        if (e.type === 'brute') e.throwCooldown = Math.min(e.throwCooldown || 0, 15 + Math.floor(Math.random() * 30));
       }
     } else if (inSafe || distToPlayer > e.aggroRadius * 1.5) {
       // Под куполом Михалыча Василия не видно: жабы теряют цель, снайперы перестают стрелять
@@ -4443,19 +4882,35 @@ function update() {
 
     if (e.isAggroed) {
       const angle = Math.atan2(player.y - e.y, player.x - e.x);
-      e.angle = angle;
-      if (e.type === 'grunt' || e.type === 'brute') {
+      if (e.type === 'brute') {
+        // Тяжёлый: разворачивается медленно и идёт туда, куда смотрит — за спину можно зайти перекатом.
+        // На расстоянии ищет, чем бы швырнуть
+        if (!updateBruteThrow(e, distToPlayer, eSpeed)) {
+          e.angle = turnToward(typeof e.angle === 'number' ? e.angle : angle, angle, BRUTE_TURN_RATE);
+          slideMove(e, Math.cos(e.angle) * eSpeed, Math.sin(e.angle) * eSpeed, e.radius, true);
+        }
+        // Бьёт только тех, кто перед ним: со спины громила не достаёт
+        const facing = Math.abs(angleDelta(angle, e.angle)) < 1.3;
+        if (facing && !e.throwState && distToPlayer < player.radius + e.radius && !player.isRolling) {
+          const tierMult = 1 + (e.tier || 1) * 0.22;
+          player.hp -= 1.65 * tierMult;
+          createParticles(player.x, player.y, '#ef4444', 3);
+          if (player.hp <= 0) gameOver();
+        }
+      } else if (e.type === 'grunt') {
+        e.angle = angle;
         slideMove(e, Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed, e.radius, true);
 
         if (distToPlayer < player.radius + e.radius && !player.isRolling) {
           // Усиленный контактный урон по тирам зоны!
           const tierMult = 1 + (e.tier || 1) * 0.22;
-          const dmg = (e.type === 'brute' ? 1.65 : 0.78) * tierMult;
+          const dmg = 0.78 * tierMult;
           player.hp -= dmg;
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
         }
       } else if (e.type === 'sniper') {
+        e.angle = angle;
         // Держит дистанцию 200–320 px: подходит или отступает, но, как и все, не сквозь стены
         const step = distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0);
         if (step !== 0) slideMove(e, Math.cos(angle) * step, Math.sin(angle) * step, e.radius, true);
@@ -4500,6 +4955,7 @@ function update() {
         }
       }
     } else {
+      if (e.throwState) cancelThrow(e);
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -4908,6 +5364,7 @@ function render() {
 
   // 6.5. Логово босса и красные зоны его ударов (под фигурами)
   drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  drawThrowTargets(ctx); // куда упадёт брошенное громилой
   if (bossRef) drawBossTelegraph(ctx, bossRef);
 
   // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
@@ -5072,6 +5529,8 @@ function render() {
   // 9.2. Машины, деревья, фонари и прочее, за чем стоит Василий или враг, — поверх фигур
   if (window.environmentRenderer) {
     window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height);
+    // 9.25. Предметы в руках громил и в полёте
+    drawAirborneProps(ctx);
     // 9.3. Плафоны фонарей, ореолы и конусы света — поверх персонажей
     window.environmentRenderer.drawLampGlows(ctx, camera, canvas.width, canvas.height);
   }
@@ -5218,10 +5677,82 @@ function drawPerfOverlay() {
   ctx.restore();
 }
 
+// --- ТАБЛИЦА БАЛАНСА (F4): за сколько секунд оружие убивает врага ---
+// Считается по WEAPONS, броне и здоровью живых врагов текущей карты и текущему урону Василия
+// (перки учтены). «Чистое» время непрерывной атаки: без выносливости, промахов и беготни;
+// перезарядка ПМ и обреза и перегрев плазмы учтены. Через дробь — то же со спины
+const balanceStats = { visible: false };
+const BALANCE_WEAPONS = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+const BALANCE_NAMES = {
+  bat: 'Бита', makarov: 'ПМ', drill: 'Дрель', shotgun: 'Обрез', plasma: 'Плазма',
+  grunt: 'Пех', sniper: 'Снай', brute: 'Гром', boss: 'МЯСНИК',
+  courtyards: 'дв', garages: 'гар', heating: 'тепл', cordon: 'корд', nest: 'гн'
+};
+
+function weaponDps(w, base) {
+  const W = WEAPONS[w];
+  if (w === 'shotgun') return W.dmg(base) * W.pellets * W.clip * 60 / (W.clip * W.cooldown + W.reload);
+  if (w === 'makarov') {
+    const clip = player.ammo.makarov.maxClip, reload = player.ammo.makarov.reloadTime;
+    return W.dmg(base) * clip * 60 / (clip * W.cooldown + reload);
+  }
+  if (w === 'plasma') return W.dmg(base) * 7 * 60 / (7 * W.cooldown + 180); // 7 выстрелов до перегрева + 3 с
+  return W.dmg(base) * 60 / W.cooldown;
+}
+
+function drawBalanceOverlay() {
+  if (!balanceStats.visible) return;
+  const groups = new Map();
+  enemies.forEach(e => {
+    const key = e.type === 'boss' ? 'boss' : e.type + ':' + e.districtId;
+    if (!groups.has(key)) groups.set(key, { e, n: 0 });
+    groups.get(key).n++;
+  });
+  const cols = Array.from(groups.values()).sort((a, b) => a.e.maxHp - b.e.maxHp).slice(0, 11);
+  const colW = 74, rowH = 18, x0 = 12, y0 = 110, firstW = 112;
+  const w = firstW + cols.length * colW + 10;
+  const h = rowH * (BALANCE_WEAPONS.length + 3) + 14;
+  ctx.save();
+  ctx.fillStyle = 'rgba(8, 10, 14, 0.86)';
+  ctx.fillRect(x0, y0, w, h);
+  ctx.font = '11px Consolas, monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = '#94a3b8';
+  ctx.fillText(`TTK, с (спереди/сзади) · урон ${player.baseDamage} · F4`, x0 + 8, y0 + 6);
+  cols.forEach((g, i) => {
+    const e = g.e;
+    const name = e.type === 'boss' ? BALANCE_NAMES.boss : `${BALANCE_NAMES[e.type]}·${BALANCE_NAMES[e.districtId] || ''}`;
+    const cx = x0 + firstW + i * colW;
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(`${name}×${g.n}`, cx, y0 + 6 + rowH);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText(`${Math.round(e.maxHp)}${e.armor ? ' 🛡' + Math.round(e.armor * 100) : ''}`, cx, y0 + 6 + rowH * 2);
+  });
+  BALANCE_WEAPONS.forEach((wk, r) => {
+    const y = y0 + 6 + rowH * (r + 3);
+    const dps = weaponDps(wk, player.baseDamage);
+    ctx.fillStyle = player.unlockedWeapons[wk] ? '#f8fafc' : '#64748b';
+    ctx.fillText(`${BALANCE_NAMES[wk]} ${Math.round(dps)}/с`, x0 + 8, y);
+    cols.forEach((g, i) => {
+      const e = g.e;
+      const front = e.maxHp / (dps * armorFactor(e.armor || 0, wk));
+      const back = e.maxHp / (dps * (e.armor ? BACKSTAB_MULT : 1));
+      ctx.fillStyle = front > 20 ? '#f87171' : (front > 8 ? '#fbbf24' : '#4ade80');
+      ctx.fillText(e.armor ? `${front.toFixed(1)}/${back.toFixed(1)}` : front.toFixed(1), x0 + firstW + i * colW, y);
+    });
+  });
+  ctx.restore();
+}
+
 window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') {
     e.preventDefault();
     perfStats.visible = !perfStats.visible;
+  }
+  if (e.code === 'F4') {
+    e.preventDefault();
+    balanceStats.visible = !balanceStats.visible;
   }
 });
 
@@ -5264,6 +5795,7 @@ function loop(now = performance.now()) {
     const t1 = performance.now();
     render();
     drawPerfOverlay();
+    drawBalanceOverlay();
     frozenFrameState = frozen ? gameState : null;
     const t2 = performance.now();
 

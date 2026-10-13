@@ -944,12 +944,12 @@ class EnvironmentRenderer {
     if (binImg) {
       for (let i = 0; i < this.courtyardBins.length; i++) {
         const tb = this.courtyardBins[i];
-        if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
+        if (tb.airborne || !this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
         this.drawBin(ctx, tb);
       }
       for (let i = 0; i < this.staticSidewalkBins.length; i++) {
         const tb = this.staticSidewalkBins[i];
-        if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
+        if (tb.airborne || !this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
         this.drawBin(ctx, tb);
       }
     }
@@ -1060,7 +1060,7 @@ class EnvironmentRenderer {
     this.deferredContainers.clear();
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
-      if (!this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) continue;
+      if (c.airborne || !this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) continue;
       const r = this.containerRect(c);
       let playerBehind = false, behind = false, front = false;
       for (let j = 0; j < actors.length; j++) {
@@ -1102,7 +1102,7 @@ class EnvironmentRenderer {
     for (let k = 0; k < bins.length; k++) {
       for (let i = 0; i < bins[k].length; i++) {
         const tb = bins[k][i];
-        if (!this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
+        if (tb.airborne || !this.isVisible(tb.x - 30, tb.y - 30, 60, 60, camera, screenW, screenH)) continue;
         if (behind(tb.y, { x: tb.x - 18, y: tb.y - 20, w: 36, h: 36 })) items.push({ y: tb.y, draw: () => this.drawBin(ctx, tb) });
       }
     }
@@ -1346,8 +1346,9 @@ class EnvironmentRenderer {
   drawContainers(ctx, camera, screenW, screenH, containers) {
     containers.forEach(c => {
       if (!this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) return;
-      // За ним стоит персонаж — нарисуем после персонажей (drawOccludingProps)
-      if (this.deferredContainers.has(c)) return;
+      // За ним стоит персонаж — нарисуем после персонажей (drawOccludingProps).
+      // Поднятый или летящий (громила швыряет) рисует game.js поверх фигур
+      if (c.airborne || this.deferredContainers.has(c)) return;
       this.drawContainer(ctx, c);
     });
   }

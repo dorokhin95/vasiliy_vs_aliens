@@ -65,7 +65,9 @@ class ThreeBossManager {
       slash: { clip: 'Attack_Slash', phases: [34, 8, 30] },
       chop: { clip: 'Attack_Chop', phases: [52, 6, 50] },
       spin: { clip: 'Attack_Spin', phases: [38, 30, 44] },
-      lunge: { clip: 'Attack_Lunge', phases: [40, 14, 36] }
+      lunge: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
+      // Захват: своего клипа нет — тот же рывок вперёд, только на месте и быстрее
+      grab: { clip: 'Attack_Lunge', phases: [40, 14, 36] }
     };
 
     this.loadModel();
