@@ -32,6 +32,9 @@ window.Menu = (() => {
       new_run: 'НОВЫЙ ЗАБЕГ',
       new_run_confirm: 'ТОЧНО? ЗАБЕГ СОТРЁТСЯ',
       settings: 'НАСТРОЙКИ',
+      intro: 'ПРЕДЫСТОРИЯ',
+      comic_skip: 'ПРОПУСТИТЬ [ESC]',
+      comic_hint: 'Клик или пробел — дальше · ← назад',
       pause: 'ПАУЗА',
       resume: 'ПРОДОЛЖИТЬ',
       save_now: 'СОХРАНИТЬ',
@@ -86,6 +89,9 @@ window.Menu = (() => {
       new_run: 'NEW RUN',
       new_run_confirm: 'SURE? THE RUN WILL BE LOST',
       settings: 'SETTINGS',
+      intro: 'STORY',
+      comic_skip: 'SKIP [ESC]',
+      comic_hint: 'Click or Space — next · ← back',
       pause: 'PAUSED',
       resume: 'RESUME',
       save_now: 'SAVE',
@@ -396,8 +402,13 @@ window.Menu = (() => {
   function startNewRun() {
     removeKey(SAVE_KEY);
     hidePause();
-    startGame();
-    requestSave();
+    const begin = () => {
+      startGame();
+      requestSave();
+    };
+    // Самый первый забег начинается с комикса-предыстории (src/comic.js)
+    if (window.Comic && !window.Comic.seen()) window.Comic.play(begin);
+    else begin();
   }
 
   function continueRun(save) {
@@ -580,6 +591,7 @@ window.Menu = (() => {
     else startNewRun();
   });
   $('btn-menu-settings').addEventListener('click', openSettings);
+  $('btn-menu-intro').addEventListener('click', () => window.Comic && window.Comic.play());
 
   $('btn-resume').addEventListener('click', resume);
   $('btn-pause-save').addEventListener('click', () => updatePauseStatus(saveRun()));
