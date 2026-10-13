@@ -3536,10 +3536,16 @@ function checkBuildingCollision(x, y, radius) {
     const b = buildings[i];
     if (b.cols === undefined) {
       const shape = buildingShape(b);
-      if (shape) b.cols = shape;
-      else if (!SILHOUETTE_TYPES.has(b.type)) b.cols = null;
+      if (shape) {
+        b.cols = shape;
+        // Габарит всех прямоугольников силуэта — чтобы не перебирать их у далёких домов
+        const x1 = Math.min(...shape.map(r => r.x)), y1 = Math.min(...shape.map(r => r.y));
+        b.colBox = { x: x1, y: y1, w: Math.max(...shape.map(r => r.x + r.w)) - x1, h: Math.max(...shape.map(r => r.y + r.h)) - y1 };
+      } else if (!SILHOUETTE_TYPES.has(b.type)) b.cols = null;
     }
     if (b.cols) {
+      const bb = b.colBox;
+      if (x + radius <= bb.x || x - radius >= bb.x + bb.w || y + radius <= bb.y || y - radius >= bb.y + bb.h) continue;
       for (let j = 0; j < b.cols.length; j++) {
         const r = b.cols[j];
         if (x + radius > r.x && x - radius < r.x + r.w && y + radius > r.y && y - radius < r.y + r.h) return r;

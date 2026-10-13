@@ -426,11 +426,14 @@ class ThreePropsManager {
 
   /**
    * Силуэт модели на кадре — для коллизий: «врезаешься» только там, где здание нарисовано.
-   * Кадр режется на полосы по высоте; в каждой полосе берутся участки столбцов, где модель занимает
-   * хотя бы четверть строк (антенны, тонкие трубы и перила отсекаются), близкие участки сливаются.
+   * Кадр режется на тонкие полосы (~0.8% кадра); в каждой полосе берутся участки столбцов, где модель
+   * занимает хотя бы половину строк, близкие участки сливаются, узкие (антенны, тонкие трубы) отсекаются.
+   * Полосы с теми же участками склеиваются по вертикали — прямоугольников остаётся немного.
+   * Раньше полос было 7: будка на крыше растягивала верхнюю полосу на всю ширину дома, и над краем
+   * крыши стояла невидимая стена (у брежневки — ~60 px).
    * Возвращает прямоугольники в долях кадра.
    */
-  silhouette(propKey, strips = 7) {
+  silhouette(propKey) {
     if (this.silhouettes[propKey]) return this.silhouettes[propKey];
     const frame = this.getFrameCanvas(propKey, 0);
     if (!frame) return null;
@@ -459,11 +462,14 @@ class ThreePropsManager {
     }
     if (top < 0) return null;
     const rects = [];
-    const stripH = (bottom - top + 1) / strips;
+    const stripH = Math.max(2, Math.round(size * 0.008));
     const minGap = Math.round(size * 0.04);
-    for (let s = 0; s < strips; s++) {
-      const y0 = Math.round(top + s * stripH), y1 = Math.round(top + (s + 1) * stripH);
-      const need = Math.max(1, (y1 - y0) * 0.25);
+    const minRun = size * 0.04;
+    const tol = Math.round(size * 0.025); // насколько края полос могут гулять внутри одного прямоугольника (балконы)
+    let open = []; // прямоугольники, которые ещё можно продолжить вниз: { x0, x1, y0, y1, x0min, x0max, x1min, x1max }
+    for (let y0 = top; y0 <= bottom; y0 += stripH) {
+      const y1 = Math.min(bottom + 1, y0 + stripH);
+      const need = Math.max(1, (y1 - y0) * 0.5);
       let runStart = -1, lastEnd = -1;
       const runs = [];
       for (let x = 0; x <= size; x++) {
@@ -480,10 +486,28 @@ class ThreePropsManager {
           runStart = -1;
         }
       }
+      const next = [];
       runs.forEach(([x0, x1]) => {
-        if (x1 - x0 < size * 0.02) return;
-        rects.push({ x: x0 / size, y: y0 / size, w: (x1 - x0 + 1) / size, h: (y1 - y0) / size });
+        if (x1 - x0 < minRun) return;
+        const r = open.find(o => !next.includes(o) &&
+          Math.max(o.x0max, x0) - Math.min(o.x0min, x0) <= tol &&
+          Math.max(o.x1max, x1) - Math.min(o.x1min, x1) <= tol);
+        if (r) {
+          r.x0min = Math.min(r.x0min, x0); r.x0max = Math.max(r.x0max, x0);
+          r.x1min = Math.min(r.x1min, x1); r.x1max = Math.max(r.x1max, x1);
+          r.y1 = y1;
+          next.push(r);
+        } else {
+          const n = { y0, y1, x0min: x0, x0max: x0, x1min: x1, x1max: x1 };
+          rects.push(n);
+          next.push(n);
+        }
       });
+      open = next;
+    }
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      rects[i] = { x: r.x0min / size, y: r.y0 / size, w: (r.x1max - r.x0min + 1) / size, h: (r.y1 - r.y0) / size };
     }
     this.silhouettes[propKey] = rects;
     return rects;
