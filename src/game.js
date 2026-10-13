@@ -831,7 +831,7 @@ const LANGS = {
     controls_aim: "ЛКМ — Удар / Стрельба | R — Перезарядка",
     controls_roll: "ПРОБЕЛ — Перекат (-25 выносливости)",
     controls_interact: "E — Обыскать тайник / Лавка Михалыча",
-    controls_items: "1, 2, 3 — Расходники | Q / 4..8 — Оружие",
+    controls_items: "1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Следующее оружие",
     hp: "ЗДОРОВЬЕ",
     stamina: "ВЫНОСЛИВ.",
     vodka: "Водка",
@@ -870,7 +870,7 @@ const LANGS = {
     controls_aim: "LMB — Attack / Shoot | R — Reload",
     controls_roll: "SPACE — Dodge Roll (-25 Stamina)",
     controls_interact: "E — Scavenge / Shop",
-    controls_items: "1, 2, 3 — Consumables | Q / 4..8 — Weapons",
+    controls_items: "1–8 — Hotbar slots (drag to reorder) | Q — Next weapon",
     hp: "HEALTH",
     stamina: "STAMINA",
     vodka: "Vodka",
@@ -1546,14 +1546,12 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') performRoll();
     if (e.code === 'KeyR') startReload();
     if (e.code === 'KeyQ') cycleWeapon();
-    if (e.code === 'Digit1') useItem('vodka');
-    if (e.code === 'Digit2') useItem('stew');
-    if (e.code === 'Digit3') useItem('bandage');
-    if (e.code === 'Digit4') switchWeapon('bat');
-    if (e.code === 'Digit5') switchWeapon('makarov');
-    if (e.code === 'Digit6') switchWeapon('drill');
-    if (e.code === 'Digit7') switchWeapon('shotgun');
-    if (e.code === 'Digit8') switchWeapon('plasma');
+    // Цифры 1–8 — видимые слоты хотбара по порядку (порядок игрок меняет перетаскиванием)
+    const digit = /^Digit[1-8]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
+    if (digit) {
+      const slotId = visibleHotbarSlots()[digit - 1];
+      if (slotId) activateHotbarSlot(slotId);
+    }
   }
 });
 
@@ -1563,6 +1561,98 @@ window.addEventListener('mousemove', (e) => {
   mouseScreen.y = e.clientY;
 });
 window.addEventListener('mousedown', (e) => { if (e.button === 0) mouseDown = true; });
+
+// --- ХОТБАР: слоты перетаскиваются мышью, клавиши 1–8 идут по видимому порядку, порядок сохраняется ---
+const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma']);
+const HOTBAR_STORAGE_KEY = 'vasiliy.hotbarOrder';
+let hotbarOrder = loadHotbarOrder();
+
+function loadHotbarOrder() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HOTBAR_STORAGE_KEY));
+    if (Array.isArray(saved) && saved.length === HOTBAR_DEFAULT_ORDER.length &&
+        HOTBAR_DEFAULT_ORDER.every(id => saved.includes(id))) {
+      return saved;
+    }
+  } catch (e) { /* хранилище недоступно — порядок по умолчанию */ }
+  return HOTBAR_DEFAULT_ORDER.slice();
+}
+
+function saveHotbarOrder() {
+  try { localStorage.setItem(HOTBAR_STORAGE_KEY, JSON.stringify(hotbarOrder)); } catch (e) { /* не критично */ }
+}
+
+// Ещё не купленное оружие в хотбаре скрыто и номера не занимает
+function visibleHotbarSlots() {
+  return hotbarOrder.filter(id => !HOTBAR_WEAPONS.has(id) || player.unlockedWeapons[id]);
+}
+
+function activateHotbarSlot(id) {
+  if (HOTBAR_WEAPONS.has(id)) window.switchWeapon(id);
+  else window.useItem(id);
+}
+
+// Расставляет слоты в DOM по hotbarOrder и подписывает клавиши [1]..[N] у видимых
+function applyHotbarOrder() {
+  const bar = document.getElementById('hotbar');
+  if (!bar) return;
+  const visible = visibleHotbarSlots();
+  hotbarOrder.forEach(id => {
+    const slot = bar.querySelector(`[data-slot="${id}"]`);
+    if (!slot) return;
+    bar.appendChild(slot);
+    const n = visible.indexOf(id);
+    slot.querySelector('.slot-key').textContent = n >= 0 ? `[${n + 1}]` : '';
+  });
+}
+
+function initHotbarDrag() {
+  const bar = document.getElementById('hotbar');
+  if (!bar) return;
+  let drag = null;
+
+  // Клик по хотбару — не выстрел (окно ловит mousedown для стрельбы)
+  bar.addEventListener('mousedown', (e) => e.stopPropagation());
+
+  bar.addEventListener('pointerdown', (e) => {
+    const slot = e.target.closest('.hotbar-slot');
+    if (!slot || e.button !== 0) return;
+    drag = { slot, startX: e.clientX, startY: e.clientY, moved: false };
+    try { bar.setPointerCapture(e.pointerId); } catch (err) { /* указатель уже отпущен */ }
+  });
+
+  bar.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
+    drag.moved = true;
+    drag.slot.classList.add('dragging');
+    // Ставим слот перед первым видимым соседом, чей центр правее курсора, иначе — сразу за последним видимым
+    const others = [...bar.querySelectorAll('.hotbar-slot')].filter(s => s !== drag.slot && s.style.display !== 'none');
+    if (others.length === 0) return;
+    const before = others.find(s => { const r = s.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
+    const anchor = before || others[others.length - 1].nextElementSibling;
+    if (anchor !== drag.slot && drag.slot.nextElementSibling !== anchor) bar.insertBefore(drag.slot, anchor);
+  });
+
+  const finish = (e) => {
+    if (!drag) return;
+    const { slot, moved } = drag;
+    drag = null;
+    slot.classList.remove('dragging');
+    if (moved) {
+      hotbarOrder = [...bar.querySelectorAll('.hotbar-slot')].map(s => s.dataset.slot);
+      saveHotbarOrder();
+      applyHotbarOrder();
+    } else if (e.type === 'pointerup') {
+      activateHotbarSlot(slot.dataset.slot);
+    }
+  };
+  bar.addEventListener('pointerup', finish);
+  bar.addEventListener('pointercancel', finish);
+
+  applyHotbarOrder();
+}
 window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = false; });
 
 document.getElementById('btn-start').addEventListener('click', startGame);
@@ -1611,6 +1701,7 @@ function startGame() {
   }
 
   generateWorld();
+  applyHotbarOrder();
   updateHUD(true);
 }
 
@@ -2015,6 +2106,7 @@ function buyArsenalItem(item) {
       player.ammo.shotgun.clip = 2;
       player.ammo.shotgun.reserve += 10;
     }
+    applyHotbarOrder(); // новый слот получает номер, следующие сдвигаются
     window.switchWeapon(item.weaponKey);
   } else if (item.type === 'ammo') {
     player.ammo[item.ammoKey].reserve += item.amount;
@@ -2234,7 +2326,8 @@ window.switchWeapon = function(weaponKey) {
 };
 
 window.cycleWeapon = function() {
-  const weapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'].filter(w => player.unlockedWeapons[w]);
+  // Q перебирает открытое оружие в порядке хотбара
+  const weapons = hotbarOrder.filter(w => HOTBAR_WEAPONS.has(w) && player.unlockedWeapons[w]);
   if (weapons.length <= 1) return;
   const curIdx = weapons.indexOf(player.currentWeapon);
   const nextIdx = (curIdx + 1) % weapons.length;
@@ -4927,5 +5020,6 @@ function loop(now = performance.now()) {
 
 // Запуск
 updateUILanguage();
+initHotbarDrag();
 updateHUD();
 loop();

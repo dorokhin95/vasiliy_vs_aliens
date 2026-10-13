@@ -393,11 +393,16 @@
       border-color: #ef4444 !important;
       box-shadow: 0 0 16px rgba(239, 68, 68, 0.7) !important;
     }
-    .hotbar-divider {
-      width: 2px;
-      background: #334155;
-      margin: 4px 2px;
-      border-radius: 1px;
+    .hotbar-slot {
+      cursor: grab;
+      touch-action: none;
+    }
+    .hotbar-slot.dragging {
+      opacity: 0.6;
+      cursor: grabbing;
+      border-color: #fbbf24;
+      transform: translateY(-6px) scale(1.04);
+      z-index: 2;
     }
 
     /* Shop & Workbench Modal */
@@ -775,35 +780,34 @@
 
     <!-- Bottom Hotbar (Real PNG Renders for Consumables & 5 Weapons) -->
     <div class="hotbar" id="hotbar">
-      <div class="hotbar-slot" onclick="useItem('vodka')" title="Водка [1]: режим берсерка (+урон)">
+      <div class="hotbar-slot" data-slot="vodka" title="Водка: режим берсерка (+урон)">
         <span class="slot-key">[1]</span>
         <img class="slot-img" src="assets/sprites/loot/loot_vodka.png?v=1026" alt="Водка">
         <span class="slot-name" id="lbl-vodka">Водка</span>
         <span class="slot-count" id="count-vodka">0</span>
       </div>
-      <div class="hotbar-slot" onclick="useItem('stew')" title="Тушёнка [2]: +65 Выносливости">
+      <div class="hotbar-slot" data-slot="stew" title="Тушёнка: +65 Выносливости">
         <span class="slot-key">[2]</span>
         <img class="slot-img" src="assets/sprites/loot/loot_stew.png?v=1026" alt="Тушенка">
         <span class="slot-name" id="lbl-stew">Тушенка</span>
         <span class="slot-count" id="count-stew">0</span>
       </div>
-      <div class="hotbar-slot" onclick="useItem('bandage')" title="Бинты [3]: +45 Здоровья">
+      <div class="hotbar-slot" data-slot="bandage" title="Бинты: +45 Здоровья">
         <span class="slot-key">[3]</span>
         <img class="slot-img" src="assets/sprites/loot/loot_bandage.png?v=1026" alt="Бинты">
         <span class="slot-name" id="lbl-bandage">Бинты</span>
         <span class="slot-count" id="count-bandage">0</span>
       </div>
 
-      <div class="hotbar-divider"></div>
 
-      <div class="hotbar-slot active" id="slot-w-bat" onclick="switchWeapon('bat')" title="Бита с гвоздями [4]: тратит 18 выносливости за удар">
+      <div class="hotbar-slot active" id="slot-w-bat" data-slot="bat" title="Бита с гвоздями: тратит 18 выносливости за удар">
         <span class="slot-key">[4]</span>
         <span class="slot-sub" id="sub-w-bat">-18 ВЫН</span>
         <img class="slot-img" src="assets/sprites/weapons/weapon_bat.png?v=1026" alt="Бита">
         <span class="slot-name" id="lbl-w-bat">Бита</span>
       </div>
 
-      <div class="hotbar-slot" id="slot-w-makarov" style="display:none;" onclick="switchWeapon('makarov')" title="Пистолет Макарова ПМ [5]: магазин 8 патр. 9х18, R — перезарядка">
+      <div class="hotbar-slot" id="slot-w-makarov" data-slot="makarov" style="display:none;" title="Пистолет Макарова ПМ: магазин 8 патр. 9х18, R — перезарядка">
         <span class="slot-key">[5]</span>
         <span class="slot-ammo" id="ammo-w-makarov">8/16</span>
         <img class="slot-img" src="assets/sprites/weapons/weapon_makarov.png?v=1029" alt="ПМ">
@@ -811,14 +815,14 @@
         <span class="slot-name" id="lbl-w-makarov">ПМ 9×18</span>
       </div>
 
-      <div class="hotbar-slot" id="slot-w-drill" style="display:none;" onclick="switchWeapon('drill')" title="Ударная дрель ИЭ-1035 [6]: бурит броню, тратит выносливость">
+      <div class="hotbar-slot" id="slot-w-drill" data-slot="drill" style="display:none;" title="Ударная дрель ИЭ-1035: бурит броню, тратит выносливость">
         <span class="slot-key">[6]</span>
         <span class="slot-sub" id="sub-w-drill">-4.5 ВЫН</span>
         <img class="slot-img" src="assets/sprites/weapons/weapon_drill.png?v=1029" alt="Дрель">
         <span class="slot-name" id="lbl-w-drill">Дрель</span>
       </div>
 
-      <div class="hotbar-slot" id="slot-w-shotgun" style="display:none;" onclick="switchWeapon('shotgun')" title="Дедовский Обрез 12к [7]: 2 ствола картечи, R — перезарядка">
+      <div class="hotbar-slot" id="slot-w-shotgun" data-slot="shotgun" style="display:none;" title="Дедовский Обрез 12к: 2 ствола картечи, R — перезарядка">
         <span class="slot-key">[7]</span>
         <span class="slot-ammo" id="ammo-w-shotgun">2/8</span>
         <img class="slot-img" src="assets/sprites/weapons/weapon_shotgun.png?v=1029" alt="Обрез">
@@ -826,7 +830,7 @@
         <span class="slot-name" id="lbl-w-shotgun">Обрез</span>
       </div>
 
-      <div class="hotbar-slot" id="slot-w-plasma" style="display:none;" onclick="switchWeapon('plasma')" title="Трофейный Плазмаган [8]: бесконечный боезапас, перегревается при 100%">
+      <div class="hotbar-slot" id="slot-w-plasma" data-slot="plasma" style="display:none;" title="Трофейный Плазмаган: бесконечный боезапас, перегревается при 100%">
         <span class="slot-key">[8]</span>
         <span class="slot-ammo" id="ammo-w-plasma">0%</span>
         <img class="slot-img" src="assets/sprites/weapons/weapon_plasma.png?v=1029" alt="Плазма">
@@ -903,18 +907,18 @@
         <span id="menu-ctrl-aim">ЛКМ — Удар битой / Стрельба | R — Перезарядка</span><br>
         <span id="menu-ctrl-roll">ПРОБЕЛ — Перекат (тратит выносливость)</span> | 
         <span id="menu-ctrl-interact">E — Обыскать тайник / Лавка Михалыча</span><br>
-        <span id="menu-ctrl-items">1, 2, 3 — Расходники | Q / 4..8 — Смена открытого оружия</span>
+        <span id="menu-ctrl-items">1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Следующее оружие</span>
       </div>
     </div>
   </div>
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/environment.js?v=1037"></script>
-  <script src="src/three_character.js?v=1037"></script>
-  <script src="src/three_enemies.js?v=1037"></script>
-  <script src="src/three_props.js?v=1037"></script>
-  <script src="src/three_boss.js?v=1037"></script>
-  <script src="src/game.js?v=1037"></script>
+  <script src="src/environment.js?v=1038"></script>
+  <script src="src/three_character.js?v=1038"></script>
+  <script src="src/three_enemies.js?v=1038"></script>
+  <script src="src/three_props.js?v=1038"></script>
+  <script src="src/three_boss.js?v=1038"></script>
+  <script src="src/game.js?v=1038"></script>
 </body>
 </html>
