@@ -15,7 +15,7 @@ const UPGRADE_TREES = {
         name_en: "Drill Arm",
         desc_ru: "+12 к базовому урону, ударная волна при перекате",
         desc_en: "+12 base dmg, shockwave during roll",
-        cost: { bottles: 10, scrap: 18 },
+        cost: { bottles: 10, scrap: 18, toad_leg: 2, toad_eye: 1 },
         statMods: { damage: 12 },
         locks: ["tentacle_arm"]
       },
@@ -25,7 +25,7 @@ const UPGRADE_TREES = {
         name_en: "Truck Battery Pack",
         desc_ru: "Цепная молния бьёт 2 соседние жабы при попадании",
         desc_en: "Chain lightning arcs to 2 nearby toads",
-        cost: { bottles: 14, scrap: 28, mil_parts: 2 },
+        cost: { bottles: 14, scrap: 28, mil_parts: 2, toad_eye: 3, toad_liver: 2 },
         statMods: {},
         locks: ["shaman_carpet"]
       },
@@ -35,7 +35,7 @@ const UPGRADE_TREES = {
         name_en: "Cybernetic Bionic Eye",
         desc_ru: "Лазерный целеуказатель, +25% шанс крита (x2.5)",
         desc_en: "Red laser sight, +25% crit chance (x2.5)",
-        cost: { bottles: 20, scrap: 38, mil_parts: 4, alien_core: 2 },
+        cost: { bottles: 20, scrap: 38, mil_parts: 4, alien_core: 2, toad_eye: 5, toad_liver: 2 },
         statMods: { critChance: 0.25, critMult: 2.5 },
         locks: ["third_frog_eye"]
       }
@@ -53,7 +53,7 @@ const UPGRADE_TREES = {
         name_en: "Toad Tongue Whip",
         desc_ru: "Авто-притягивание всего лута в радиусе 185px",
         desc_en: "Auto-pull loot & resources from 185px radius",
-        cost: { bottles: 14, scrap: 12 },
+        cost: { bottles: 14, scrap: 12, toad_leg: 3 },
         statMods: {},
         locks: ["drill_arm"]
       },
@@ -63,7 +63,7 @@ const UPGRADE_TREES = {
         name_en: "Toxic Mucus Skin",
         desc_ru: "+22% к скорости бега и +30% реген выносливости",
         desc_en: "+22% move speed & +30% stamina regen",
-        cost: { bottles: 18, scrap: 22, mil_parts: 2 },
+        cost: { bottles: 18, scrap: 22, mil_parts: 2, toad_leg: 3, toad_liver: 1 },
         statMods: {},
         locks: []
       },
@@ -73,7 +73,7 @@ const UPGRADE_TREES = {
         name_en: "Amphibian Bulging Eye",
         desc_ru: "+35 макс. Выносливости и снижение расхода на 25%",
         desc_en: "+35 Max Stamina & -25% stamina cost",
-        cost: { bottles: 22, scrap: 30, mil_parts: 3, alien_core: 3 },
+        cost: { bottles: 22, scrap: 30, mil_parts: 3, alien_core: 3, toad_eye: 4, toad_leg: 3 },
         statMods: { bonusMaxStamina: 35 },
         locks: ["laser_eye"]
       }
@@ -89,9 +89,9 @@ const UPGRADE_TREES = {
         id: "fume_aura",
         name_ru: "Аура Перегара",
         name_en: "Hangover Stench Aura",
-        desc_ru: "Враги рядом замедлены на 45%",
-        desc_en: "Nearby enemies slowed by 45%",
-        cost: { bottles: 16, scrap: 15 },
+        desc_ru: "Облако перегара вокруг Василия: жабы в нём хмелеют и замедляются на 45%",
+        desc_en: "A cloud of booze fumes around Vasiliy: toads inside get tipsy and slow down by 45%",
+        cost: { bottles: 16, scrap: 15, toad_liver: 2, toad_leg: 1 },
         statMods: {},
         locks: []
       },
@@ -101,7 +101,7 @@ const UPGRADE_TREES = {
         name_en: "Soviet Rug Cloak",
         desc_ru: "+60 макс. HP и пассивная регенерация здоровья",
         desc_en: "+60 max HP & passive health regeneration",
-        cost: { bottles: 22, scrap: 24, mil_parts: 2 },
+        cost: { bottles: 22, scrap: 24, mil_parts: 2, toad_liver: 3, toad_leg: 2 },
         statMods: { bonusMaxHp: 60 },
         locks: ["car_battery"]
       },
@@ -111,7 +111,7 @@ const UPGRADE_TREES = {
         name_en: "Ghost Pigeon Gena",
         desc_ru: "+20 к базовому урону всех видов оружия",
         desc_en: "+20 base damage to all weapons",
-        cost: { bottles: 28, scrap: 35, mil_parts: 3, alien_core: 3 },
+        cost: { bottles: 28, scrap: 35, mil_parts: 3, alien_core: 3, toad_eye: 3, toad_liver: 2, toad_leg: 2 },
         statMods: { damage: 20 },
         locks: []
       }
@@ -205,17 +205,7 @@ class VasiliyAnimator {
     ctx.save();
     ctx.translate(player.x, player.y);
 
-    // 1. АУРА ПЕРЕГАРА (Шаманская способность)
-    if (player.hasPerk && player.hasPerk('fume_aura')) {
-      const time = Date.now() * 0.004;
-      ctx.fillStyle = 'rgba(168, 85, 247, 0.22)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 75 + Math.sin(time) * 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(192, 132, 252, 0.5)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+    // 1. Аура перегара рисуется облаком на земле до фигур (drawFumeAura)
 
     // Определение направления прицеливания (влево / вправо / вверх / вниз)
     const isAimingLeft = Math.cos(player.angle) < 0;
@@ -1032,7 +1022,10 @@ const player = {
     bottles: 0,
     scrap: 0,
     mil_parts: 0,
-    alien_core: 0
+    alien_core: 0,
+    toad_eye: 0,
+    toad_leg: 0,
+    toad_liver: 0
   },
   unlockedWeapons: {
     bat: true,
@@ -1719,7 +1712,7 @@ function startGame(save = null) {
   player.stunTimer = 0;
   player.knockFrames = 0;
   player.items = { vodka: 0, stew: 1, bandage: 2 };
-  player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0 };
+  player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0, toad_eye: 0, toad_leg: 0, toad_liver: 0 };
   player.unlockedWeapons = {
     bat: true,
     makarov: false,
@@ -1777,7 +1770,10 @@ function spawn3DLootItem(x, y, type, val = 1) {
     ammo_12g: '💥',
     stew: '🥫',
     vodka: '🍾',
-    bandage: '🩹'
+    bandage: '🩹',
+    toad_eye: '👁️',
+    toad_leg: '🦶',
+    toad_liver: '🫀'
   };
   lootItems.push({
     x: Math.round(x),
@@ -1788,13 +1784,17 @@ function spawn3DLootItem(x, y, type, val = 1) {
   });
 }
 
+// Тайники дают меньше стеклотары и чермета, чем раньше: обыскать всё и не драться было выгоднее,
+// чем зачищать район (см. docs/BALANCE.md)
+const STASH_YIELD = 0.75;
+
 function scavengeContainer(c) {
   if (c.searched) return;
   c.searched = true;
 
   const dist = getDistrictAt(c.x, c.y);
-  const bMult = dist.bottleMult || 1.0;
-  const sMult = dist.scrapMult || 1.0;
+  const bMult = (dist.bottleMult || 1.0) * STASH_YIELD;
+  const sMult = (dist.scrapMult || 1.0) * STASH_YIELD;
   const toPlayerAngle = Math.atan2(player.y - c.y, player.x - c.x);
 
   let bottleRoll = 1;
@@ -1920,8 +1920,8 @@ const SHOP_ARSENAL_ITEMS = [
     img: 'assets/sprites/weapons/weapon_shotgun.png?v=1026',
     name_ru: 'Дедовский Обрез 12 калибра',
     name_en: 'Grandpa\'s Sawed-Off 12G',
-    desc_ru: 'Урон: 7×18 картечь | Стволы: 2 патр. (+12 в комплекте). Сносит штурмовиков в упор.',
-    desc_en: 'DMG: 7×18 buckshot | Barrels: 2 shells (+12 included). Devastating stopping power.',
+    desc_ru: 'Урон: 7×18 картечь, в упор ×1,35, вдаль быстро слабеет | Стволы: 2 патр. (+12 в комплекте). Сносит штурмовиков в упор.',
+    desc_en: 'DMG: 7×18 buckshot, ×1.35 point-blank, weak at range | Barrels: 2 shells (+12 included). Devastating up close.',
     zone_ru: '🔴 Нужны Оружейные детали с Военного Кордона!',
     zone_en: '🔴 Requires Military Gun Parts from Military Cordon!',
     cost: { bottles: 20, scrap: 25, mil_parts: 5 }
@@ -1950,9 +1950,9 @@ const SHOP_ARSENAL_ITEMS = [
     name_en: 'Trophy Alien Plasma Rifle',
     desc_ru: 'Урон: 48 | Боезапас бесконечен! Нагревается (+16%/выстр.), при 100% — клин на 3 сек.',
     desc_en: 'DMG: 48 | Infinite ammo! Builds heat (+16%/shot), overheats at 100% for 3s.',
-    zone_ru: '🟣 Нужны Квако-ядра из угловых Квако-Гнёзд!',
-    zone_en: '🟣 Requires Alien Cores from corner Toad Nests!',
-    cost: { bottles: 30, scrap: 35, mil_parts: 6, alien_core: 5 }
+    zone_ru: '🟣 Нужны Квако-ядра из угловых Квако-Гнёзд и жабьи глаза с печенью!',
+    zone_en: '🟣 Requires Alien Cores from corner Toad Nests plus toad eyes and liver!',
+    cost: { bottles: 30, scrap: 35, mil_parts: 6, alien_core: 5, toad_eye: 3, toad_liver: 2 }
   }
 ];
 
@@ -1987,35 +1987,45 @@ const SHOP_SUPPLY_ITEMS = [
 ];
 
 function canAffordCost(cost) {
-  if (cost.bottles && player.resources.bottles < cost.bottles) return false;
-  if (cost.scrap && player.resources.scrap < cost.scrap) return false;
-  if (cost.mil_parts && player.resources.mil_parts < cost.mil_parts) return false;
-  if (cost.alien_core && player.resources.alien_core < cost.alien_core) return false;
-  return true;
+  return Object.keys(cost).every(k => (player.resources[k] || 0) >= cost[k]);
 }
 
 function payCost(cost) {
-  if (cost.bottles) player.resources.bottles -= cost.bottles;
-  if (cost.scrap) player.resources.scrap -= cost.scrap;
-  if (cost.mil_parts) player.resources.mil_parts -= cost.mil_parts;
-  if (cost.alien_core) player.resources.alien_core -= cost.alien_core;
+  for (const k in cost) player.resources[k] -= cost[k];
 }
+
+// Иконки и цвета ресурсов в ценах (порядок — как в кошельке)
+const RES_DISPLAY = {
+  bottles: { img: 'assets/sprites/loot/loot_bottle.png?v=1026' },
+  scrap: { img: 'assets/sprites/loot/loot_scrap.png?v=1026' },
+  mil_parts: { img: 'assets/sprites/loot/loot_mil_parts.png?v=1026', color: '#fca5a5' },
+  alien_core: { img: 'assets/sprites/loot/loot_alien_core.png?v=1026', color: '#d8b4fe' },
+  toad_eye: { img: 'assets/sprites/loot/loot_toad_eye.png?v=1', color: '#fde047' },
+  toad_leg: { img: 'assets/sprites/loot/loot_toad_leg.png?v=1', color: '#86efac' },
+  toad_liver: { img: 'assets/sprites/loot/loot_toad_liver.png?v=1', color: '#fda4af' }
+};
 
 function formatCostHTML(cost) {
   const parts = [];
-  if (cost.bottles) {
-    parts.push(`<span><img class="inline-res-icon" src="assets/sprites/loot/loot_bottle.png?v=1026">${cost.bottles}</span>`);
-  }
-  if (cost.scrap) {
-    parts.push(`<span><img class="inline-res-icon" src="assets/sprites/loot/loot_scrap.png?v=1026">${cost.scrap}</span>`);
-  }
-  if (cost.mil_parts) {
-    parts.push(`<span style="color:#fca5a5;"><img class="inline-res-icon" src="assets/sprites/loot/loot_mil_parts.png?v=1026">${cost.mil_parts}</span>`);
-  }
-  if (cost.alien_core) {
-    parts.push(`<span style="color:#d8b4fe;"><img class="inline-res-icon" src="assets/sprites/loot/loot_alien_core.png?v=1026">${cost.alien_core}</span>`);
+  for (const k in RES_DISPLAY) {
+    if (!cost[k]) continue;
+    const d = RES_DISPLAY[k];
+    const style = d.color ? ` style="color:${d.color};"` : '';
+    parts.push(`<span${style}><img class="inline-res-icon" src="${d.img}">${cost[k]}</span>`);
   }
   return parts.join(' ');
+}
+
+// Кошелёк в шапке лавки
+function updateShopWallet() {
+  const ids = {
+    bottles: 'shop-res-bottles', scrap: 'shop-res-scrap', mil_parts: 'shop-res-mil', alien_core: 'shop-res-core',
+    toad_eye: 'shop-res-eye', toad_leg: 'shop-res-leg', toad_liver: 'shop-res-liver'
+  };
+  for (const k in ids) {
+    const el = document.getElementById(ids[k]);
+    if (el) el.innerText = player.resources[k];
+  }
 }
 
 function openShop() {
@@ -2052,14 +2062,7 @@ window.switchShopTab = function(tab) {
 };
 
 function renderArsenalAndSupplies() {
-  const wB = document.getElementById('shop-res-bottles');
-  const wS = document.getElementById('shop-res-scrap');
-  const wM = document.getElementById('shop-res-mil');
-  const wC = document.getElementById('shop-res-core');
-  if (wB) wB.innerText = player.resources.bottles;
-  if (wS) wS.innerText = player.resources.scrap;
-  if (wM) wM.innerText = player.resources.mil_parts;
-  if (wC) wC.innerText = player.resources.alien_core;
+  updateShopWallet();
 
   const arsenalBox = document.getElementById('arsenal-container');
   if (arsenalBox) {
@@ -2183,15 +2186,15 @@ function renderUpgradeTrees() {
   const container = document.getElementById('tree-container');
   if (!container) return;
   container.innerHTML = '';
+  updateShopWallet();
 
-  const wB = document.getElementById('shop-res-bottles');
-  const wS = document.getElementById('shop-res-scrap');
-  const wM = document.getElementById('shop-res-mil');
-  const wC = document.getElementById('shop-res-core');
-  if (wB) wB.innerText = player.resources.bottles;
-  if (wS) wS.innerText = player.resources.scrap;
-  if (wM) wM.innerText = player.resources.mil_parts;
-  if (wC) wC.innerText = player.resources.alien_core;
+  // Подсказка: перки ставятся на жабьи трофеи
+  const hint = document.createElement('div');
+  hint.className = 'tree-hint';
+  hint.innerHTML = currentLang === 'ru'
+    ? `Михалыч вживляет модификации на жабьей биологии: ${formatCostHTML({ toad_eye: 'глаза', toad_leg: 'лапки', toad_liver: 'печень' })} — падают только с жаб.`
+    : `Mikhalych builds mods on toad biology: ${formatCostHTML({ toad_eye: 'eyes', toad_leg: 'legs', toad_liver: 'liver' })} — dropped by toads only.`;
+  container.appendChild(hint);
 
   for (const treeKey in UPGRADE_TREES) {
     const tree = UPGRADE_TREES[treeKey];
@@ -2427,7 +2430,11 @@ const WEAPONS = {
   // Дрель лучше всех пробивает броню, но тиков меньше и урон за тик ниже: раньше она давала втрое
   // больше урона в секунду, чем остальное оружие, и разбирала Мясника за полминуты
   drill: { dmg: b => b * 0.75 + 6, cooldown: 14, pen: 0.7 },
-  shotgun: { dmg: b => b * 0.72, cooldown: 26, pen: 0.4, pellets: 7, clip: 2, reload: 110 },
+  // Дробь в упор сильнее (×1,35 ближе 60 px), с 100 px слабеет и к 250 px даёт четверть урона
+  shotgun: {
+    dmg: b => b * 0.72, cooldown: 26, pen: 0.4, pellets: 7, clip: 2, reload: 110,
+    falloff: { near: 60, full: 100, far: 250, closeMult: 1.35, farMult: 0.25 }
+  },
   plasma: { dmg: b => b + 24, cooldown: 10, pen: 0.8 },
   chain: { pen: 1.0 },  // цепная молния перка «Аккумулятор от КАМАЗа»
   shock: { pen: 0.5 },  // ударная волна переката перка «Рука-перфоратор»
@@ -2439,6 +2446,15 @@ const WEAPONS = {
 // Удар со спины (сзади от того, куда враг смотрит) броню не замечает и бьёт сильнее
 const BACK_ARC = 1.95;       // дальше этого угла от взгляда врага — уже спина (~112°)
 const BACKSTAB_MULT = 1.25;
+
+// Множитель урона дробины по пройденному ею пути (WEAPONS.shotgun.falloff)
+function shotgunFalloff(d) {
+  const F = WEAPONS.shotgun.falloff;
+  if (d <= F.near) return F.closeMult;
+  if (d <= F.full) return F.closeMult + (1 - F.closeMult) * (d - F.near) / (F.full - F.near);
+  if (d >= F.far) return F.farMult;
+  return 1 + (F.farMult - 1) * (d - F.full) / (F.far - F.full);
+}
 
 function armorFactor(armor, weapon) {
   const pen = (WEAPONS[weapon] && WEAPONS[weapon].pen !== undefined) ? WEAPONS[weapon].pen : 0.5;
@@ -2458,6 +2474,7 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
   const dealt = armor > 0 ? dmg * (fromBehind ? BACKSTAB_MULT : armorFactor(armor, weapon)) : dmg;
   e.hp -= dealt;
   e.isAggroed = true;
+  if (e.lunge && e.lunge.phase === 'windup' && (weapon === 'bat' || weapon === 'drill')) interruptTongue(e);
   if (armor > 0 && !fromBehind && dealt < dmg * 0.8) {
     // Звонкий удар по железу: серые искры навстречу удару
     spawnDirectionalSparks(e.x, e.y - 22, Math.atan2(fromY - e.y, fromX - e.x), 1.3, 6, '#cbd5e1', 3, 9, 9);
@@ -2722,6 +2739,36 @@ const SoundFX = {
       osc.start(now);
       osc.stop(now + 0.35);
     }
+  },
+  // Шлепок-«чпок» жабьего языка: короткий влажный свист вниз и щелчок
+  tongue() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(620, now);
+    osc.frequency.exponentialRampToValueAtTime(140, now + 0.12);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+    osc.connect(gain);
+    gain.connect(this.out);
+    osc.start(now);
+    osc.stop(now + 0.14);
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1400, now);
+    const nGain = ac.createGain();
+    nGain.gain.setValueAtTime(0.12, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    nSrc.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(this.out);
+    nSrc.start(now);
+    nSrc.stop(now + 0.06);
   },
   ricochet() {
     const ac = this.ensure();
@@ -3154,6 +3201,8 @@ function shootPlayerWeapon() {
     bullets.push({
       x: muzzle.x + Math.cos(pelletAngle) * 4,
       y: muzzle.y + Math.sin(pelletAngle) * 4,
+      ox: muzzle.x, // откуда вылетела: урон дроби падает с расстоянием
+      oy: muzzle.y,
       prevX: muzzle.x,
       prevY: muzzle.y,
       vx: Math.cos(pelletAngle) * speed,
@@ -3166,8 +3215,8 @@ function shootPlayerWeapon() {
       isCrit: isCrit,
       weaponType: 'shotgun',
       trailLen: 32 + Math.random() * 14,
-      life: 24,
-      maxLife: 24,
+      life: 16, // ~300 px: дальше дробь уже не летит
+      maxLife: 16,
       color: isCrit ? '#ef4444' : (player.isDrunk ? '#f97316' : '#fde047')
     });
   }
@@ -3468,6 +3517,289 @@ function spawnBioPuddleBubbles() {
     life: 34,
     maxLife: 34
   });
+}
+
+// --- АУРА ПЕРЕГАРА (перк «Аура перегара») ---
+// Вокруг Василия стелется облако перегара. Клубы рождаются у него под ногами, расползаются и тают
+// ровно на границе действия — по ним видно, докуда достаёт аура. Жабы в облаке хмелеют
+// (над головой кружат пузыри) и двигаются медленнее
+const FUME_AURA_RADIUS = 140;
+const FUME_AURA_SLOW = 0.55;
+const FUME_PUFFS = 18;
+let fumePuffSprite = null;
+
+// Мягкий клуб дыма, рисуется один раз и дальше только тиражируется
+function getFumePuff() {
+  if (fumePuffSprite) return fumePuffSprite;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  grad.addColorStop(0, 'rgba(214, 211, 120, 0.85)');
+  grad.addColorStop(0.45, 'rgba(176, 186, 84, 0.45)');
+  grad.addColorStop(1, 'rgba(150, 160, 70, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  fumePuffSprite = c;
+  return c;
+}
+
+function drawFumeAura(ctx) {
+  const t = performance.now() / 1000;
+  const cx = player.x, cy = player.y + 6;
+  const R = FUME_AURA_RADIUS;
+  ctx.save();
+  // Едва заметная дымка: гуще у Василия, к краю сходит на нет
+  const haze = ctx.createRadialGradient(cx, cy, 8, cx, cy, R);
+  haze.addColorStop(0, 'rgba(190, 196, 90, 0.24)');
+  haze.addColorStop(0.75, 'rgba(160, 170, 70, 0.09)');
+  haze.addColorStop(1, 'rgba(150, 160, 60, 0)');
+  ctx.fillStyle = haze;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fill();
+  // Клубы: каждый живёт по кругу — от ног наружу, закручиваясь, и тает у границы
+  const puff = getFumePuff();
+  for (let i = 0; i < FUME_PUFFS; i++) {
+    const seed = i * 2.399963; // золотой угол — клубы не слипаются
+    const life = (t * (0.16 + (i % 5) * 0.015) + i / FUME_PUFFS) % 1;
+    const r = 18 + (R - 18) * life;
+    const a = seed + t * (i % 2 ? 0.22 : -0.18) + life * 0.9;
+    const size = 26 + 34 * life;
+    ctx.globalAlpha = Math.sin(Math.PI * life) * 0.65;
+    ctx.drawImage(puff, cx + Math.cos(a) * r - size / 2, cy + Math.sin(a) * r - size / 2, size, size);
+  }
+  ctx.restore();
+}
+
+// Хмельная жаба: над головой кружат пузыри перегара
+function drawFumeTipsy(ctx, e) {
+  const t = performance.now() / 1000 + e.x * 0.01;
+  const headY = e.y - (e.type === 'boss' ? 118 : e.type === 'brute' ? 92 : 52);
+  ctx.save();
+  for (let k = 0; k < 3; k++) {
+    const a = t * 3 + k * (Math.PI * 2 / 3);
+    const x = e.x + Math.cos(a) * 11;
+    const y = headY + Math.sin(a) * 4;
+    const front = Math.sin(a) > 0;
+    ctx.globalAlpha = front ? 0.95 : 0.55;
+    ctx.fillStyle = k === 1 ? '#facc15' : '#bef264';
+    ctx.beginPath();
+    ctx.arc(x, y, front ? 3.2 : 2.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha *= 0.8;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x - 0.9, y - 1, 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// --- ВЫПАД ЯЗЫКОМ (пехотинцы) ---
+// Кружить вокруг пехотинцев больше не выйдет. Подпустив Василия ближе TONGUE_REACH, жаба приседает,
+// раздувает горло и стреляет языком туда, где Василий был в конце замаха (TONGUE_AIM_LOCK),
+// а сама прыгает следом. От языка уходят перекатом или шагом в сторону. Удар битой или дрелью
+// во время замаха сбивает его, а после выпада жаба на полсекунды открыта — так её и бьют битой
+const TONGUE_REACH = 128;
+const TONGUE_MIN = 34;
+const TONGUE_WINDUP = 24;
+const TONGUE_AIM_LOCK = 9;
+const TONGUE_OUT = 7;
+const TONGUE_HOLD = 4;
+const TONGUE_BACK = 9;
+const TONGUE_RECOVER = 28;
+const TONGUE_COOLDOWN = 110;      // + до 70 случайно
+const TONGUE_DAMAGE = 11;         // + 1,6 за тир района
+const TONGUE_PULL = 22;           // язык подтягивает Василия к жабе
+const TONGUE_STAGGER = 26;        // сбитая с замаха жаба столько кадров приходит в себя
+
+// Рот жабы на экране (от её точки): по 3D-модели, пока она грузится — примерно
+function gruntMouth(e) {
+  const m = window.threeEnemies && window.threeEnemies.getGruntMouth(e);
+  if (m) return { x: e.x + m.x, y: e.y + m.y };
+  return { x: e.x + Math.cos(e.angle || 0) * 10, y: e.y - 30 + Math.sin(e.angle || 0) * 4 };
+}
+
+// Куда целится язык — грудь Василия
+function tongueTarget() {
+  return { x: player.x, y: player.y - 18 };
+}
+
+function interruptTongue(e) {
+  e.lunge = null;
+  e.squash = 0;
+  e.stagger = TONGUE_STAGGER;
+  e.tongueCooldown = 60;
+  addFloatingText(e.x, e.y - 40, currentLang === 'ru' ? 'СБИТ!' : 'STAGGERED!', '#fbbf24');
+}
+
+function distToSegment(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+}
+
+// true — в этом кадре жаба занята выпадом (или приходит в себя) и не идёт к Василию.
+// slowed — жаба в облаке перегара: замах и язык медленнее
+function updateGruntTongue(e, distToPlayer, angle, slowed) {
+  if (e.tongueCooldown > 0) e.tongueCooldown--;
+  if (e.stagger > 0) {
+    e.stagger--;
+    return true;
+  }
+  let L = e.lunge;
+  if (!L) {
+    if (e.tongueCooldown > 0 || distToPlayer > TONGUE_REACH || distToPlayer < TONGUE_MIN) return false;
+    // Сквозь стену языком не достать
+    const m = gruntMouth(e), tg = tongueTarget();
+    for (let k = 1; k < 5; k++) {
+      if (checkBuildingCollision(m.x + (tg.x - m.x) * k / 5, m.y + (tg.y - m.y) * k / 5 + 18, 4)) return false;
+    }
+    L = e.lunge = { phase: 'windup', t: 0, tx: tg.x, ty: tg.y, ext: 0, hit: false, side: Math.random() < 0.5 ? 1 : -1 };
+  }
+  L.t += slowed ? 0.7 : 1;
+  if (L.phase === 'windup') {
+    if (L.t <= TONGUE_WINDUP - TONGUE_AIM_LOCK) {
+      e.angle = angle;
+      const tg = tongueTarget();
+      L.tx = tg.x;
+      L.ty = tg.y;
+    }
+    e.squash = Math.min(1, L.t / TONGUE_WINDUP);
+    if (L.t >= TONGUE_WINDUP) {
+      // Цель — не дальше длины языка
+      const m = gruntMouth(e);
+      const d = Math.hypot(L.tx - m.x, L.ty - m.y) || 1;
+      const reach = TONGUE_REACH + 10;
+      if (d > reach) {
+        L.tx = m.x + (L.tx - m.x) / d * reach;
+        L.ty = m.y + (L.ty - m.y) / d * reach;
+      }
+      L.phase = 'out';
+      L.t = 0;
+      SoundFX.tongue();
+    }
+    return true;
+  }
+  if (L.phase === 'out') {
+    L.ext = Math.min(1, L.t / TONGUE_OUT);
+    e.squash = -0.6;
+    // Выпад: жаба прыгает следом за языком
+    slideMove(e, Math.cos(e.angle) * 3, Math.sin(e.angle) * 3, e.radius, true);
+    if (L.t >= TONGUE_OUT) {
+      L.phase = 'hold';
+      L.t = 0;
+    }
+  } else if (L.phase === 'hold') {
+    L.ext = 1;
+    if (L.hit) {
+      // Прилип к Василию: кончик языка держится на нём
+      const tg = tongueTarget();
+      L.tx = tg.x;
+      L.ty = tg.y;
+    }
+    if (L.t >= TONGUE_HOLD) {
+      L.phase = 'back';
+      L.t = 0;
+    }
+  } else if (L.phase === 'back') {
+    L.ext = Math.max(0, 1 - L.t / TONGUE_BACK);
+    e.squash = -0.6 * L.ext;
+    if (L.t >= TONGUE_BACK) {
+      L.phase = 'recover';
+      L.t = 0;
+      L.ext = 0;
+      e.squash = 0;
+    }
+  } else if (L.phase === 'recover') {
+    if (L.t >= TONGUE_RECOVER) {
+      e.lunge = null;
+      e.tongueCooldown = TONGUE_COOLDOWN + Math.floor(Math.random() * 70);
+      return false;
+    }
+    return true;
+  }
+  // Попадание: кончик языка задел Василия (перекат проскакивает)
+  if (!L.hit && L.ext > 0.55 && !player.isRolling) {
+    const m = gruntMouth(e);
+    const tipX = m.x + (L.tx - m.x) * L.ext, tipY = m.y + (L.ty - m.y) * L.ext;
+    const tg = tongueTarget();
+    if (distToSegment(tg.x, tg.y, m.x, m.y, tipX, tipY) < player.radius + 4) {
+      L.hit = true;
+      const dmg = Math.round(TONGUE_DAMAGE + (e.tier || 1) * 1.6);
+      player.hp -= dmg;
+      addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
+      createParticles(player.x, player.y - 14, '#f472b6', 8);
+      const a = Math.atan2(e.y - player.y, e.x - player.x);
+      slideMove(player, Math.cos(a) * TONGUE_PULL, Math.sin(a) * TONGUE_PULL, player.radius);
+      if (player.hp <= 0) gameOver();
+    }
+  }
+  return true;
+}
+
+// Язык: розовый, сужается к липкой подушечке на кончике, при выстреле изгибается хлыстом
+function drawGruntTongue(ctx, e) {
+  const L = e.lunge;
+  if (!L) return;
+  const m = gruntMouth(e);
+  if (L.phase === 'windup') {
+    // Раздувается горло — вот-вот выстрелит
+    const k = Math.min(1, L.t / TONGUE_WINDUP);
+    ctx.save();
+    ctx.globalAlpha = 0.35 + 0.5 * k;
+    ctx.fillStyle = '#f9a8d4';
+    ctx.beginPath();
+    ctx.ellipse(m.x, m.y + 5, 4 + 6 * k, 3 + 4 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
+  if (!(L.ext > 0.02)) return;
+  const tipX = m.x + (L.tx - m.x) * L.ext, tipY = m.y + (L.ty - m.y) * L.ext;
+  const dx = tipX - m.x, dy = tipY - m.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  // Хлыст: изгиб сильнее, пока язык летит, и почти прямой, когда натянут
+  const bend = (L.phase === 'hold' ? 3 : 11) * Math.sin(L.ext * Math.PI) * L.side;
+  const qx = m.x + dx * 0.5 + nx * bend, qy = m.y + dy * 0.5 + ny * bend;
+  ctx.save();
+  ctx.lineCap = 'round';
+  // Контур, тело и влажный блик — три прохода по одной кривой, к кончику тоньше
+  const passes = [['#881337', 7.5, 4.5], ['#e11d48', 5.5, 3], ['#fda4af', 1.6, 1]];
+  passes.forEach(([color, w0, w1], pi) => {
+    ctx.strokeStyle = color;
+    const steps = 6;
+    let px = m.x, py = m.y;
+    for (let k = 1; k <= steps; k++) {
+      const s = k / steps;
+      const x = (1 - s) * (1 - s) * m.x + 2 * (1 - s) * s * qx + s * s * tipX;
+      const y = (1 - s) * (1 - s) * m.y + 2 * (1 - s) * s * qy + s * s * tipY;
+      ctx.lineWidth = w0 + (w1 - w0) * s;
+      ctx.beginPath();
+      ctx.moveTo(pi === 2 ? px - 0.8 : px, pi === 2 ? py - 1 : py);
+      ctx.lineTo(pi === 2 ? x - 0.8 : x, pi === 2 ? y - 1 : y);
+      ctx.stroke();
+      px = x;
+      py = y;
+    }
+  });
+  // Липкая подушечка
+  ctx.fillStyle = '#9f1239';
+  ctx.beginPath();
+  ctx.ellipse(tipX, tipY, 6.5, 5.5, Math.atan2(dy, dx), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fb7185';
+  ctx.beginPath();
+  ctx.ellipse(tipX, tipY, 4.5, 3.8, Math.atan2(dy, dx), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+  ctx.beginPath();
+  ctx.arc(tipX - 1.5, tipY - 1.8, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 // --- ГРОМИЛЫ МЕТАЮТ ПРЕДМЕТЫ ---
@@ -3936,6 +4268,12 @@ function updateHUD(forceWeaponRefresh = false) {
     const el = document.getElementById('res-alien-core');
     if (el) el.innerText = player.resources.alien_core;
   }
+  for (const k in TROPHY_NAMES) {
+    if (_hudCache[k] === player.resources[k]) continue;
+    _hudCache[k] = player.resources[k];
+    const el = document.getElementById('res-' + k);
+    if (el) el.innerText = player.resources[k];
+  }
 
   if (_hudCache.inSlime !== !!player.inSlime) {
     _hudCache.inSlime = !!player.inSlime;
@@ -4064,6 +4402,37 @@ function addFloatingText(x, y, text, color) {
   floatingTexts.push({ x, y, text, color, life: 45, vy: -1.2 });
 }
 
+// --- ЖАБЬИ ТРОФЕИ ---
+// Глаза, лапки и печень падают только с жаб и только с шансом. На них Михалыч ставит все перки
+// Василия и собирает Плазмаган: обыском тайников их не набрать, за ними нужно драться.
+// Шансы — у каждого вида свой главный трофей; в Квако-гнёздах он падает чаще
+const TROPHY_DROPS = {
+  grunt: [['toad_leg', 0.5], ['toad_eye', 0.15], ['toad_liver', 0.08]],
+  sniper: [['toad_eye', 0.65], ['toad_leg', 0.15], ['toad_liver', 0.05]],
+  brute: [['toad_liver', 0.65], ['toad_eye', 0.2], ['toad_leg', 0.2]]
+};
+const TROPHY_NEST_BONUS = 0.15;
+// С жаб чермета больше, чем раньше: тайники урезаны (STASH_YIELD), доход сдвинут в сторону боя
+const ENEMY_SCRAP_YIELD = 1.4;
+const TROPHY_NAMES = {
+  toad_eye: ['ЖАБИЙ ГЛАЗ', 'TOAD EYE', '#fde047'],
+  toad_leg: ['ЖАБЬЯ ЛАПКА', 'TOAD LEG', '#86efac'],
+  toad_liver: ['ЖАБЬЯ ПЕЧЕНЬ', 'TOAD LIVER', '#fda4af']
+};
+
+function dropTrophies(x, y, eType, districtId) {
+  const list = TROPHY_DROPS[eType];
+  if (!list) return;
+  let n = 0;
+  list.forEach(([kind, chance], i) => {
+    const p = chance + (i === 0 && districtId === 'nest' ? TROPHY_NEST_BONUS : 0);
+    if (Math.random() >= p) return;
+    const a = -Math.PI / 2 + (n - 0.5) * 1.1;
+    spawn3DLootItem(x + Math.cos(a) * 24, y + Math.sin(a) * 18 - 4, kind, 1);
+    n++;
+  });
+}
+
 function spawnLootDrop(enemyOrX, yOpt) {
   const isEnemyObj = (typeof enemyOrX === 'object' && enemyOrX !== null);
   const x = isEnemyObj ? enemyOrX.x : enemyOrX;
@@ -4071,7 +4440,7 @@ function spawnLootDrop(enemyOrX, yOpt) {
   const eType = isEnemyObj ? (enemyOrX.type || 'grunt') : 'grunt';
   const dist = getDistrictAt(x, y);
   const bMult = dist.bottleMult || 1.0;
-  const sMult = dist.scrapMult || 1.0;
+  const sMult = (dist.scrapMult || 1.0) * ENEMY_SCRAP_YIELD;
 
   if (eType === 'brute') {
     const scrapVal = Math.round((2 + Math.floor(Math.random() * 3)) * sMult);
@@ -4116,6 +4485,7 @@ function spawnLootDrop(enemyOrX, yOpt) {
       spawn3DLootItem(x + 14, y - 8, 'alien_core', 1);
     }
   }
+  if (isEnemyObj) dropTrophies(x, y, eType, dist.id);
 }
 
 function handleEnemyKilled(index) {
@@ -4369,7 +4739,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   }
 
   let speed = e.speed * (e.enraged ? 1.25 : 1.0);
-  if (hasFumeAura && dist < 140) speed *= 0.55;
+  if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
 
   if (!e.isAggroed) {
     // Игрок ушёл из логова: возвращаемся домой и зализываем раны
@@ -4928,7 +5298,8 @@ function update() {
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
         // Удар пришёл оттуда, откуда летела пуля
-        const hit = damageEnemy(e, b.damage, b.weaponType, b.x - b.vx * 4, b.y - b.vy * 4);
+        const dmg = b.weaponType === 'shotgun' ? b.damage * shotgunFalloff(Math.hypot(b.x - b.ox, b.y - b.oy)) : b.damage;
+        const hit = damageEnemy(e, dmg, b.weaponType, b.x - b.vx * 4, b.y - b.vy * 4);
         e.hitFlash = 5;
 
         const hitAngle = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
@@ -5025,8 +5396,8 @@ function update() {
     }
 
     let eSpeed = e.speed;
-    if (hasFumeAura && distToPlayer < 140) {
-      eSpeed *= 0.55;
+    if (hasFumeAura && distToPlayer < FUME_AURA_RADIUS) {
+      eSpeed *= FUME_AURA_SLOW;
     }
 
     if (!e.animTimer) e.animTimer = 0;
@@ -5056,8 +5427,10 @@ function update() {
           if (player.hp <= 0) gameOver();
         }
       } else if (e.type === 'grunt') {
-        e.angle = angle;
-        slideMove(e, Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed, e.radius, true);
+        if (!updateGruntTongue(e, distToPlayer, angle, hasFumeAura && distToPlayer < FUME_AURA_RADIUS)) {
+          e.angle = angle;
+          slideMove(e, Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed, e.radius, true);
+        }
 
         if (distToPlayer < player.radius + e.radius && !player.isRolling) {
           // Усиленный контактный урон по тирам зоны!
@@ -5115,6 +5488,8 @@ function update() {
     } else {
       if (e.throwState) cancelThrow(e);
       e.throwPose = null;
+      e.lunge = null;
+      e.squash = 0;
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -5188,6 +5563,10 @@ function update() {
         } else if (item.type === 'bandage') {
           player.items.bandage += item.val;
           addFloatingText(item.x, item.y - 20, `+${item.val} БИНТЫ`, '#4ade80');
+        } else if (TROPHY_NAMES[item.type]) {
+          const [ru, en, color] = TROPHY_NAMES[item.type];
+          player.resources[item.type] += item.val;
+          addFloatingText(item.x, item.y - 22, `+${item.val} ${currentLang === 'ru' ? ru : en}`, color);
         }
         lootItems.splice(i, 1);
       }
@@ -5525,14 +5904,18 @@ function render() {
   drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
   if (bossRef) drawBossTelegraph(ctx, bossRef);
+  const fumeOn = player.hasPerk('fume_aura');
+  if (fumeOn) drawFumeAura(ctx); // облако перегара стелется по земле, под фигурами
 
   // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
 
+    const tipsy = fumeOn && Math.hypot(e.x - player.x, e.y - player.y) < FUME_AURA_RADIUS;
     if (e.type === 'boss') {
       drawBoss(ctx, e);
+      if (tipsy) drawFumeTipsy(ctx, e);
       continue;
     }
 
@@ -5552,17 +5935,21 @@ function render() {
     }
 
     if (e.type === 'brute') drawHeldBehind(ctx, e);
-    if (window.threeEnemies && window.threeEnemies.draw(ctx, e)) {
-      continue;
+    // Язык жабы, отвернувшейся от камеры, уходит за её голову — рисуется до фигуры
+    const tongueBehind = e.lunge && Math.sin(e.angle || 0) < -0.2;
+    if (tongueBehind) drawGruntTongue(ctx, e);
+    if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
+      if (e.type === 'grunt') {
+        SpriteRenderer.drawToadGrunt(ctx, e);
+      } else if (e.type === 'brute') {
+        if (SpriteRenderer.drawToadBrute) SpriteRenderer.drawToadBrute(ctx, e);
+        else SpriteRenderer.drawToadGrunt(ctx, e);
+      } else {
+        SpriteRenderer.drawToadSniper(ctx, e);
+      }
     }
-    if (e.type === 'grunt') {
-      SpriteRenderer.drawToadGrunt(ctx, e);
-    } else if (e.type === 'brute') {
-      if (SpriteRenderer.drawToadBrute) SpriteRenderer.drawToadBrute(ctx, e);
-      else SpriteRenderer.drawToadGrunt(ctx, e);
-    } else {
-      SpriteRenderer.drawToadSniper(ctx, e);
-    }
+    if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
+    if (tipsy) drawFumeTipsy(ctx, e);
   }
 
   // 8. Выстрелы и баллистические трассеры — только в пределах экрана
@@ -5842,7 +6229,11 @@ function drawPerfOverlay() {
 // (перки учтены). «Чистое» время непрерывной атаки: без выносливости, промахов и беготни;
 // перезарядка ПМ и обреза и перегрев плазмы учтены. Через дробь — то же со спины
 const balanceStats = { visible: false };
-const BALANCE_WEAPONS = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+// Строки таблицы: оружие и (для обреза) расстояние, на котором считается урон дроби
+const BALANCE_ROWS = [
+  ['bat', 'Бита'], ['makarov', 'ПМ'], ['drill', 'Дрель'],
+  ['shotgun', 'Обрез≤60', 40], ['shotgun', 'Обрез150', 150], ['plasma', 'Плазма']
+];
 const BALANCE_NAMES = {
   bat: 'Бита', makarov: 'ПМ', drill: 'Дрель', shotgun: 'Обрез', plasma: 'Плазма',
   grunt: 'Пех', sniper: 'Снай', brute: 'Гром', boss: 'МЯСНИК',
@@ -5871,7 +6262,7 @@ function drawBalanceOverlay() {
   const cols = Array.from(groups.values()).sort((a, b) => a.e.maxHp - b.e.maxHp).slice(0, 11);
   const colW = 74, rowH = 18, x0 = 12, y0 = 110, firstW = 112;
   const w = firstW + cols.length * colW + 10;
-  const h = rowH * (BALANCE_WEAPONS.length + 3) + 14;
+  const h = rowH * (BALANCE_ROWS.length + 3) + 14;
   ctx.save();
   ctx.fillStyle = 'rgba(8, 10, 14, 0.86)';
   ctx.fillRect(x0, y0, w, h);
@@ -5889,11 +6280,11 @@ function drawBalanceOverlay() {
     ctx.fillStyle = '#94a3b8';
     ctx.fillText(`${Math.round(e.maxHp)}${e.armor ? ' 🛡' + Math.round(e.armor * 100) : ''}`, cx, y0 + 6 + rowH * 2);
   });
-  BALANCE_WEAPONS.forEach((wk, r) => {
+  BALANCE_ROWS.forEach(([wk, label, range], r) => {
     const y = y0 + 6 + rowH * (r + 3);
-    const dps = weaponDps(wk, player.baseDamage);
+    const dps = weaponDps(wk, player.baseDamage) * (range ? shotgunFalloff(range) : 1);
     ctx.fillStyle = player.unlockedWeapons[wk] ? '#f8fafc' : '#64748b';
-    ctx.fillText(`${BALANCE_NAMES[wk]} ${Math.round(dps)}/с`, x0 + 8, y);
+    ctx.fillText(`${label} ${Math.round(dps)}/с`, x0 + 8, y);
     cols.forEach((g, i) => {
       const e = g.e;
       const front = e.maxHp / (dps * armorFactor(e.armor || 0, wk));

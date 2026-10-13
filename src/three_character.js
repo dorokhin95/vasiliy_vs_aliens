@@ -615,17 +615,7 @@ class ThreeCharacterManager {
       ctx.rotate(wobble);
     }
 
-    // Аура перегара (Шаман)
-    if (player.hasPerk && player.hasPerk('fume_aura')) {
-      const time = Date.now() * 0.004;
-      ctx.fillStyle = 'rgba(168, 85, 247, 0.22)';
-      ctx.beginPath();
-      ctx.arc(0, 0, 75 + Math.sin(time) * 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(192, 132, 252, 0.5)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+    // Аура перегара рисуется облаком на земле до фигур (drawFumeAura в game.js)
 
     // Мягкая тень под ногами
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';

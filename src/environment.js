@@ -84,6 +84,9 @@ class EnvironmentRenderer {
       { key: 'loot_bandage', path: 'assets/sprites/loot/loot_bandage.png?v=1026', type: 'loot' },
       { key: 'loot_mil_parts', path: 'assets/sprites/loot/loot_mil_parts.png?v=1026', type: 'loot' },
       { key: 'loot_alien_core', path: 'assets/sprites/loot/loot_alien_core.png?v=1026', type: 'loot' },
+      { key: 'loot_toad_eye', path: 'assets/sprites/loot/loot_toad_eye.png?v=1', type: 'loot' },
+      { key: 'loot_toad_leg', path: 'assets/sprites/loot/loot_toad_leg.png?v=1', type: 'loot' },
+      { key: 'loot_toad_liver', path: 'assets/sprites/loot/loot_toad_liver.png?v=1', type: 'loot' },
       { key: 'loot_ammo_9x18', path: 'assets/sprites/loot/ammo_9x18.png?v=1026', type: 'loot' },
       { key: 'loot_ammo_12g', path: 'assets/sprites/loot/ammo_12g.png?v=1026', type: 'loot' }
     ];
@@ -1475,14 +1478,22 @@ class EnvironmentRenderer {
     else if (l.type === 'mil_parts') glowColor = 'rgba(239, 68, 68, 0.34)';
     else if (l.type === 'alien_core') glowColor = 'rgba(168, 85, 247, 0.42)';
     else if (l.type === 'ammo_9x18' || l.type === 'ammo_12g') glowColor = 'rgba(250, 204, 21, 0.28)';
+    // Жабьи трофеи — с пульсирующим ореолом: их выпадает немного, мимо пройти не должны
+    const isTrophy = l.type === 'toad_eye' || l.type === 'toad_leg' || l.type === 'toad_liver';
+    if (isTrophy) {
+      const pulse = 0.3 + 0.14 * Math.sin(time * 1.6 + l.y);
+      glowColor = l.type === 'toad_eye' ? `rgba(250, 204, 21, ${pulse})`
+        : l.type === 'toad_leg' ? `rgba(74, 222, 128, ${pulse})` : `rgba(244, 63, 94, ${pulse})`;
+    }
+    const big = isTrophy || l.type === 'alien_core' || l.type === 'mil_parts';
 
     ctx.fillStyle = glowColor;
     ctx.beginPath();
-    ctx.arc(0, hoverY, (l.type === 'alien_core' || l.type === 'mil_parts') ? 17 : 14, 0, Math.PI * 2);
+    ctx.arc(0, hoverY, big ? 17 : 14, 0, Math.PI * 2);
     ctx.fill();
 
     if (img) {
-      const size = (l.type === 'alien_core' || l.type === 'mil_parts') ? 32 : 28;
+      const size = big ? 32 : 28;
       ctx.drawImage(img, -size / 2, -size / 2 + hoverY, size, size);
     } else {
       ctx.font = '18px Arial';

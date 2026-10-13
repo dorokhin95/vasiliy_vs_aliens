@@ -62,6 +62,8 @@ const BRUTE_POSE_DIRS = {
 // Обычный кадр громилы: 138 px мира, центр на 16 px выше его точки. Кадр позы выше: поднятые
 // руки торчат над головой и иначе обрезались бы
 const BRUTE_FRAME = { w: 138, anchor: -16 };
+// Кадр пехотинца (и запасной для остальных): 86 px мира, центр на 10 px выше его точки
+const GRUNT_FRAME = { w: 86, anchor: -10 };
 const BRUTE_POSE_FRAME = { w: 170, anchor: -37 };
 
 function brutePoseDirs(pose) {
@@ -107,6 +109,9 @@ class ThreeEnemyManager {
     // Кулаки громилы в кадрах поз броска: ключ кадра → {x, y} от его точки (см. getBruteFists)
     this.bruteFists = new Map();
     this.bruteSkin = null;
+    // Рот пехотинца по направлениям: отсюда вылетает язык (см. getGruntMouth)
+    this.gruntMouths = new Map();
+    this.gruntMouthLocal = null;
 
     // Offscreen Three.js setup
     this.width = 160;
@@ -528,6 +533,54 @@ class ThreeEnemyManager {
     return this.bruteFists.get(key) || null;
   }
 
+  /**
+   * Рот пехотинца на экране (px мира от e.x, e.y) — отсюда game.js выпускает язык.
+   * Точка рта — перёд морды (вершины головы, дальше всех выдающиеся вперёд), проецируется
+   * той же камерой, что и кадры, для каждого направления один раз.
+   */
+  getGruntMouth(e) {
+    if (!this.isLoaded.grunt) return null;
+    const dirIdx = this.dirIndex(e);
+    if (!this.gruntMouths.has(dirIdx)) this.gruntMouths.set(dirIdx, this.projectGruntMouth(dirIdx));
+    return this.gruntMouths.get(dirIdx);
+  }
+
+  projectGruntMouth(dirIdx) {
+    const model = this.models.grunt;
+    const head = model.getObjectByName('Head');
+    if (!head) return null;
+    if (!this.gruntMouthLocal) {
+      const meshes = [];
+      model.traverse(o => { if (o.isSkinnedMesh) meshes.push(o); });
+      const sk = meshes[0].skeleton;
+      const hi = sk.bones.indexOf(head);
+      const pts = [];
+      meshes.forEach(sm => {
+        const si = sm.geometry.attributes.skinIndex, sw = sm.geometry.attributes.skinWeight;
+        const pos = sm.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          const w = (si.getX(i) === hi ? sw.getX(i) : 0) + (si.getY(i) === hi ? sw.getY(i) : 0)
+            + (si.getZ(i) === hi ? sw.getZ(i) : 0) + (si.getW(i) === hi ? sw.getW(i) : 0);
+          if (w > 0.6) pts.push(new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(sm.bindMatrix));
+        }
+      });
+      if (pts.length === 0) return null;
+      const maxZ = pts.reduce((m, p) => Math.max(m, p.z), -Infinity);
+      const front = pts.filter(p => p.z > maxZ - 0.06);
+      const mouth = front.reduce((a, p) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / front.length);
+      this.gruntMouthLocal = mouth.applyMatrix4(sk.boneInverses[hi]);
+    }
+    this.roots.grunt.rotation.y = -(dirIdx / this.numDirections) * Math.PI * 2 + Math.PI / 2;
+    if (this.mixers.grunt) this.mixers.grunt.setTime(0);
+    this.camera.zoom = 1.0;
+    this.camera.lookAt(0, 0.9, 0);
+    this.camera.updateProjectionMatrix();
+    model.updateMatrixWorld(true);
+    const p = head.localToWorld(this.gruntMouthLocal.clone()).project(this.camera);
+    const { w, anchor } = GRUNT_FRAME;
+    return { x: ((p.x + 1) / 2) * w - w / 2, y: ((1 - p.y) / 2) * w - w / 2 + anchor };
+  }
+
   // Направление взгляда, округлённое до одного из numDirections кадров
   dirIndex(e) {
     let angle = e.angle !== undefined ? e.angle : (e.patrolAngle || 0);
@@ -556,9 +609,9 @@ class ThreeEnemyManager {
     if (!frameCanvas) return false;
 
     // Render dimensions
-    let renderW = 86;
-    let renderH = 86;
-    let anchorOffsetY = -10;
+    let renderW = GRUNT_FRAME.w;
+    let renderH = GRUNT_FRAME.w;
+    let anchorOffsetY = GRUNT_FRAME.anchor;
 
     if (type === 'sniper') {
       renderW = 82;
@@ -584,6 +637,14 @@ class ThreeEnemyManager {
     ctx.fill();
 
     // 2. Draw 3D Model Canvas (without slow CPU ctx.filter)
+    // Пехотинец приседает перед выпадом языком (squash > 0) и вытягивается в выпаде (< 0), game.js
+    const sq = e.squash || 0;
+    if (sq) {
+      ctx.save();
+      ctx.translate(0, 22);
+      ctx.scale(1 + sq * 0.08, 1 - sq * 0.13);
+      ctx.translate(0, -22);
+    }
     ctx.drawImage(
       frameCanvas,
       -frameW / 2,
@@ -591,6 +652,7 @@ class ThreeEnemyManager {
       frameW,
       frameW
     );
+    if (sq) ctx.restore();
 
     if (e.hitFlash && e.hitFlash > 0) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.36)';

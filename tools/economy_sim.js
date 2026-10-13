@@ -8,7 +8,8 @@ window.economySim = function (N = 300) {
   const was = { res: Object.assign({}, player.resources), mk: player.unlockedWeapons.makarov, loot: lootItems.slice() };
   player.unlockedWeapons.makarov = true; // поздняя игра: в баках попадаются патроны к ПМ
   lootItems.length = 0;
-  const keys = ['bottles', 'scrap', 'mil_parts', 'alien_core', 'bandage', 'stew', 'vodka', 'ammo_9x18', 'ammo_12g'];
+  const keys = ['bottles', 'scrap', 'mil_parts', 'alien_core', 'toad_eye', 'toad_leg', 'toad_liver',
+    'bandage', 'stew', 'vodka', 'ammo_9x18', 'ammo_12g'];
   const zero = () => Object.fromEntries(keys.map(k => [k, 0]));
   const tot = zero(), by = {};
   const bucket = key => (by[key] = by[key] || Object.assign({ n: 0 }, zero()));
