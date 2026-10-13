@@ -271,10 +271,16 @@ class ThreeCharacterManager {
     });
     this.swingDuration = 0.34;
     this.swingP = 1;
+    this.appliedTwist = [];
     this._q = new THREE.Quaternion();
     this._m = new THREE.Matrix4();
     this._v1 = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
+  }
+
+  undoTwist() {
+    for (const [bone, inverse] of this.appliedTwist) bone.quaternion.multiply(inverse);
+    this.appliedTwist.length = 0;
   }
 
   // Bone transform relative to the rig object
@@ -321,12 +327,18 @@ class ThreeCharacterManager {
     if (this.swingP < 1) this.swingP = Math.min(1, this.swingP + dt / this.swingDuration);
     const pose = swinging ? this.swingPose(this.swingP) : null;
 
-    // 1. Torso twist through the spine bones (the clip rewrites them every frame, so this never accumulates)
+    // 1. Torso twist through the spine bones. Only for this frame's render: undoTwist() restores the clip
+    // pose afterwards, because the mixer rewrites a bone only when the clip value changes — in the idle clip
+    // the spine is static, so a twist left on the bone would stay (and accumulate) forever
     if (pose && pose.twist !== 0) {
       const yAxis = this._v1.set(0, 1, 0);
-      this.spineBone.quaternion.multiply(this._q.setFromAxisAngle(yAxis, pose.twist * 0.55));
-      this.chestBone.quaternion.multiply(this._q.setFromAxisAngle(yAxis, pose.twist * 0.45));
-      if (this.headBone) this.headBone.quaternion.multiply(this._q.setFromAxisAngle(yAxis, -pose.twist * 0.6));
+      const parts = [[this.spineBone, 0.55], [this.chestBone, 0.45], [this.headBone, -0.6]];
+      for (const [bone, share] of parts) {
+        if (!bone) continue;
+        const q = new THREE.Quaternion().setFromAxisAngle(yAxis, pose.twist * share);
+        bone.quaternion.multiply(q);
+        this.appliedTwist.push([bone, q.invert()]);
+      }
     }
     if (pose) this.rollPivot.position.z += pose.lunge;
 
@@ -507,10 +519,12 @@ class ThreeCharacterManager {
     const isIdle = !player.isMoving && !player.isRolling && this.recoil <= 0 && this.swingP >= 1 && currentWeapon !== 'drill';
     const stateKey = `${currentWeapon}|${Math.round(player.angle * 180)}`;
     if (isIdle && stateKey === this.lastRenderState && (++this.idleFrameCounter % 3) !== 0) {
+      if (this.appliedTwist) this.undoTwist();
       return;
     }
     this.lastRenderState = isIdle ? stateKey : '';
     this.renderer.render(this.scene, this.camera);
+    if (this.appliedTwist) this.undoTwist();
   }
 
   triggerRecoil(strength = 1.0) {
