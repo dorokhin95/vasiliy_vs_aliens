@@ -3,9 +3,11 @@
 // передышками, потом выжившие уходят в пролом — в зачищенный Новохмуринск, Василий прикрывает.
 //   - Баррикада (мешки, ящики, бочки) — дугой вокруг пролома, остаётся и после обороны; для ходьбы — препятствие,
 //     пули летят поверх.
-//   - Выжившие не умирают. Пока у них нет 3D-моделей (арт А4), они плоские — фигуры из листа
-//     docs/comic_refs/survivors_comic_sheet.webp (tools/make_survivor_sprites.py), но двигаются по частям:
-//     ноги качаются от бедра, корпус дышит, покачивается и отдаёт при выстреле, сидящие поджимают ноги.
+//   - Выжившие не умирают. Они в 3D (src/three_survivors.js, tools/build_promzona_survivors_blender.py):
+//     стоят, целятся и стреляют в сторону жабы, на отходе идут к пролому (Серёга ковыляет, прижав руку
+//     к бедру), Лена на колене бинтует лежащего Серёгу. Пока модели грузятся (или если не загрузились) —
+//     плоские фигуры из листа docs/comic_refs/survivors_comic_sheet.webp (tools/make_survivor_sprites.py),
+//     которые двигаются по частям: ноги качаются от бедра, корпус дышит и отдаёт при выстреле.
 //   - Жабы обороны — обычные жабы с пометкой defense: в счётчик жаб локации и в сохранение не идут.
 // Скрипты обычные, без модулей: player, enemies, currentLocation, SoundFX и прочее — из game.js.
 window.Defense = (function () {
@@ -35,7 +37,7 @@ window.Defense = (function () {
       weapon: { dmg: 12, cd: 45, range: 480, flash: 'makarov', color: '#fde68a' }, spot: [200, 0.74] },
     { id: 'tolik', name: ['Толик', 'Tolik'], h: 92, hip: 0.58, gap: 0.417, muzzle: [0.387, 0.641],
       weapon: { dmg: 22, splash: 12, cd: 140, range: 560, flash: 'shotgun', color: '#fb923c' }, spot: [305, 0.72] },
-    { id: 'lena', name: ['Лена', 'Lena'], h: 86, hip: 0.64, gap: 0.444, medic: true, spot: [0, 0], at: [-95, 112] },
+    { id: 'lena', name: ['Лена', 'Lena'], h: 86, hip: 0.64, gap: 0.444, medic: true, spot: [0, 0], at: [-158, 110] },
     { id: 'seryoga', name: ['Серёга', 'Seryoga'], h: 88, hip: 0.57, gap: 0.433, wounded: true, spot: [0, 0], at: [-175, 122] }
   ];
   const images = {};
@@ -52,6 +54,7 @@ window.Defense = (function () {
     [['stormtrooper', 'n'], ['brute', 'w'], ['stormtrooper', 'w']]
   ];
   const SPAWN_GAP = 40;          // кадров между жабами волны
+  const KNEE_PX = 17;            // колено лежащего Серёги — восточнее его середины (3D-кадр «лёжа»)
   const PAUSE = 60 * 12;         // передышка между волнами
   const BREACH_OUT = 40;         // насколько за пролом уходят выжившие, px
 
@@ -98,9 +101,16 @@ window.Defense = (function () {
         x = C.x + Math.cos(a) * R * def.spot[1];
         y = C.y + Math.sin(a) * R * def.spot[1] * GROUND_SQUASH;
       }
-      return { def, x, y, facing: x < C.x ? -1 : 1, phase: Math.random() * 6, t: Math.random() * 100,
-        moving: false, cd: 30 + Math.random() * 60, kick: 0, gone: false, alpha: 1, healCd: 300 };
+      // angle — куда смотрит (как у жаб: 0 — восток, π/2 — юг); стрелки — от центра обороны наружу
+      const angle = Math.atan2(y - C.y, x - C.x);
+      return { def, x, y, facing: x < C.x ? -1 : 1, angle, lookout: angle, phase: Math.random() * 6, t: Math.random() * 100,
+        moving: false, dist: 0, aimT: 0, firePause: 0, cd: 30 + Math.random() * 60, kick: 0, gone: false, alpha: 1, healCd: 300 };
     });
+    // Серёга лежит головой на запад (кадр «лицом на восток»), Лена смотрит на его раненое колено
+    const ser = survivors.find(s => s.def.wounded), lena = survivors.find(s => s.def.medic);
+    if (ser) ser.angle = 0;
+    if (ser && lena) lena.angle = Math.atan2(ser.y - lena.y, ser.x + KNEE_PX - lena.x);
+    if (window.threeSurvivors) window.threeSurvivors.load();
     showToast(L('ОБОРОНА У ПРОЛОМА', 'HOLD THE BREACH'),
       L('Выжившие с завода держатся из последних сил. Помоги им отбиться!', 'The plant\'s last survivors are barely holding. Help them fight off the toads!'));
   }
@@ -218,7 +228,18 @@ window.Defense = (function () {
     return best;
   }
 
+  // Повернуться к жабе и держать прицел ещё ~0,7 с
+  function face(s, e) {
+    s.angle = Math.atan2(e.y - s.y, e.x - s.x);
+    s.facing = e.x < s.x ? -1 : 1;
+    s.aimT = 40;
+  }
+
+  // Дуло: у 3D-модели — кость Muzzle в позе прицела, у плоской фигуры — точка на листе
   function muzzleOf(s) {
+    const ts = window.threeSurvivors;
+    const m3 = ts && ts.ready(s.def.id) && ts.muzzle(s.def.id, 'aim', s.angle);
+    if (m3) return { x: s.x + m3.x, y: s.y + m3.y };
     const def = s.def, img = images[def.id];
     const w = img.naturalWidth ? def.h * img.naturalWidth / img.naturalHeight : def.h * 0.5;
     return { x: s.x + (def.muzzle[0] - 0.5) * w * s.facing, y: s.y - (1 - def.muzzle[1]) * def.h };
@@ -226,7 +247,7 @@ window.Defense = (function () {
 
   function shoot(s, e) {
     const w = s.def.weapon;
-    s.facing = e.x < s.x ? -1 : 1;
+    face(s, e);
     const m = muzzleOf(s);
     const hit = Math.random() < 0.72;
     const tx = e.x + (hit ? 0 : (Math.random() - 0.5) * 70), ty = e.y - 20 + (hit ? 0 : (Math.random() - 0.5) * 50);
@@ -261,8 +282,11 @@ window.Defense = (function () {
     }
     s.moving = true;
     s.facing = dx < 0 ? -1 : 1;
-    s.x += dx / d * Math.min(speed, d);
-    s.y += dy / d * Math.min(speed, d);
+    s.angle = Math.atan2(dy, dx);
+    const step = Math.min(speed, d);
+    s.x += dx / d * step;
+    s.y += dy / d * step;
+    s.dist += step;
     s.phase += speed * 0.11;
     return false;
   }
@@ -270,6 +294,7 @@ window.Defense = (function () {
   function updateSurvivor(s) {
     s.t++;
     if (s.kick > 0) s.kick--;
+    if (s.aimT > 0) s.aimT--;
     if (s.gone) return;
     const def = s.def;
     if (stage === 'retreat') {
@@ -280,19 +305,30 @@ window.Defense = (function () {
       s.limp = def.wounded;
       s.lying = false;
       s.kneeling = false;
+      if (def.weapon && (s.cd -= 1) <= 0) {
+        const e = nearestToad(s, def.weapon.range * 0.8);
+        if (e) {
+          shoot(s, e);
+          s.firePause = 22;          // встал, выстрелил, пошёл дальше
+        }
+        s.cd = def.weapon.cd * 1.3;
+      }
+      if (s.firePause > 0) {
+        s.firePause--;
+        s.moving = false;
+        return;
+      }
       // Дошёл до пролома — дальше только наружу, тает за забором (иначе ходьба тянула назад к точке у пролома)
       if (!s.exiting && walkTo(s, tx, WORLD_HEIGHT - 60, slow ? 1.5 : 2.3)) s.exiting = true;
       if (s.exiting) {
-        s.y += slow ? 1.2 : 1.8;
+        const step = slow ? 1.2 : 1.8;
+        s.y += step;
+        s.dist += step;
+        s.angle = Math.PI / 2;
         s.moving = true;
         s.phase += 0.2;
         s.alpha = Math.max(0, 1 - (s.y - (WORLD_HEIGHT - 60)) / BREACH_OUT);
         if (s.alpha <= 0) s.gone = true;
-      }
-      if (def.weapon && (s.cd -= 1) <= 0) {
-        const e = nearestToad(s, def.weapon.range * 0.8);
-        if (e) shoot(s, e);
-        s.cd = def.weapon.cd * 1.3;
       }
       return;
     }
@@ -314,13 +350,15 @@ window.Defense = (function () {
     if (!def.weapon) return;
     const e = nearestToad(s, def.weapon.range);
     if (e) {
-      s.facing = e.x < s.x ? -1 : 1;
+      face(s, e);
       if ((s.cd -= 1) <= 0) {
         shoot(s, e);
         s.cd = def.weapon.cd + Math.random() * 20;
       }
-    } else if (s.t % 240 === 0) {
-      s.facing = Math.random() < 0.5 ? -1 : 1;   // оглядывается
+    } else if (s.t % 240 === 0 && s.aimT <= 0) {
+      // Оглядывается — в свою сторону обороны
+      s.angle = s.lookout + (Math.random() - 0.5) * 1.6;
+      s.facing = Math.cos(s.angle) < 0 ? -1 : 1;
     }
   }
 
@@ -400,9 +438,47 @@ window.Defense = (function () {
     ctx.restore();
   }
 
-  // Фигура по частям: две ноги качаются от бедра, корпус дышит, наклоняется на ходу и отдаёт при выстреле.
-  // Стоящая на коленях (медсестра) — ноги поджаты, корпус ниже и склоняется к раненому
+  // 3D-кадр выжившего сейчас: поза по состоянию, направление — angle. null — модель ещё не готова
+  function sprite3d(s) {
+    const ts = window.threeSurvivors, def = s.def;
+    if (!ts || !ts.ready(def.id)) return null;
+    if (s.lying) return ts.sprite(def.id, 'lie', 0);
+    if (s.kneeling) return ts.sprite(def.id, 'heal', s.angle, Math.floor(s.t / 12));
+    if (s.moving || def.wounded) return ts.sprite(def.id, s.limp || def.wounded ? 'limp' : 'walk', s.angle, s.moving ? ts.stepFrame(s.dist) : 0);
+    const pose = !def.weapon ? 'idle' : s.kick > 3 ? 'fire' : s.aimT > 0 ? 'aim' : 'idle';
+    return ts.sprite(def.id, pose, s.angle);
+  }
+
+  // Высота фигуры на экране (имя над головой, предметы перед ней — environment.drawOccludingProps)
+  const figureH = s => (s.lying ? 26 : s.kneeling ? 50 : 76);
+
+  function drawSurvivor3D(ctx, s, sp) {
+    ctx.save();
+    ctx.globalAlpha = s.alpha;
+    ctx.translate(s.x, s.y);
+    // Контактная тень (отбрасываемую кладёт слой теней — addShadows)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.26)';
+    ctx.beginPath();
+    if (s.lying) ctx.ellipse(0, 6, 40, 10, 0, 0, Math.PI * 2);
+    else ctx.ellipse(0, 1, 15, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Стоящие дышат
+    if (!s.moving && !s.lying) ctx.scale(1, 1 + Math.sin(s.t * 0.055 + s.phase) * 0.01);
+    ctx.drawImage(sp.frame, sp.ox, sp.oy, sp.size, sp.size);
+    ctx.restore();
+    // Лежащему — над головой (она на западе), иначе имя легло бы на Лену
+    if (s.lying) drawName(ctx, s, -14, -34);
+    else drawName(ctx, s, -figureH(s) - 4);
+  }
+
+  // Плоская фигура по частям: две ноги качаются от бедра, корпус дышит, наклоняется на ходу и отдаёт при
+  // выстреле. Стоящая на коленях (медсестра) — ноги поджаты, корпус ниже и склоняется к раненому
   function drawSurvivor(ctx, s) {
+    const sp = sprite3d(s);
+    if (sp) {
+      drawSurvivor3D(ctx, s, sp);
+      return;
+    }
     const def = s.def, img = images[def.id];
     if (!img.complete || !img.naturalWidth) return;
     const iw = img.naturalWidth, ih = img.naturalHeight;
@@ -456,16 +532,16 @@ window.Defense = (function () {
   }
 
   // Имя над головой
-  function drawName(ctx, s, dy) {
+  function drawName(ctx, s, dy, dx = 0) {
     if (s.alpha <= 0.5) return;
     const def = s.def, name = L(def.name[0], def.name[1]);
     ctx.save();
     ctx.font = 'bold 11px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillText(name, s.x + 1, s.y + dy + 1);
+    ctx.fillText(name, s.x + dx + 1, s.y + dy + 1);
     ctx.fillStyle = def.wounded ? '#fca5a5' : '#e2e8f0';
-    ctx.fillText(name, s.x, s.y + dy);
+    ctx.fillText(name, s.x + dx, s.y + dy);
     ctx.restore();
   }
 
@@ -492,7 +568,16 @@ window.Defense = (function () {
 
   // Для перерисовки предметов, за которыми стоит фигура (environment.drawOccludingProps)
   function addActors(actors) {
-    survivors.forEach(s => { if (!s.gone) actors.push({ x: s.x, y: s.y, h: s.def.h }); });
+    survivors.forEach(s => { if (!s.gone) actors.push({ x: s.x, y: s.y, h: sprite3d(s) ? figureH(s) : s.def.h }); });
+  }
+
+  // Отбрасываемые тени 3D-фигур (game.js collectActorShadows)
+  function addShadows(list) {
+    survivors.forEach(s => {
+      if (s.gone || s.alpha < 0.5) return;
+      const sp = sprite3d(s);
+      if (sp) list.push({ img: sp.frame, x: s.x + sp.ox, y: s.y + sp.oy, w: sp.size, h: sp.size });
+    });
   }
 
   // Баррикада — препятствие для ходьбы (пули летят поверх); стоит всегда, и после обороны
@@ -509,6 +594,6 @@ window.Defense = (function () {
   // Площадка обороны: деревья туда не ставятся (environment.scatterGreenery)
   const inArea = (x, y) => Math.hypot(x - C.x, (y - C.y) / GROUND_SQUASH) < R + 120;
 
-  return { saveState, loadState, onWorld, onEnter, update, drawGround, drawActors, drawShots, addActors, addObstacles,
+  return { saveState, loadState, onWorld, onEnter, update, drawGround, drawActors, drawShots, addActors, addShadows, addObstacles,
     isDefenseToad, inArea, get stage() { return stage; } };
 })();

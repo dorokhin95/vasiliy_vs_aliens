@@ -2367,12 +2367,17 @@ const Loading = {
     const er = window.environmentRenderer, tp = window.threeProps, te = window.threeEnemies;
     const ch = window.threeCharacter;
     const boss = currentLocation === 'promzona' ? window.threePounder : window.threeBoss;
+    // Выжившие у пролома — пока оборона не пройдена (src/three_survivors.js)
+    const ts = window.threeSurvivors;
+    const survivors = !!ts && currentLocation === 'promzona' && !!window.Defense && window.Defense.stage !== 'done';
+    if (survivors) ts.load();
     const checks = [
       !!(er && er.loaded),
       !ch || ch.isLoaded || ch.loadFailed,
       !tp || (tp.allSettled() && (currentLocation !== 'promzona' || tp.promzonaRequested)),
       !te || (te.allSettled() && (currentLocation !== 'promzona' || te.promzonaRequested)),
-      !boss || !boss.loadRequested || boss.isLoaded || boss.loadFailed
+      !boss || !boss.loadRequested || boss.isLoaded || boss.loadFailed,
+      !survivors || ts.allSettled()
     ];
     return { done: checks.filter(Boolean).length, total: checks.length };
   },
@@ -9446,6 +9451,7 @@ function collectActorShadows(minX, maxX, minY, maxY) {
     const sp = tp.lootSprite(l);
     if (sp) list.push({ img: sp.frame, x: sp.x, y: sp.y, w: sp.w, h: sp.h });
   }
+  if (window.Defense) window.Defense.addShadows(list);
   return list;
 }
 

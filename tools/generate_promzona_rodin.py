@@ -45,6 +45,13 @@ MODELS = {
     'prop_pipe_rack':         ([12, 3.4, 6], 'open see-through steel pipe rack: thin lattice support legs, pipes on top, empty space under the pipes, no walls, no panels, no fill between the legs'),
     'prop_pipe_stack':        ([8, 7, 4], 'stack of large rusty steel pipes on wooden sleepers'),
     'prop_cable_reel':        ([2.2, 1.4, 2.2], 'large wooden cable reel with black cable'),
+    # Выжившие (docs/LEVEL2_PROMZONA.md, раздел 5): полный рост, A-поза, оружие отведено от тела — иначе Rodin
+    # вплавляет его в ноги. Скелет и анимации — tools/build_promzona_survivors_blender.py
+    'survivor_stepanych': ([0.95, 0.5, 1.78], 'full body game character, old Soviet foreman in a quilted jacket and flat cap holding a double-barreled hunting shotgun pointing down, A-pose'),
+    'survivor_zina':      ([0.95, 0.5, 1.70], 'full body game character, heavy-set woman guard in a navy quilted coat and fur hat holding a revolver pointing down, A-pose'),
+    'survivor_tolik':     ([1.0, 0.5, 1.78], 'full body game character, wiry welder with a welding mask on his forehead holding a flare pistol and a crowbar pointing down, A-pose'),
+    'survivor_lena':      ([0.8, 0.45, 1.66], 'full body game character, young female lab assistant in a white lab coat with a red first-aid bag, A-pose'),
+    'survivor_seryoga':   ([0.8, 0.45, 1.75], 'full body game character, young skinny mechanic in blue overalls with a bandaged leg, A-pose'),
 }
 
 
@@ -59,8 +66,11 @@ def curl_json(args, timeout=60):
 def prep(name):
     webp = os.path.join(CONCEPTS, name + '_14k.webp')
     if not os.path.exists(webp):
+        from PIL import Image
+        src = os.path.join(CONCEPTS, name + '.png')
+        w, h = Image.open(src).size  # концепт целиком (кадр из Gemini бывает не 1024)
         subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'prep_rodin_concept.py'),
-                        os.path.join(CONCEPTS, name + '.png'), CONCEPTS, name, '1024', '1024'], check=True)
+                        src, CONCEPTS, name, str(w), str(h)], check=True)
     return webp
 
 
