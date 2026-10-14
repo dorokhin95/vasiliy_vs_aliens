@@ -194,6 +194,8 @@
 - Рендер — общий с Мясником класс `ThreeBossManager` (`src/three_boss.js`), второй экземпляр `window.threePounder` грузится при входе в Промзону. Поза юлы — кадр конца размаха (`hold`), крутится сама модель; мерцание — полупрозрачность и глитч-полосы, копии — полупрозрачные с фиолетовым отсветом.
 - Сохранение: здоровье и фаза (`world.pounder`), побеждён ли (`pounderDefeated`). Копии не сохраняются.
 - Полоска здоровья — общая с Мясником (`hudBoss`), в счётчике жаб босс и копии не считаются.
+- Бой начат (`engaged`, снято 15%): не остывает вне логова, копии тоже; барьер `arena` (`raisePounderArena`, `updatePounderArena` возвращает Василия на кромку, `drawPounderArena` — дальняя половина до фигур, ближняя после); «не уйдёшь» — `updatePounderPull` / `pounderPull`. Притягивание — удар `hook`; малая копия — `spawnPounderMini` (`isMini`, удары `miniSlam`/`miniSweep`, пока жива — `damageEnemy` не проходит); снайперы 40% — `summonPounderSnipers` (`stationary`, `summon` — не в счётчике и не в сохранении).
+- Тренировочный бой по ссылке `?boss2` — `src/practice.js`.
 
 ### Карты Долбильщика
 - Набор — `POUNDER_CARDS` в `src/cards.js`: `BossCards.open(onPick, 'kicker_pounder')` показывает его вместо карт Мясника, рубашка общая. Картинки — `assets/cards/card_laser|dash|regen.webp`, из концепта Gemini `blender_assets/card_concepts/pounder_cards_concept.png` нарезает `tools/make_card_sprites.py pounder`.

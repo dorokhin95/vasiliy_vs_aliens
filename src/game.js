@@ -2185,6 +2185,9 @@ function saveHotbarOrder() {
 }
 
 // Ещё не купленное и оставленное у Михалыча оружие в хотбаре скрыто и номера не занимает
+// Q переключает оружие в этих ячейках хотбара (номера с нуля: 4-я и 5-я)
+const Q_SLOTS = [3, 4];
+
 function visibleHotbarSlots() {
   return hotbarOrder.filter(id => !HOTBAR_WEAPONS.has(id) || isEquipped(id));
 }
@@ -2205,6 +2208,8 @@ function applyHotbarOrder() {
     bar.appendChild(slot);
     const n = visible.indexOf(id);
     slot.querySelector('.slot-key').textContent = n >= 0 ? `[${n + 1}]` : '';
+    // Ячейки 4 и 5 — пара оружия для Q (cycleWeapon), подсвечены жёлтым
+    slot.classList.toggle('q-slot', Q_SLOTS.includes(n));
   });
 }
 
@@ -3205,19 +3210,15 @@ window.switchWeapon = function(weaponKey) {
   updateHUD(true);
 };
 
-// Q: ближнее ↔ дальнее (к тому, что было в руках последним). Если всё взятое одного вида — по кругу
+// Q: оружие в 4-й и 5-й ячейках хотбара (жёлтые) — туда-обратно. В руках что-то третье — берёт из 4-й.
+// Расходник в этих ячейках не в счёт; в паре одно оружие — берёт его
 window.cycleWeapon = function() {
-  const weapons = equippedWeapons();
-  if (weapons.length === 0) return;
-  const cur = player.currentWeapon;
-  const toMelee = !cur || !MELEE_WEAPONS.has(cur);
-  const pool = weapons.filter(w => MELEE_WEAPONS.has(w) === toMelee);
-  if (pool.length === 0) {
-    stepWeapon(1);
-    return;
-  }
-  const last = toMelee ? player.lastMelee : player.lastRanged;
-  window.switchWeapon(pool.includes(last) ? last : pool[0]);
+  const visible = visibleHotbarSlots();
+  const pair = Q_SLOTS.map(i => visible[i]).filter(id => id && HOTBAR_WEAPONS.has(id));
+  if (pair.length === 0) return;
+  const i = pair.indexOf(player.currentWeapon);
+  const next = i < 0 ? pair[0] : pair[(i + 1) % pair.length];
+  if (next !== player.currentWeapon) window.switchWeapon(next);
 };
 
 // Колесо: следующее (dir = 1) или предыдущее взятое оружие по порядку хотбара
@@ -6763,6 +6764,10 @@ const POUNDER_HOP = 120;               // перескок раз в ~2 с (+ д
 // дальнего удара (разряд молота) — через 2 с его выдёргивает к Долбильщику
 const POUNDER_PULL_AT = 0.85;
 const POUNDER_PULL_DELAY = 120;
+// Энергетический барьер: с начала боя (то же — снято 15%) вокруг места боя встаёт кольцо, сквозь которое
+// Василию не выйти, и перекатом тоже. Радиус — шире дальнего удара; держится, пока Долбильщик жив
+const POUNDER_ARENA_R = 600;
+const POUNDER_ARENA_RISE = 40;         // кадров, пока стена поднимается
 let pounderRef = null;
 let pounderRings = [];                 // электрические кольца бури: { x, y, r, life, owner, hit }
 
@@ -7185,7 +7190,10 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   const dist = Math.hypot(dx, dy);
   const playerInLair = Math.hypot(player.x - POUNDER_HOME.x, player.y - POUNDER_HOME.y) < POUNDER_LEASH;
   if (!e.isAggroed && dist < e.aggroRadius && !playerInSafe) e.isAggroed = true;
-  if (e.isAggroed && !e.isClone && e.hp < e.maxHp * POUNDER_PULL_AT) e.engaged = true;
+  if (e.isAggroed && !e.isClone && e.hp < e.maxHp * POUNDER_PULL_AT && !e.engaged) {
+    e.engaged = true;
+    raisePounderArena(e);
+  }
   // Бой начат — не остывает и за пределами логова; его копии держатся вместе с ним
   const engaged = e.engaged || (e.isClone && pounderRef && pounderRef.engaged);
   if (e.isAggroed && !engaged && (!playerInLair || playerInSafe) && !(e.attack && e.attack.key === 'leap')) {
@@ -7199,6 +7207,7 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   }
 
   if (e.engaged) updatePounderPull(e, dist);
+  if (e.arena) updatePounderArena(e);
 
   let speed = e.speed * (e.phase >= 2 ? 1.2 : 1.0);
   if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
@@ -7302,6 +7311,80 @@ function summonPounderSnipers(e) {
   }
   addFloatingText(e.x - 120, e.y - 160, `✦ ${t('pounder_snipers')}`, '#84cc16');
   shakeScreen(14, 10);
+}
+
+// Барьер встаёт вокруг места боя — посередине между Долбильщиком и Василием (оба внутри)
+function raisePounderArena(e) {
+  e.arena = { x: (e.x + player.x) / 2, y: (e.y + player.y) / 2, r: POUNDER_ARENA_R, t: 0, hitCd: 0 };
+  addFloatingText(player.x - 70, player.y - 90, currentLang === 'ru' ? '⛔ Барьер — не уйти!' : '⛔ Barrier — no way out!', '#c084fc');
+  shakeScreen(14, 8);
+  SoundFX.toadPlasma(1);
+}
+
+// Где Василий относительно кольца: 1 — на стене (в осях земли: по вертикали сжато, как всё на земле)
+function arenaDist(ar, x, y) {
+  return Math.hypot(x - ar.x, (y - ar.y) / GROUND_SQUASH) / ar.r;
+}
+
+// Сквозь стену не пройти: Василия возвращает на кромку изнутри — искры, треск
+function updatePounderArena(e) {
+  const ar = e.arena;
+  if (ar.t < POUNDER_ARENA_RISE) ar.t++;
+  if (ar.hitCd > 0) ar.hitCd--;
+  const fy = player.y + footDY(player);
+  const d = arenaDist(ar, player.x, fy);
+  const edge = 1 - 8 / ar.r;
+  if (d <= edge) return;
+  const k = edge / d;
+  const nx = ar.x + (player.x - ar.x) * k;
+  const ny = ar.y + (fy - ar.y) * k - footDY(player);
+  if (!checkWalkCollision(nx, ny, player.radius, footDY(player))) {
+    player.x = nx;
+    player.y = ny;
+  }
+  player.isRolling = false;
+  if (ar.hitCd === 0) {
+    ar.hitCd = 30;
+    const a = Math.atan2(player.y - ar.y, player.x - ar.x);
+    spawnDirectionalSparks(player.x + Math.cos(a) * 14, player.y - 20, a + Math.PI, 1.6, 10, '#e9d5ff', 3, 10, 12);
+    addFloatingText(player.x - 30, player.y - 70, currentLang === 'ru' ? 'Барьер!' : 'Barrier!', '#c084fc');
+    SoundFX.toadPlasma(0.6);
+  }
+}
+
+// Стена барьера: кольцо на земле и светящаяся завеса над ним. Дальняя половина (север) — до фигур,
+// ближняя (юг) — после, иначе фигура внутри оказалась бы за стеной
+function drawPounderArena(ctx, e, front) {
+  const ar = e && e.arena;
+  if (!ar) return;
+  const rise = Math.min(1, ar.t / POUNDER_ARENA_RISE);
+  const H = 70 * rise;
+  const now = performance.now() / 1000;
+  const a0 = front ? 0 : Math.PI, a1 = front ? Math.PI : Math.PI * 2;
+  const n = 64;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  // Завеса: вертикальные полосы, бегущие по кругу
+  for (let i = 0; i < n; i++) {
+    const a = a0 + (a1 - a0) * (i + 0.5) / n;
+    const x = ar.x + Math.cos(a) * ar.r, y = ar.y + Math.sin(a) * ar.r * GROUND_SQUASH;
+    const pulse = 0.5 + 0.5 * Math.sin(now * 4 + i * 0.6);
+    const g = ctx.createLinearGradient(x, y, x, y - H);
+    g.addColorStop(0, `rgba(168, 85, 247, ${0.22 + 0.18 * pulse})`);
+    g.addColorStop(1, 'rgba(168, 85, 247, 0)');
+    ctx.fillStyle = g;
+    const w = (Math.PI * ar.r / n) * Math.abs(Math.sin(a)) + 4;
+    ctx.fillRect(x - w / 2, y - H, w, H);
+  }
+  // Кромка на земле и верхняя кромка
+  [[0, 3, 0.75], [H, 1.5, 0.35]].forEach(([dy, lw, al]) => {
+    ctx.strokeStyle = `rgba(233, 213, 255, ${al * (0.8 + 0.2 * Math.sin(now * 6))})`;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.ellipse(ar.x, ar.y - dy, ar.r, ar.r * GROUND_SQUASH, 0, a0, a1);
+    ctx.stroke();
+  });
+  ctx.restore();
 }
 
 // Отсчёт «не уйдёшь»: дальше дальнего удара — копится, вернулся — сброшен; дотикал — выдёргивает
@@ -9464,6 +9547,7 @@ function render() {
   if (bossRef) drawBossTelegraph(ctx, bossRef);
   // Телеграфы и кольца бури — у хозяина и у копий
   enemies.forEach(e => { if (e.type === 'pounder') drawPounderTelegraph(ctx, e); });
+  if (pounderRef) drawPounderArena(ctx, pounderRef, false); // дальняя половина барьера — за фигурами
   drawPounderRings(ctx);
   const fumeOn = player.hasPerk('fume_aura');
   if (fumeOn) drawFumeAura(ctx); // облако перегара стелется по земле, под фигурами
@@ -9673,6 +9757,7 @@ function render() {
 
   SpriteRenderer.drawVasiliy(ctx, player);
   drawDazeStars(ctx);
+  if (pounderRef) drawPounderArena(ctx, pounderRef, true); // ближняя половина барьера — перед фигурами
 
   // 9.2. Машины, деревья, фонари и прочее, за чем стоит Василий или враг, — поверх фигур
   if (window.environmentRenderer) {
