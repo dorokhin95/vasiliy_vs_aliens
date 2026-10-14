@@ -892,6 +892,9 @@ const LANGS = {
     boss_dead: "✓ Мясник повержен",
     pounder_name: "МЕЖПРОСТРАНСТВЕННЫЙ ДОЛБИЛЬЩИК",
     pounder_storm: "ЭЛЕКТРОБУРЯ!",
+    pounder_mini: "Отщепил копию — пока она жива, его не взять!",
+    pounder_shielded: "ЗАЩИЩЁН КОПИЕЙ",
+    pounder_snipers: "Призвал снайперов из гнезда!",
     pounder_clones: "Расслоился между измерениями — две копии!",
     pounder_blink: "МЕРЦАЕТ — неуязвим",
     pounder_defeated: "🏆 ДОЛБИЛЬЩИК ПОВЕРЖЕН!",
@@ -971,6 +974,9 @@ const LANGS = {
     boss_dead: "✓ Butcher down",
     pounder_name: "THE INTERDIMENSIONAL POUNDER",
     pounder_storm: "ELECTRIC STORM!",
+    pounder_mini: "Split off a copy — while it lives, he can't be hurt!",
+    pounder_shielded: "SHIELDED BY A COPY",
+    pounder_snipers: "Called snipers from the nest!",
     pounder_clones: "Split across dimensions — two copies!",
     pounder_blink: "BLINKING — invulnerable",
     pounder_defeated: "🏆 THE POUNDER IS DOWN!",
@@ -3290,8 +3296,8 @@ function armorFactor(armor, weapon) {
 // Возвращает фактический урон и как он прошёл, чтобы место вызова показало цифру
 function damageEnemy(e, dmg, weapon, fromX, fromY) {
   if (e.type === 'boss') return damageBoss(e, dmg, weapon, fromX, fromY);
-  if (e.type === 'pounder' && e.blinking > 0) {
-    // Мерцает между измерениями: удары проходят насквозь
+  if (e.type === 'pounder' && (e.blinking > 0 || (!e.isClone && pounderMiniAlive()))) {
+    // Мерцает между измерениями или его прикрывает малая копия: удары проходят насквозь
     e.isAggroed = true;
     const ha = Math.atan2(fromY - e.y, fromX - e.x);
     spawnDirectionalSparks(e.x + Math.cos(ha) * 36, e.y - 60 + Math.sin(ha) * 30, ha, 1.4, 4, '#d8b4fe', 3, 9, 8);
@@ -6369,7 +6375,7 @@ function updateHUD(forceWeaponRefresh = false) {
     _hudCache.bandage = player.items.bandage;
     document.getElementById('count-bandage').innerText = player.items.bandage;
   }
-  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).length;
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).length;
   // Босс своей локации: Мясник в городе, Долбильщик в Промзоне
   const bossAlive = currentLocation === 'promzona' ? !!pounderRef : !!bossRef;
   const bossStatus = currentLocation === 'promzona'
@@ -6431,7 +6437,8 @@ function updateHUD(forceWeaponRefresh = false) {
     const pct = Math.max(0, Math.round((pounderRef.hp / pounderRef.maxHp) * 1000) / 10);
     setHudStyle(document.getElementById('boss-bar-fill'), 'width', `${pct}%`);
     setHudStyle(document.getElementById('boss-shield-bg'), 'display', 'none');
-    const tag = pounderRef.blinking > 0 ? t('pounder_blink') : pounderRef.phase >= 2 ? t('boss_enraged') : '';
+    const tag = pounderRef.blinking > 0 ? t('pounder_blink') : pounderMiniAlive() ? t('pounder_shielded')
+      : pounderRef.phase >= 2 ? t('boss_enraged') : '';
     setHudText(document.getElementById('boss-name'), tag ? `${t('pounder_name')} — ${tag}` : t('pounder_name'));
   } else if (showBossBar) {
     const bossPct = Math.max(0, Math.round((bossRef.hp / bossRef.maxHp) * 1000) / 10);
@@ -6726,8 +6733,19 @@ const POUNDER_ATTACKS = {
   // Электробуря: удар в землю, кольца расходятся (rings штук через ringGap кадров, ringSpeed px/кадр до range)
   storm: { windup: 50, active: 6, recover: 20, range: 560, rings: 3, ringGap: 26, ringSpeed: 6, ringWidth: 26, damage: 25, stun: 60 },
   // Юла: active кадров несётся на Василия, доворачивая не быстрее turn рад/кадр; касание — урон раз в hitEvery
-  spin: { windup: 16, active: 240, recover: 110, speed: 3.7, turn: 0.035, range: 70, damage: 30, hitEvery: 30 }
+  spin: { windup: 16, active: 240, recover: 110, speed: 3.7, turn: 0.035, range: 70, damage: 30, hitEvery: 30 },
+  // Притягивание: луч к Василию (видно в замахе), кто в луче — рывком к Долбильщику и оглушён. Раз в 40 с
+  hook: { windup: 44, active: 10, recover: 30, range: 620, width: 70, land: 105, damage: 20, stun: 60, cooldown: 2400 },
+  // Лёгкие удары малой копии: те же удар сверху и размах, только короче и слабее
+  miniSlam: { base: 'slam', windup: 30, active: 6, recover: 28, range: 100, reach: 45, damage: 70 },
+  miniSweep: { base: 'sweep', windup: 22, active: 8, recover: 24, range: 120, arc: 2.09, damage: 50 }
 };
+// Малая копия: раз в 1,5 мин отщепляется (первая — через 20 с боя), быстрая, только простые удары,
+// своё здоровье; пока она жива, Долбильщика не взять
+const POUNDER_MINI = { first: 1200, every: 5400, hp: 650, speed: 3.0, scale: 0.62, dmg: 0.4 };
+// На 40% здоровья призывает кольцом вокруг себя снайперов гнезда: стоят на месте и стреляют
+const POUNDER_SNIPERS_AT = 0.4;
+const POUNDER_SNIPERS = 10;
 const POUNDER_STORM_AT = 0.5;
 const POUNDER_STORM_CD = 1200;         // 20 с между электробурями
 const POUNDER_CLONES_AT = 0.2;
@@ -6736,6 +6754,10 @@ const POUNDER_CLONE_DMG = 0.75;        // и доля урона
 const POUNDER_BLINK = 900;             // 15 с неуязвимости
 const POUNDER_BLINK_CD = 2400;         // 40 с перезарядки после мерцания
 const POUNDER_HOP = 120;               // перескок раз в ~2 с (+ до 40 случайно)
+// «Не уйдёшь»: бой начат, когда снято больше 15% здоровья. Дальше из логова не уйти: убежал дальше
+// дальнего удара (разряд молота) — через 2 с его выдёргивает к Долбильщику
+const POUNDER_PULL_AT = 0.85;
+const POUNDER_PULL_DELAY = 120;
 let pounderRef = null;
 let pounderRings = [];                 // электрические кольца бури: { x, y, r, life, owner, hit }
 
@@ -6760,6 +6782,7 @@ function newPounder(x, y, hp, extra) {
     electricCd: 0,
     leapCd: 0,
     stormCd: 0,
+    hookCd: 300,                         // первое притягивание — через 5 с боя
     phase: 1,
     blinking: 0,
     blinkCd: 0,
@@ -6823,7 +6846,7 @@ function startPounderAttack(e, key) {
   const def = POUNDER_ATTACKS[key];
   const tempo = e.phase >= 2 ? 0.85 : 1.0;
   const a = {
-    key, phase: 'windup', t: 0,
+    key, kind: def.base || key, phase: 'windup', t: 0,
     windup: Math.round(def.windup * tempo),
     recover: Math.round(def.recover * tempo),
     aim: Math.atan2(player.y - e.y, player.x - e.x),
@@ -6835,6 +6858,7 @@ function startPounderAttack(e, key) {
     a.squat = Math.round(def.squat * tempo);
   }
   if (key === 'storm') e.stormCd = POUNDER_STORM_CD;
+  if (key === 'hook') e.hookCd = def.cooldown;
   e.attack = a;
 }
 
@@ -6851,7 +6875,7 @@ function pounderLeapTarget(e, def) {
 
 // Центр кольца удара сверху: молот бьёт в землю перед ним
 function pounderSlamCenter(e, a) {
-  const def = POUNDER_ATTACKS.slam;
+  const def = POUNDER_ATTACKS[a.key];
   return { x: e.x + Math.cos(a.aim) * def.reach, y: e.y + 4 + Math.sin(a.aim) * def.reach * GROUND_SQUASH };
 }
 
@@ -6861,13 +6885,13 @@ function pounderHit(e, damage) {
 }
 
 function onPounderStrike(e, a, def) {
-  if (a.key === 'slam') {
+  if (a.kind === 'slam') {
     const c = pounderSlamCenter(e, a);
     spawnShockwave(c.x, c.y, def.range, '#a855f7', 28);
     spawnDirectionalSparks(c.x, c.y, -Math.PI / 2, Math.PI * 2, 16, '#c084fc', 4, 12, 16);
     shakeScreen(16, 14);
     SoundFX.bossSwing(true);
-  } else if (a.key === 'sweep') {
+  } else if (a.kind === 'sweep') {
     muzzleFlashes.push({ x: e.x, y: e.y - 30, angle: a.aim, type: 'boss_slash', life: 12, maxLife: 12, scale: def.range / 54 });
     SoundFX.bossSwing(false);
   } else if (a.key === 'electric') {
@@ -6895,6 +6919,30 @@ function onPounderStrike(e, a, def) {
     a.ringTimer = 0;
   } else if (a.key === 'spin') {
     SoundFX.bossSwing(true);
+  } else if (a.key === 'hook') {
+    // Луч схватил: кто в луче и не в перекате — рывок к Долбильщику
+    const fy = player.y + footDY(player);
+    const along = (player.x - e.x) * Math.cos(a.aim) + (fy - e.y) * Math.sin(a.aim);
+    const across = Math.abs(-(player.x - e.x) * Math.sin(a.aim) + (fy - e.y) * Math.cos(a.aim));
+    a.bolt = { x: e.x, y: e.y - 60, len: def.range };
+    SoundFX.toadPlasma(1);
+    if (along > 0 && along < def.range && across < def.width / 2 + player.radius * 0.5 && !player.isRolling && !playerDodged()) {
+      let to = null;
+      for (let r = def.land; r <= def.land + 120 && !to; r += 20) {
+        for (const off of [0, 0.4, -0.4, 0.8, -0.8]) {
+          const x = e.x + Math.cos(a.aim + off) * r, y = e.y + Math.sin(a.aim + off) * r * GROUND_SQUASH;
+          if (!checkWalkCollision(x, y, player.radius, footDY(player))) { to = { x, y }; break; }
+        }
+      }
+      if (to) {
+        a.drag = { fx: player.x, fy: player.y, tx: to.x, ty: to.y };
+        player.isRolling = false;
+        const dmg = Math.round(def.damage * e.dmgMult);
+        player.hp -= dmg;
+        addFloatingText(player.x - 40, player.y - 80, currentLang === 'ru' ? `↯ Притянул! -${dmg}` : `↯ Hooked! -${dmg}`, '#e9d5ff');
+        if (player.hp <= 0) gameOver();
+      }
+    }
   }
 }
 
@@ -6902,10 +6950,10 @@ function updatePounderStrike(e, a, def) {
   const dx = player.x - e.x, dy = player.y - e.y;
   const dist = Math.hypot(dx, dy);
   const footY = player.y + footDY(player);
-  if (a.key === 'slam') {
+  if (a.kind === 'slam') {
     const c = pounderSlamCenter(e, a);
     if (a.t === 1 && inGroundEllipse(player.x, footY, c.x, c.y, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
-  } else if (a.key === 'sweep') {
+  } else if (a.kind === 'sweep') {
     if (a.t === 3 && dist < def.range + player.radius) {
       let diff = Math.atan2(dy, dx) - a.aim;
       while (diff > Math.PI) diff -= Math.PI * 2;
@@ -6937,6 +6985,16 @@ function updatePounderStrike(e, a, def) {
     if (a.t === 1 && inGroundEllipse(player.x, footY, e.x, e.y + 4, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
   } else if (a.key === 'storm') {
     // Кольца выпускаются и в фазе восстановления — см. advancePounderAttack
+  } else if (a.key === 'hook') {
+    // Тащит рывком по лучу; в конце — оглушение
+    if (a.drag) {
+      const k = Math.min(1, a.t / def.active);
+      player.x = a.drag.fx + (a.drag.tx - a.drag.fx) * k;
+      player.y = a.drag.fy + (a.drag.ty - a.drag.fy) * k;
+      player.stunTimer = Math.max(player.stunTimer || 0, 2);
+      if (a.t % 2 === 0) createParticles(player.x, player.y - 30, '#c084fc', 3);
+      if (a.t >= def.active) dazePlayer(def.stun, def.stun, 0.6);
+    }
   } else if (a.key === 'spin') {
     // Юла: несётся на Василия, доворачивая медленно — от неё можно уйти в сторону
     const want = Math.atan2(dy, dx);
@@ -7045,6 +7103,8 @@ function advancePounderAttack(e) {
 }
 
 function choosePounderAttack(e, dist) {
+  if (e.isMini) return dist < 110 ? (Math.random() < 0.5 ? 'miniSlam' : 'miniSweep') : null;
+  if (e.hookCd <= 0 && dist > 200 && dist < POUNDER_ATTACKS.hook.range - 40) return 'hook';
   if (e.phase >= 2 && e.stormCd <= 0 && dist < 500) return 'storm';
   if (dist < 150) return Math.random() < 0.45 ? 'slam' : 'sweep';
   if (dist < 470 && dist > 160 && e.electricCd <= 0) return 'electric';
@@ -7078,6 +7138,10 @@ function updatePounderPhases(e) {
     spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 24, '#a855f7', 4, 11, 18);
     SoundFX.bossSwing(true);
   }
+  if (!e.snipersCalled && e.hp < e.maxHp * POUNDER_SNIPERS_AT) {
+    e.snipersCalled = true;
+    summonPounderSnipers(e);
+  }
   if (e.phase < 3 && e.hp < e.maxHp * POUNDER_CLONES_AT) {
     e.phase = 3;
     e.attack = null;
@@ -7099,6 +7163,16 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   if (e.electricCd > 0) e.electricCd--;
   if (e.leapCd > 0) e.leapCd--;
   if (e.stormCd > 0) e.stormCd--;
+  if (e.hookCd > 0) e.hookCd--;
+  // Малая копия: раз в 1,5 мин, если прежняя уже убита (только у хозяина, в бою)
+  if (!e.isClone && e.isAggroed) {
+    if (e.miniCd === undefined) e.miniCd = POUNDER_MINI.first;
+    if (e.miniCd > 0) e.miniCd--;
+    else if (!pounderMiniAlive()) {
+      e.miniCd = POUNDER_MINI.every;
+      spawnPounderMini(e);
+    }
+  }
   if (e.blinkAnim > 0) e.blinkAnim--;
   if (!(e.z > 0)) unstickBoss(e);
 
@@ -7106,7 +7180,10 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   const dist = Math.hypot(dx, dy);
   const playerInLair = Math.hypot(player.x - POUNDER_HOME.x, player.y - POUNDER_HOME.y) < POUNDER_LEASH;
   if (!e.isAggroed && dist < e.aggroRadius && !playerInSafe) e.isAggroed = true;
-  if (e.isAggroed && (!playerInLair || playerInSafe) && !(e.attack && e.attack.key === 'leap')) {
+  if (e.isAggroed && !e.isClone && e.hp < e.maxHp * POUNDER_PULL_AT) e.engaged = true;
+  // Бой начат — не остывает и за пределами логова; его копии держатся вместе с ним
+  const engaged = e.engaged || (e.isClone && pounderRef && pounderRef.engaged);
+  if (e.isAggroed && !engaged && (!playerInLair || playerInSafe) && !(e.attack && e.attack.key === 'leap')) {
     e.isAggroed = false;
     e.attack = null;
     e.z = 0;
@@ -7115,6 +7192,8 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
     e.introShown = true;
     addFloatingText(e.x - 110, e.y - 150, `⚔ ${t('pounder_name')}`, '#c084fc');
   }
+
+  if (e.engaged) updatePounderPull(e, dist);
 
   let speed = e.speed * (e.phase >= 2 ? 1.2 : 1.0);
   if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
@@ -7182,6 +7261,109 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   }
 }
 
+const pounderMiniAlive = () => enemies.some(o => o.isMini && o.hp > 0);
+
+// Малая копия: уменьшенная, быстрая, только простые удары, своё здоровье; пока жива — хозяин неуязвим
+function spawnPounderMini(e) {
+  const s = pounderFreeSpot(e, e.x, e.y) || { x: e.x + 80, y: e.y + 20 };
+  const m = newPounder(s.x, s.y, POUNDER_MINI.hp, {
+    isClone: true, isMini: true, scale: POUNDER_MINI.scale, dmgMult: POUNDER_MINI.dmg, speed: POUNDER_MINI.speed,
+    radius: 26, isAggroed: true, introShown: true, phase: 1, attackCooldown: 30, blinkAnim: 16, hookCd: 1e9
+  });
+  enemies.push(m);
+  spawnDirectionalSparks(s.x, s.y - 40, -Math.PI / 2, Math.PI * 2, 20, '#e9d5ff', 4, 12, 16);
+  addFloatingText(e.x - 140, e.y - 160, `✦ ${t('pounder_mini')}`, '#e9d5ff');
+  SoundFX.toadPlasma(1);
+}
+
+// 40%: снайперы гнезда появляются кольцом вокруг Долбильщика — вспышкой, как он сам перескакивает
+function summonPounderSnipers(e) {
+  let n = 0;
+  for (let i = 0; i < POUNDER_SNIPERS * 3 && n < POUNDER_SNIPERS; i++) {
+    const a = (n / POUNDER_SNIPERS) * Math.PI * 2 + (i >= POUNDER_SNIPERS ? Math.random() * 0.5 : 0);
+    const r = 210 + (i >= POUNDER_SNIPERS ? Math.random() * 120 : 0);
+    const x = e.x + Math.cos(a) * r, y = e.y + Math.sin(a) * r * GROUND_SQUASH;
+    if (x < 80 || y < 80 || checkWalkCollision(x, y, 17, FOOT_DY.sniper)) continue;
+    const hp = Math.round(180 * ENEMY_HP_SCALE);
+    enemies.push({
+      x, y, startX: x, startY: y, bounds: { x1: x - 50, y1: y - 50, x2: x + 50, y2: y + 50 },
+      districtId: 'pz_cooling', tier: 4, radius: 17, hp, maxHp: hp, speed: 2.25, type: 'sniper', color: '#84cc16',
+      armor: 0, throwCooldown: 0, aggroRadius: 3000, isAggroed: true, hitFlash: 0, patrolAngle: 0, patrolTimer: 90,
+      shootCooldown: 40 + Math.random() * 80, stationary: true, summon: true
+    });
+    spawnDirectionalSparks(x, y - 30, -Math.PI / 2, Math.PI * 2, 12, '#c084fc', 3, 10, 12);
+    createParticles(x, y - 20, '#84cc16', 8);
+    n++;
+  }
+  addFloatingText(e.x - 120, e.y - 160, `✦ ${t('pounder_snipers')}`, '#84cc16');
+  shakeScreen(14, 10);
+}
+
+// Отсчёт «не уйдёшь»: дальше дальнего удара — копится, вернулся — сброшен; дотикал — выдёргивает
+function updatePounderPull(e, dist) {
+  if (dist <= POUNDER_ATTACKS.electric.range || (e.attack && e.attack.key === 'leap')) {
+    e.pullT = 0;
+    return;
+  }
+  e.pullT = (e.pullT || 0) + 1;
+  if (e.pullT === 1) {
+    addFloatingText(player.x - 50, player.y - 80, currentLang === 'ru' ? '↯ Не уйдёшь!' : '↯ You won\'t escape!', '#c084fc');
+  }
+  if (e.pullT >= POUNDER_PULL_DELAY) {
+    e.pullT = 0;
+    pounderPull(e);
+  }
+}
+
+// Разрыв пространства: Василий оказывается перед Долбильщиком, на свободном месте, и на миг оглушён
+function pounderPull(e) {
+  const a = Math.atan2(player.y - e.y, player.x - e.x);
+  let spot = null;
+  for (let r = 140; r <= 260 && !spot; r += 30) {
+    for (let k = 0; k < 9 && !spot; k++) {
+      const ang = a + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.35;
+      const x = e.x + Math.cos(ang) * r, y = e.y + Math.sin(ang) * r * GROUND_SQUASH;
+      if (!checkWalkCollision(x, y, player.radius, footDY(player))) spot = { x, y };
+    }
+  }
+  if (!spot) return;
+  spawnDirectionalSparks(player.x, player.y - 40, -Math.PI / 2, Math.PI * 2, 18, '#c084fc', 3, 11, 14);
+  createParticles(player.x, player.y - 30, '#a855f7', 14);
+  player.x = spot.x;
+  player.y = spot.y;
+  player.isRolling = false;
+  player.stunTimer = Math.max(player.stunTimer || 0, 30);
+  player.knockFrames = 0;
+  spawnDirectionalSparks(player.x, player.y - 40, -Math.PI / 2, Math.PI * 2, 22, '#e9d5ff', 4, 12, 16);
+  shakeScreen(16, 12);
+  SoundFX.toadPlasma(1);
+  addFloatingText(player.x - 40, player.y - 80, currentLang === 'ru' ? '↯ Выдернуло!' : '↯ Pulled back!', '#e9d5ff');
+}
+
+// Нить разрыва от Долбильщика к Василию, пока идёт отсчёт: мерцает и разгорается
+function drawPounderTether(ctx, e) {
+  if (!(e.pullT > 0)) return;
+  const k = Math.min(1, e.pullT / POUNDER_PULL_DELAY);
+  const x1 = e.x, y1 = e.y - 70, x2 = player.x, y2 = player.y - 40;
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const cos = (x2 - x1) / len, sin = (y2 - y1) / len;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  [[6 + 6 * k, `rgba(168, 85, 247, ${0.25 + 0.4 * k})`], [1.5 + 1.5 * k, `rgba(245, 243, 255, ${0.4 + 0.5 * k})`]].forEach(([w, c]) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    for (let s = 30; s < len; s += 30) {
+      const j = (Math.random() - 0.5) * (8 + 18 * k);
+      ctx.lineTo(x1 + cos * s - sin * j, y1 + sin * s + cos * j);
+    }
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
 // Разовая награда за Долбильщика: больше, чем за Мясника — он сильнее
 const POUNDER_REWARD = [
   ['alien_core', 3], ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4], ['mil_parts', 4],
@@ -7245,8 +7427,8 @@ function drawPounderTelegraph(ctx, e) {
   const stroke = locked ? 'rgba(243, 232, 255, 0.95)' : 'rgba(168, 85, 247, 0.7)';
   ctx.save();
   ctx.lineWidth = locked ? 3 : 2;
-  if (a.key === 'slam' || a.key === 'leap' || a.key === 'storm' || a.key === 'spin') {
-    const c = a.key === 'slam' ? pounderSlamCenter(e, a)
+  if (a.kind === 'slam' || a.key === 'leap' || a.key === 'storm' || a.key === 'spin') {
+    const c = a.kind === 'slam' ? pounderSlamCenter(e, a)
       : (a.key === 'leap' && a.target ? { x: a.target.x, y: a.target.y + 4 } : { x: e.x, y: e.y + 4 });
     const r = a.key === 'spin' ? def.range * 2 : def.range;
     ctx.fillStyle = `rgba(168, 85, 247, ${(a.key === 'storm' ? 0.04 : 0.08) + 0.18 * p})`;
@@ -7258,7 +7440,20 @@ function drawPounderTelegraph(ctx, e) {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, r, r * GROUND_SQUASH, 0, 0, Math.PI * 2);
     ctx.stroke();
-  } else if (a.key === 'sweep') {
+  } else if (a.key === 'hook') {
+    // Луч-аркан к Василию: тонкий, к концу замаха наливается
+    const len = Math.min(def.range, Math.hypot(player.x - e.x, player.y - e.y) + 40);
+    ctx.translate(e.x, e.y - 30);
+    ctx.rotate(a.aim);
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = `rgba(216, 180, 254, ${0.25 + 0.6 * p})`;
+    ctx.lineWidth = 2 + 4 * p;
+    ctx.setLineDash([10, 6]);
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.lineTo(len, 0);
+    ctx.stroke();
+  } else if (a.kind === 'sweep') {
     ctx.translate(e.x, e.y);
     ctx.scale(1, GROUND_SQUASH);
     ctx.fillStyle = `rgba(168, 85, 247, ${0.1 + 0.2 * p})`;
@@ -7344,7 +7539,11 @@ function drawPounderRings(ctx) {
 
 // Пока модель грузится — фиолетовый силуэт с молотом
 function drawPounder(ctx, e) {
-  if (window.threePounder && window.threePounder.draw(ctx, e)) return;
+  if (e.isMini && pounderRef) drawPounderLink(ctx, e, pounderRef);
+  if (window.threePounder && window.threePounder.draw(ctx, e)) {
+    if (e.isClone) drawPounderCopyBar(ctx, e);
+    return;
+  }
   ctx.save();
   ctx.translate(e.x, e.y - (e.z || 0));
   ctx.globalAlpha = e.blinking > 0 || e.isClone ? 0.5 : 1;
@@ -7354,6 +7553,38 @@ function drawPounder(ctx, e) {
   ctx.fill();
   ctx.fillStyle = '#a855f7';
   ctx.fillRect(28, -90, 10, 70);
+  ctx.restore();
+}
+
+// Здоровье копии — полоской над головой (у хозяина — большая полоса сверху экрана)
+function drawPounderCopyBar(ctx, e) {
+  const w = e.isMini ? 50 : 70, y = e.y - (e.isMini ? 112 : 172) - (e.z || 0);
+  ctx.save();
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(e.x - w / 2 - 1, y - 1, w + 2, 6);
+  ctx.fillStyle = e.isMini ? '#e9d5ff' : '#a855f7';
+  ctx.fillRect(e.x - w / 2, y, w * Math.max(0, e.hp / e.maxHp), 4);
+  ctx.restore();
+}
+
+// Связь малой копии с хозяином: пока она тянется, его не взять
+function drawPounderLink(ctx, m, e) {
+  const x1 = m.x, y1 = m.y - 50, x2 = e.x, y2 = e.y - 80;
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  if (len < 1) return;
+  const cos = (x2 - x1) / len, sin = (y2 - y1) / len;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.strokeStyle = `rgba(216, 180, 254, ${0.35 + Math.sin(performance.now() / 120) * 0.15})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  for (let s = 26; s < len; s += 26) {
+    const j = (Math.random() - 0.5) * 10;
+    ctx.lineTo(x1 + cos * s - sin * j, y1 + sin * s + cos * j);
+  }
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -8447,7 +8678,7 @@ function update() {
     }
   }
 
-  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).length;
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).length;
   const safeTarget = nearbyInteractable && nearbyInteractable.type === 'container' && window.Safes &&
     window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
   const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
@@ -8695,7 +8926,8 @@ function update() {
       } else if (e.type === 'sniper') {
         e.angle = angle;
         // Держит дистанцию 200–320 px: подходит или отступает, но, как и все, не сквозь стены
-        const step = distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0);
+        // Призванные Долбильщиком стоят кольцом вокруг него (stationary)
+        const step = e.stationary ? 0 : (distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0));
         if (step !== 0) slideMove(e, Math.cos(angle) * step, Math.sin(angle) * step, e.radius, true);
         if (distToPlayer > 320) {
           e.angle = angle;
@@ -9290,7 +9522,11 @@ function render() {
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   if (window.Defense) window.Defense.drawShots(ctx);
-  enemies.forEach(e => { if (e.type === 'pounder') drawPounderBolt(ctx, e); });
+  enemies.forEach(e => {
+    if (e.type !== 'pounder') return;
+    drawPounderBolt(ctx, e);
+    drawPounderTether(ctx, e);
+  });
   drawBreachHint(ctx);
 
   // 8. Выстрелы и баллистические трассеры — только в пределах экрана

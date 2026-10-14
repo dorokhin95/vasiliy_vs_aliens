@@ -210,8 +210,9 @@ class ThreeBossManager {
   // Для слоя теней (shadows.js): холст прошлого кадра и где он на карте; ноги стоят ровно на e.y
   shadowSprite(e) {
     if (!this.isLoaded) return null;
-    const drawSize = this.frustumSize * this.pxPerMeter;
-    const feetOffset = this.lookAtY * Math.cos(this.pitch) * this.pxPerMeter;
+    const sk = e.scale || 1;      // малая копия Долбильщика — уменьшенная
+    const drawSize = this.frustumSize * this.pxPerMeter * sk;
+    const feetOffset = this.lookAtY * Math.cos(this.pitch) * this.pxPerMeter * sk;
     // В прыжке тень остаётся на земле, а фигура уходит вверх (e.z) — тень от неё не рисуем
     if (e.z > 20) return null;
     return { img: this.canvas, x: e.x - drawSize / 2, y: e.y - drawSize / 2 - feetOffset, w: drawSize, h: drawSize, footY: e.y, live: true };
@@ -223,16 +224,17 @@ class ThreeBossManager {
     this.updatePose(e);
     this.renderer.render(this.scene, this.camera);
 
-    const drawSize = this.frustumSize * this.pxPerMeter;
+    const sk = e.scale || 1;      // малая копия Долбильщика — уменьшенная
+    const drawSize = this.frustumSize * this.pxPerMeter * sk;
     // The canvas centre is the look-at point (y = lookAtY); the feet are lookAtY·cos(pitch) below it
-    const feetOffset = this.lookAtY * Math.cos(this.pitch) * this.pxPerMeter;
+    const feetOffset = this.lookAtY * Math.cos(this.pitch) * this.pxPerMeter * sk;
 
     ctx.save();
     ctx.translate(e.x, e.y);
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
-    ctx.ellipse(0, 4, 50, 20, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 4, 50 * sk, 20 * sk, 0, 0, Math.PI * 2);
     ctx.fill();
 
     if (e.type === 'pounder') {
@@ -272,7 +274,7 @@ class ThreeBossManager {
       ctx.globalAlpha = 1;
     } else {
       // Копия Долбильщика полупрозрачная — видно, кто настоящий
-      if (e.isClone) ctx.globalAlpha = 0.72;
+      if (e.isClone && !e.isMini) ctx.globalAlpha = 0.72;
       ctx.drawImage(this.canvas, -drawSize / 2, top, drawSize, drawSize);
       ctx.globalAlpha = 1;
     }
@@ -309,6 +311,10 @@ window.threePounder = new ThreeBossManager({
     leap: { clip: 'Attack_Leap', phases: [70, 6, 44] },
     // Электробуря — тот же удар в землю; юла — поза конца размаха, крутится сама модель
     storm: { clip: 'Attack_Slam', phases: [44, 6, 42] },
+    // Притягивание — замах как у электрического молота; лёгкие удары малой копии — те же клипы
+    hook: { clip: 'Attack_Electric', phases: [56, 12, 40] },
+    miniSlam: { clip: 'Attack_Slam', phases: [44, 6, 42] },
+    miniSweep: { clip: 'Attack_Sweep', phases: [30, 10, 34] },
     spin: { clip: 'Attack_Sweep', phases: [30, 10, 34], hold: 40 }
   }
 });

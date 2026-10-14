@@ -161,7 +161,7 @@ window.CharacterPanel = (function () {
     if (ps) body.append(ps);
 
     // Прогресс локации
-    const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).length;
+    const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).length;
     const progress = [
       statRow(L('Локация', 'Location'), currentLocation === 'promzona' ? L('Промзона', 'Promzona') : L('Новохмуринск', 'Novokhmurinsk')),
       statRow(L('Жаб осталось', 'Toads left'), `${toadsLeft} / ${levelEnemyTotal}`),

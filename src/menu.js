@@ -313,9 +313,9 @@ window.Menu = (() => {
       enemyTotal: levelEnemyTotal,
       // Долбильщик есть только в Промзоне, как Мясник — только в городе
       pounderDefeated: currentLocation === 'promzona' && !pounderRef,
-      pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp), phase: pounderRef.phase } : null,
+      pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp), phase: pounderRef.phase, snipers: !!pounderRef.snipersCalled } : null,
       // Жабы обороны у пролома не сохраняются: незаконченная оборона после загрузки начнётся заново
-      enemies: enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).map(e => ({
+      enemies: enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).map(e => ({
         type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
         armor: e.armor || 0,
         radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
@@ -482,6 +482,7 @@ window.Menu = (() => {
       pounderRef.hp = num(w.pounder.hp, pounderRef.maxHp, 1, pounderRef.maxHp);
       // Фаза не повторяется после загрузки; копии 20% не сохраняются — после загрузки их нет
       pounderRef.phase = Math.floor(num(w.pounder.phase, 1, 1, 3));
+      pounderRef.snipersCalled = !!w.pounder.snipers;
     }
     if (w.bossDefeated && bossRef) {
       const i = enemies.indexOf(bossRef);
