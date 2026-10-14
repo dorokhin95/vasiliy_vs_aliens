@@ -57,6 +57,7 @@ window.Menu = (() => {
       save_now: 'СОХРАНИТЬ',
       exit_menu: 'ВЫЙТИ В МЕНЮ',
       saved_at: 'Прогресс сохранён в {t}',
+      practice_note: 'Тренировочный бой — прогресс не сохраняется. «Выйти в меню» вернёт ваш забег.',
       saved_now: 'Сохранено ✓',
       not_saved: 'Прогресс ещё не сохранялся',
       combat: 'Идёт бой — игра сохранится, когда враги отстанут',
@@ -122,6 +123,7 @@ window.Menu = (() => {
       save_now: 'SAVE',
       exit_menu: 'EXIT TO MENU',
       saved_at: 'Progress saved at {t}',
+      practice_note: 'Practice fight — progress is not saved. "Exit to menu" brings back your run.',
       saved_now: 'Saved ✓',
       not_saved: 'Progress has not been saved yet',
       combat: 'In combat — the game will save once enemies back off',
@@ -350,6 +352,8 @@ window.Menu = (() => {
 
   // Пишет сохранение, если сейчас можно: идёт забег и нет боя
   function saveRun() {
+    // Тренировочный бой (?boss2, src/practice.js) не пишет сохранение
+    if (window.Practice && window.Practice.active) return false;
     if (!runActive() || inCombat()) return false;
     if (!writeJSON(SAVE_KEY, snapshot())) return false;
     lastSaveAt = Date.now();
@@ -541,6 +545,7 @@ window.Menu = (() => {
   }
 
   function onGameOver() {
+    if (window.Practice && window.Practice.active) return;   // тренировка забег не стирает
     removeKey(SAVE_KEY);
     lastSaveAt = 0;
     saveRequested = false;
@@ -659,12 +664,17 @@ window.Menu = (() => {
 
   function updatePauseStatus(justSaved = false) {
     const el = $('pause-save-status');
-    if (inCombat()) el.textContent = tr('combat');
+    if (window.Practice && window.Practice.active) el.textContent = tr('practice_note');
+    else if (inCombat()) el.textContent = tr('combat');
     else if (justSaved) el.textContent = tr('saved_now');
     else el.textContent = lastSaveAt ? tr('saved_at', { t: formatTime(lastSaveAt) }) : tr('not_saved');
   }
 
   function exitToMenu() {
+    if (window.Practice && window.Practice.active) {
+      window.Practice.exit();
+      return;
+    }
     saveRun();
     hidePause();
     gameState = 'MENU';
@@ -885,6 +895,6 @@ window.Menu = (() => {
 
   return {
     applyRun, onGameOver, requestSave, refreshTexts, onEscape, pause, resume, saveRun, inCombat,
-    snapshotWorld, applyWorld, locationOf
+    snapshotWorld, applyWorld, locationOf, loadSave
   };
 })();

@@ -2419,6 +2419,11 @@ const Loading = {
 
 function gameOver() {
   gameState = 'GAMEOVER';
+  // Тренировочный бой (?boss2): забег не стирается, бой начинается заново
+  if (window.Practice && window.Practice.active) {
+    window.Practice.onDeath();
+    return;
+  }
   // Рогалик: смерть заканчивает забег, сохранение стирается
   if (window.Menu) window.Menu.onGameOver();
   document.getElementById('screen-menu').style.display = 'flex';
