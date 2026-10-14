@@ -147,9 +147,22 @@ const BUSH_SPRITES = {
   4: ['courtyard_bush_rosehip', 92, 88]
 };
 
+// Неподвижная земля (город за забором, грунт, тонировка районов, дороги с разметкой, рельсы, дворовые
+// дорожки, люки, лужи, трафареты, био-лужи) рисуется не каждый кадр по слоям, а один раз кусками GROUND_CHUNK×GROUND_CHUNK
+// мировых пикселей, и дальше кадр кладёт готовые куски. На слабой встроенной видеокарте экран
+// закрашивался этими слоями несколько раз за кадр. Видимые куски пекутся сразу, кольцо в один кусок
+// вокруг экрана — заранее, по одному за кадр (чтобы не генерировать на глазах). Готовый кусок переезжает
+// в <img>, как кадры кэша моделей: «уснувший» при скрытой вкладке холст потом рисуется в разы медленнее
+const GROUND_CHUNK = 512;
+const GROUND_CHUNK_PAD = 2;   // поля, чтобы на стыках кусков при дробном сдвиге камеры не было швов
+const GROUND_CHUNK_MAX = 64;  // кусков в памяти (~70 МБ); дальние вытесняются
+const GROUND_CHUNK_OUT = 1536; // сетка кусков выходит за карту: камера у края видит город за забором
+
 class EnvironmentRenderer {
   constructor() {
     this.loaded = false;
+    this.groundChunks = new Map(); // 'cx,cy' → { src, x, y, w, h, used }
+    this.groundFrame = 0;
     this.textures = {};
     this.patterns = {};
     this.props = {};
@@ -184,6 +197,7 @@ class EnvironmentRenderer {
   // Смена локации (game.js generateWorld): декор, дворы, районы на земле и вид за забором строятся заново
   setLocation(id) {
     this.location = id;
+    this.invalidateGround();
     this.staticPuddles = [];
     this.staticManholes = [];
     this.staticStreetLamps = [];
@@ -506,14 +520,23 @@ class EnvironmentRenderer {
   }
 
   // Земля, продолжения дорог и дома за забором, затянутые дымкой. Рисуется первым, под всем остальным
+  // Возвращает false, если какой-то дом за забором ещё не загружен (кусок земли с ним надо перепечь)
   drawOutskirts(ctx, camera, screenW, screenH, worldW, worldH, roads) {
     const x0 = camera.x - 40, y0 = camera.y - 40, x1 = camera.x + screenW + 40, y1 = camera.y + screenH + 40;
-    if (x0 >= 0 && y0 >= 0 && x1 <= worldW && y1 <= worldH) return; // граница не видна
+    if (x0 >= 0 && y0 >= 0 && x1 <= worldW && y1 <= worldH) return true; // граница не видна
     this.generateOutskirts(worldW, worldH);
 
-    // 1. Земля снаружи: тот же бесшовный грунт (паттерн привязан к миру, стыка нет)
+    // 1. Земля снаружи: тот же бесшовный грунт (паттерн привязан к миру, стыка нет). Только полосы за
+    // границей: внутри карты земля всё равно рисуется своя, а лишняя заливка на весь экран у края карты
+    // на слабой видеокарте стоила заметную долю кадра
     ctx.fillStyle = this.patterns['ground'] || '#22272e';
-    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+    const iy0 = Math.max(y0, 0), iy1 = Math.min(y1, worldH);
+    if (y0 < 0) ctx.fillRect(x0, y0, x1 - x0, Math.min(y1, 0) - y0);
+    if (y1 > worldH) ctx.fillRect(x0, Math.max(y0, worldH), x1 - x0, y1 - Math.max(y0, worldH));
+    if (iy1 > iy0) {
+      if (x0 < 0) ctx.fillRect(x0, iy0, Math.min(x1, 0) - x0, iy1 - iy0);
+      if (x1 > worldW) ctx.fillRect(Math.max(x0, worldW), iy0, x1 - Math.max(x0, worldW), iy1 - iy0);
+    }
 
     // 2. Дороги уходят за забор
     const asphalt = this.patterns['asphalt'] || '#1e2430';
@@ -541,11 +564,12 @@ class EnvironmentRenderer {
 
     // 3. Кварталы за забором (3D-спрайты тех же домов и гаражей)
     const tp = window.threeProps;
+    let complete = !!tp;
     if (tp) {
       this.outskirts.lots.forEach(b => {
         if (!this.isVisible(b.x - 60, b.y - 120, b.w + 120, b.h + 180, camera, screenW, screenH)) return;
-        if (b.type === 'garage') tp.drawGarage(ctx, b);
-        else tp.drawMajorBuilding(ctx, b);
+        const drawn = b.type === 'garage' ? tp.drawGarage(ctx, b) : tp.drawMajorBuilding(ctx, b);
+        if (!drawn) complete = false;
       });
     }
 
@@ -569,6 +593,7 @@ class EnvironmentRenderer {
     ctx.fillStyle = f.bottom; ctx.fillRect(-far, worldH, worldW + far * 2, far);
     ctx.fillStyle = f.left; ctx.fillRect(-far, 0, far, worldH);
     ctx.fillStyle = f.right; ctx.fillRect(worldW, 0, far, worldH);
+    return complete;
   }
 
   // Сегменты забора по периметру: лицом вдоль верхней/нижней границы, торцом вдоль боковых
@@ -864,6 +889,7 @@ class EnvironmentRenderer {
   ensureCourtyardLayout(buildings) {
     if (this.courtyardBuilt || !buildings || buildings.length === 0) return;
     this.courtyardBuilt = true;
+    this.invalidateGround();
 
     buildings.forEach((b, idx) => {
       if (b.type !== 'panel' && b.type !== 'boiler_house') return;
@@ -992,46 +1018,30 @@ class EnvironmentRenderer {
     this.ensurePatterns(ctx);
     this.ensureCourtyardLayout(buildings);
 
-    // 0. ГОРОД ЗА ЗАБОРОМ (видно только у границы карты)
-    this.drawOutskirts(ctx, camera, screenW, screenH, worldWidth, worldHeight, roads);
+    // 0. ГОРОД ЗА ЗАБОРОМ (видно только у границы карты) — в кусках земли, пока они не готовы — прямо
+    const chunked = this.groundReady();
+    if (!chunked) this.drawOutskirts(ctx, camera, screenW, screenH, worldWidth, worldHeight, roads);
 
     const viewX = Math.max(0, camera.x);
     const viewY = Math.max(0, camera.y);
     const viewW = Math.min(worldWidth - viewX, screenW);
     const viewH = Math.min(worldHeight - viewY, screenH);
 
-    // 1. БАЗОВАЯ ЗЕМЛЯ / ДВОРЫ
-    if (this.patterns['ground']) {
-      ctx.fillStyle = this.patterns['ground'];
-      ctx.fillRect(viewX, viewY, viewW, viewH);
-    } else {
-      ctx.fillStyle = '#22272e';
-      ctx.fillRect(viewX, viewY, viewW, viewH);
-    }
-
-    // 1.5. АТМОСФЕРНОЕ ЗОНИРОВАНИЕ РАЙОНОВ
-    this.drawDistrictAtmosphere(ctx, camera, screenW, screenH);
-
-    // 2. ДОРОЖНАЯ СЕТЬ (Тротуары из плит, объемные бордюры со швами, треснувший асфальт, потертая разметка)
-    this.drawRoadNetwork(ctx, camera, screenW, screenH, roads);
-
-    // 2.2. Ж/Д КОЛЕИ ПРОМЗОНЫ (переезды поверх дорог)
-    if (this.rails.length) this.drawRails(ctx, camera, screenW, screenH);
-
-    // 2.5. ВНУТРИДВОРОВЫЕ ДОРОЖКИ К ПОДЪЕЗДАМ И ПАЛИСАДНИКИ
-    this.drawCourtyardGround(ctx, camera, screenW, screenH);
-
-    // 3. ДОРОЖНЫЕ ДЕТАЛИ (Люки, лужи и трафаретные указатели районов)
-    this.drawRoadProps(ctx, camera, screenW, screenH);
-
-    // 3.5. БИО-ЛУЖИ КВАКО-ГНЁЗД (под всем, что стоит на земле)
-    this.drawBioPuddles(ctx, camera, screenW, screenH);
-
+    // 1–3.5. НЕПОДВИЖНАЯ ЗЕМЛЯ — готовыми кусками (пока текстуры грузятся — по слоям, как раньше)
     // 4. БЕЗОПАСНАЯ ЗОНА (бетонная площадь, защитный купол)
-    this.drawSafeZone(ctx, camera, screenW, screenH, safeZone);
-
-    // 4.5. ОТБРАСЫВАЕМЫЕ ТЕНИ всего, что стоит на земле, — одним слоем до самих предметов
-    this.drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone);
+    // 4.5. ОТБРАСЫВАЕМЫЕ ТЕНИ всего, что стоит на земле, — до самих предметов. С кусками земли площадь
+    // и тени неподвижного уже в кусках, здесь — только купол и тени того, что двигается
+    if (chunked) {
+      this.drawGroundChunks(ctx, camera, screenW, screenH, worldWidth, worldHeight, roads, buildings, containers, safeZone);
+      this.drawSafeZone(ctx, camera, screenW, screenH, safeZone, 'dome');
+      this.drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone, 'dynamic');
+    } else {
+      ctx.fillStyle = this.patterns['ground'] || '#22272e';
+      ctx.fillRect(viewX, viewY, viewW, viewH);
+      this.drawStaticGround(ctx, camera, screenW, screenH, roads);
+      this.drawSafeZone(ctx, camera, screenW, screenH, safeZone);
+      this.drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone);
+    }
 
     // 4.6. ЛАРЁК МИХАЛЫЧА с неоновой вывеской
     this.drawShopKiosk(ctx, camera, screenW, screenH, safeZone);
@@ -1047,6 +1057,153 @@ class EnvironmentRenderer {
 
     // 6. КОНТЕЙНЕРЫ (Жигули, УАЗики, мусорные баки, армейские ящики)
     this.drawContainers(ctx, camera, screenW, screenH, containers);
+  }
+
+  // Неподвижные слои земли поверх грунта: в кусок (bakeGroundChunk) или прямо в кадр, пока куски не готовы
+  drawStaticGround(ctx, camera, screenW, screenH, roads) {
+    // 1.5. АТМОСФЕРНОЕ ЗОНИРОВАНИЕ РАЙОНОВ
+    this.drawDistrictAtmosphere(ctx, camera, screenW, screenH);
+    // 2. ДОРОЖНАЯ СЕТЬ (Тротуары из плит, объемные бордюры со швами, треснувший асфальт, потертая разметка)
+    this.drawRoadNetwork(ctx, camera, screenW, screenH, roads);
+    // 2.2. Ж/Д КОЛЕИ ПРОМЗОНЫ (переезды поверх дорог)
+    if (this.rails.length) this.drawRails(ctx, camera, screenW, screenH);
+    // 2.5. ВНУТРИДВОРОВЫЕ ДОРОЖКИ К ПОДЪЕЗДАМ И ПАЛИСАДНИКИ
+    this.drawCourtyardGround(ctx, camera, screenW, screenH);
+    // 3. ДОРОЖНЫЕ ДЕТАЛИ (Люки, лужи и трафаретные указатели районов)
+    this.drawRoadProps(ctx, camera, screenW, screenH);
+    // 3.5. БИО-ЛУЖИ КВАКО-ГНЁЗД (под всем, что стоит на земле)
+    this.drawBioPuddles(ctx, camera, screenW, screenH);
+  }
+
+  // Куски земли устарели: другая локация, дворы, био-лужи
+  invalidateGround() {
+    this.groundChunks.clear();
+  }
+
+  // Печь куски можно, когда загружены все текстуры и спрайты земли и разложены дворы
+  groundReady() {
+    return this.loaded && this.courtyardBuilt && !!this.patterns['ground'] && !!this.patterns['asphalt'] &&
+      !!this.patterns['sidewalk'] && !window.__noGroundChunks;
+  }
+
+  bakeGroundChunk(cx, cy, worldW, worldH, roads, buildings, safeZone) {
+    const C = GROUND_CHUNK, P = GROUND_CHUNK_PAD;
+    const x = cx * C, y = cy * C, w = C, h = C;
+    const canvas = document.createElement('canvas');
+    canvas.width = w + P * 2;
+    canvas.height = h + P * 2;
+    const g = canvas.getContext('2d');
+    g.translate(P - x, P - y);
+    // Узоры — свои у холста куска; привязаны к миру, как и на экране, поэтому стыков нет
+    const saved = this.patterns, savedFog = this.outskirtsFog;
+    this.patterns = {
+      ground: g.createPattern(this.textures['ground'], 'repeat'),
+      asphalt: g.createPattern(this.textures['asphalt'], 'repeat'),
+      sidewalk: g.createPattern(this.textures['sidewalk'], 'repeat')
+    };
+    this.outskirtsFog = null; // градиенты дымки — тоже свои у холста куска
+    const cam = { x: x - P, y: y - P }, cw = w + P * 2, ch = h + P * 2;
+    let complete = true;
+    try {
+      // Город за забором, затем земля карты — только внутри карты, как и без кусков
+      complete = this.drawOutskirts(g, cam, cw, ch, worldW, worldH, roads);
+      const ix0 = Math.max(cam.x, 0), iy0 = Math.max(cam.y, 0);
+      const ix1 = Math.min(cam.x + cw, worldW), iy1 = Math.min(cam.y + ch, worldH);
+      if (ix1 > ix0 && iy1 > iy0) {
+        g.save();
+        g.beginPath();
+        g.rect(ix0, iy0, ix1 - ix0, iy1 - iy0);
+        g.clip();
+        g.fillStyle = this.patterns['ground'];
+        g.fillRect(ix0, iy0, ix1 - ix0, iy1 - iy0);
+        this.drawStaticGround(g, cam, cw, ch, roads);
+        if (safeZone) this.drawSafeZone(g, cam, cw, ch, safeZone, 'base');
+        g.restore();
+      }
+      // Тени неподвижного (дома, забор, деревья…) — один раз, при запекании
+      this.borderFenceSegments(worldW, worldH);
+      if (buildings && safeZone) complete = this.drawCastShadows(g, cam, cw, ch, buildings, [], safeZone, 'static') && complete;
+    } finally {
+      this.patterns = saved;
+      this.outskirtsFog = savedFog;
+    }
+    // Дом за забором ещё грузится — кусок перепечётся через полсекунды
+    const chunk = { src: canvas, x, y, w, h, used: this.groundFrame, retry: complete ? 0 : this.groundFrame + 30 };
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const img = new Image();
+      img.src = URL.createObjectURL(blob); // URL не отзываем: браузер может выкинуть пиксели и перечитать src
+      img.decode().then(() => { chunk.src = img; }).catch(() => {});
+    });
+    this.groundChunks.set(cx + ',' + cy, chunk);
+    return chunk;
+  }
+
+  // Экран загрузки: запечь куски экрана и кольца вокруг заранее. Возвращает false, если ещё рано
+  // (текстуры не загружены); тогда земля допечётся в игре
+  prebakeGround(ctx, camera, screenW, screenH, worldW, worldH, roads, buildings, safeZone) {
+    this.ensurePatterns(ctx);
+    this.ensureCourtyardLayout(buildings);
+    if (!this.groundReady()) return false;
+    const C = GROUND_CHUNK;
+    const cx0 = Math.floor(camera.x / C) - 1, cy0 = Math.floor(camera.y / C) - 1;
+    const cx1 = Math.floor((camera.x + screenW) / C) + 1, cy1 = Math.floor((camera.y + screenH) / C) + 1;
+    const lo = Math.floor(-GROUND_CHUNK_OUT / C);
+    const hiX = Math.ceil((worldW + GROUND_CHUNK_OUT) / C) - 1, hiY = Math.ceil((worldH + GROUND_CHUNK_OUT) / C) - 1;
+    const breach = window.fenceBreach ? window.fenceBreach.state + window.fenceBreach.side : '';
+    if (breach !== this.bakedBreach) {
+      this.groundChunks.clear();
+      this.bakedBreach = breach;
+    }
+    for (let cy = Math.max(lo, cy0); cy <= Math.min(hiY, cy1); cy++) {
+      for (let cx = Math.max(lo, cx0); cx <= Math.min(hiX, cx1); cx++) {
+        const c = this.groundChunks.get(cx + ',' + cy);
+        if (!c || c.retry) this.bakeGroundChunk(cx, cy, worldW, worldH, roads, buildings, safeZone);
+      }
+    }
+    return true;
+  }
+
+  drawGroundChunks(ctx, camera, screenW, screenH, worldW, worldH, roads, buildings, containers, safeZone) {
+    const C = GROUND_CHUNK, P = GROUND_CHUNK_PAD;
+    const frame = ++this.groundFrame;
+    // Пролом в заборе открылся (или загрузилось сохранение с ним) — тень плиты в кусках устарела
+    const breach = window.fenceBreach ? window.fenceBreach.state + window.fenceBreach.side : '';
+    if (breach !== this.bakedBreach) {
+      this.groundChunks.clear();
+      this.bakedBreach = breach;
+    }
+    // Сетка кусков — карта плюс GROUND_CHUNK_OUT вокруг (город за забором)
+    const gx0 = Math.floor(-GROUND_CHUNK_OUT / C), gy0 = gx0;
+    const gx1 = Math.ceil((worldW + GROUND_CHUNK_OUT) / C) - 1, gy1 = Math.ceil((worldH + GROUND_CHUNK_OUT) / C) - 1;
+    const cx0 = Math.max(gx0, Math.floor(camera.x / C)), cy0 = Math.max(gy0, Math.floor(camera.y / C));
+    const cx1 = Math.min(gx1, Math.floor((camera.x + screenW) / C));
+    const cy1 = Math.min(gy1, Math.floor((camera.y + screenH) / C));
+    for (let cy = cy0; cy <= cy1; cy++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        let chunk = this.groundChunks.get(cx + ',' + cy);
+        if (!chunk || (chunk.retry && frame >= chunk.retry)) chunk = this.bakeGroundChunk(cx, cy, worldW, worldH, roads, buildings, safeZone);
+        chunk.used = frame;
+        ctx.drawImage(chunk.src, P, P, chunk.w, chunk.h, chunk.x, chunk.y, chunk.w, chunk.h);
+      }
+    }
+    // Запас: кольцо в один кусок вокруг экрана — по куску за кадр, заранее
+    outer:
+    for (let cy = cy0 - 1; cy <= cy1 + 1; cy++) {
+      for (let cx = cx0 - 1; cx <= cx1 + 1; cx++) {
+        if (cx < gx0 || cy < gy0 || cx > gx1 || cy > gy1) continue;
+        const key = cx + ',' + cy;
+        const chunk = this.groundChunks.get(key);
+        if (chunk) { chunk.used = frame; continue; }
+        this.bakeGroundChunk(cx, cy, worldW, worldH, roads, buildings, safeZone);
+        break outer;
+      }
+    }
+    // Дальние куски вытесняются
+    if (this.groundChunks.size > GROUND_CHUNK_MAX) {
+      const old = [...this.groundChunks.entries()].sort((a, b) => a[1].used - b[1].used);
+      for (let i = 0; i < old.length - GROUND_CHUNK_MAX; i++) this.groundChunks.delete(old[i][0]);
+    }
   }
 
   drawDistrictAtmosphere(ctx, camera, screenW, screenH) {
@@ -1335,40 +1492,56 @@ class EnvironmentRenderer {
    * скамейки, урны, фонари, а ещё персонажи и лут — их кадры кладёт в this.shadowActors game.js.
    * Тень уходит влево от предмета на SHEAR·высоту — так и отсекается по экрану.
    */
-  drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone) {
+  // mode: 'all' — всё одним слоем (пока кусков земли нет); 'static' — неподвижное (дома, гаражи, ларёк, забор,
+  // деревья, кусты, скамейки, фонари) в кусок земли (bakeGroundChunk); 'dynamic' — то, что двигается или
+  // меняется (тайники, урны — их бросают громилы, персонажи, лут), прямо в кадр. Возвращает false, если
+  // кадр какого-то неподвижного ещё не загружен — кусок с ним надо перепечь
+  drawCastShadows(ctx, camera, screenW, screenH, buildings, containers, safeZone, mode = 'all') {
     const sc = window.shadowCaster;
-    if (!sc) return;
+    if (!sc) return true;
     const seen = (x, y, w, h) => this.isVisible(x - sc.reach(h), y, w + sc.reach(h), h, camera, screenW, screenH);
-    sc.begin(ctx);
+    const doStatic = mode !== 'dynamic', doDynamic = mode !== 'static';
+    let complete = true;
+    if (mode === 'dynamic') sc.beginDirect(ctx);
+    else sc.begin(ctx, mode === 'static' ? 'bake' : 'frame');
     const tp = window.threeProps;
+    if (!tp && doStatic) complete = false;
 
-    if (tp) {
+    if (tp && doStatic) {
       // Дома и гаражи
       for (let i = 0; i < buildings.length; i++) {
         const b = buildings[i];
         const garage = b.type === 'garage';
         if (!garage && !isModelBuilding(b)) continue;
         const f = garage ? tp.garageFrame(b) : tp.majorBuildingFrame(b);
-        if (!f || !tp.isLoaded[f.propKey] || !seen(f.x, f.y, f.w, f.h)) continue;
+        if (!f || !seen(f.x, f.y, f.w, f.h)) continue;
+        if (!tp.isLoaded[f.propKey]) { complete = false; continue; }
         sc.cast(tp.getFrameCanvas(f.propKey, 0), f.x, f.y, f.w, f.h);
       }
       // Ларёк Михалыча
       const shop = tp.shopSprite(safeZone);
-      if (shop && seen(shop.x, shop.y, shop.w, shop.h)) sc.cast(shop.frame, shop.x, shop.y, shop.w, shop.h);
+      if (shop) {
+        if (seen(shop.x, shop.y, shop.w, shop.h)) sc.cast(shop.frame, shop.x, shop.y, shop.w, shop.h);
+      } else if (this.isVisible(safeZone.shopX - 300, safeZone.shopY - 200, 450, 350, camera, screenW, screenH)) {
+        complete = false;
+      }
       // Плиты пограничного забора (кроме проломленного пролёта)
       const segs = this.borderSegments;
       const fb = window.fenceBreach;
-      if (segs && tp.isLoaded['fence_po2']) {
+      if (segs) {
         for (let i = 0; i < segs.length; i++) {
           const s = segs[i];
           const x = s.x - s.w / 2, y = s.y - s.h / 2;
           if (!seen(x, y, s.w, s.h)) continue;
+          if (!tp.isLoaded['fence_po2']) { complete = false; break; }
           if (fb && fb.state === 'open' && s.side === (fb.side || 'top') && Math.abs(s.x - fb.x) < fb.halfW) continue;
           const v = tp.fenceVariant(s.x, s.y);
           const frame = tp.getFrameCanvas(v.key, s.dir) || tp.getFrameCanvas('fence_po2', s.dir);
           sc.cast(frame, x, y, s.w, s.h, { flip: v.flip });
         }
       }
+    }
+    if (tp && doDynamic) {
       // Тайники (поднятые и летящие — их тень рисует game.js)
       for (let i = 0; i < containers.length; i++) {
         const c = containers[i];
@@ -1380,47 +1553,52 @@ class EnvironmentRenderer {
       }
     }
 
-    // Дворовое: деревья, кусты, скамейки, урны, фонари
-    for (let i = 0; i < this.courtyardTrees.length; i++) {
-      const tr = this.courtyardTrees[i];
-      const r = this.treeRect(tr);
-      if (!seen(r.x, r.y, r.w, r.h)) continue;
-      sc.cast(this.props[(TREE_SPRITES[tr.variant] || TREE_SPRITES[1])[0]] || this.props['autumn_tree_1'], r.x, r.y, r.w, r.h);
-    }
-    for (let i = 0; i < this.courtyardBushes.length; i++) {
-      const b = this.courtyardBushes[i];
-      const r = this.bushRect(b);
-      if (!seen(r.x, r.y, r.w, r.h)) continue;
-      sc.cast(this.props[(BUSH_SPRITES[b.variant] || BUSH_SPRITES[1])[0]] || this.props['courtyard_bush'], r.x, r.y, r.w, r.h);
-    }
-    const bench = this.props['courtyard_bench'];
-    for (let i = 0; i < this.courtyardBenches.length; i++) {
-      const bn = this.courtyardBenches[i];
-      if (seen(bn.x - 36, bn.y - 24, 72, 48)) sc.cast(bench, bn.x - 36, bn.y - 24, 72, 48, { flip: bn.flipX === -1 });
-    }
-    const bin = this.props['small_trash_bin'];
-    [this.courtyardBins, this.staticSidewalkBins].forEach(list => {
-      for (let i = 0; i < list.length; i++) {
-        const tb = list[i];
-        if (!tb.airborne && seen(tb.x - 18, tb.y - 20, 36, 36)) sc.cast(bin, tb.x - 18, tb.y - 20, 36, 36);
+    if (doStatic) {
+      // Дворовое: деревья, кусты, скамейки, фонари
+      for (let i = 0; i < this.courtyardTrees.length; i++) {
+        const tr = this.courtyardTrees[i];
+        const r = this.treeRect(tr);
+        if (!seen(r.x, r.y, r.w, r.h)) continue;
+        sc.cast(this.props[(TREE_SPRITES[tr.variant] || TREE_SPRITES[1])[0]] || this.props['autumn_tree_1'], r.x, r.y, r.w, r.h);
       }
-    });
-    const lamp = this.props['street_lamp'];
-    for (let i = 0; i < this.staticStreetLamps.length; i++) {
-      const lp = this.staticStreetLamps[i];
-      if (seen(lp.x - 36, lp.y - 138, 72, 144)) sc.cast(lamp, lp.x - 36, lp.y - 138, 72, 144, { flip: lp.flipX === -1 });
+      for (let i = 0; i < this.courtyardBushes.length; i++) {
+        const b = this.courtyardBushes[i];
+        const r = this.bushRect(b);
+        if (!seen(r.x, r.y, r.w, r.h)) continue;
+        sc.cast(this.props[(BUSH_SPRITES[b.variant] || BUSH_SPRITES[1])[0]] || this.props['courtyard_bush'], r.x, r.y, r.w, r.h);
+      }
+      const bench = this.props['courtyard_bench'];
+      for (let i = 0; i < this.courtyardBenches.length; i++) {
+        const bn = this.courtyardBenches[i];
+        if (seen(bn.x - 36, bn.y - 24, 72, 48)) sc.cast(bench, bn.x - 36, bn.y - 24, 72, 48, { flip: bn.flipX === -1 });
+      }
+      const lamp = this.props['street_lamp'];
+      for (let i = 0; i < this.staticStreetLamps.length; i++) {
+        const lp = this.staticStreetLamps[i];
+        if (seen(lp.x - 36, lp.y - 138, 72, 144)) sc.cast(lamp, lp.x - 36, lp.y - 138, 72, 144, { flip: lp.flipX === -1 });
+      }
     }
-
-    // Персонажи и лут
-    const actors = this.shadowActors;
-    if (actors) {
-      for (let i = 0; i < actors.length; i++) {
-        const a = actors[i];
-        if (seen(a.x, a.y, a.w, a.h)) sc.cast(a.img, a.x, a.y, a.w, a.h, a);
+    if (doDynamic) {
+      // Урны (их бросают громилы)
+      const bin = this.props['small_trash_bin'];
+      [this.courtyardBins, this.staticSidewalkBins].forEach(list => {
+        for (let i = 0; i < list.length; i++) {
+          const tb = list[i];
+          if (!tb.airborne && seen(tb.x - 18, tb.y - 20, 36, 36)) sc.cast(bin, tb.x - 18, tb.y - 20, 36, 36);
+        }
+      });
+      // Персонажи и лут
+      const actors = this.shadowActors;
+      if (actors) {
+        for (let i = 0; i < actors.length; i++) {
+          const a = actors[i];
+          if (seen(a.x, a.y, a.w, a.h)) sc.cast(a.img, a.x, a.y, a.w, a.h, a);
+        }
       }
     }
 
     sc.end(ctx);
+    return complete;
   }
 
   drawStreetAndCourtyardProps(ctx, camera, screenW, screenH) {
@@ -1780,7 +1958,8 @@ class EnvironmentRenderer {
     ctx.restore();
   }
 
-  drawSafeZone(ctx, camera, screenW, screenH, safeZone) {
+  // part: 'all'; 'base' — бетонная площадка (неподвижна, запекается в кусок земли); 'dome' — свечение и купол
+  drawSafeZone(ctx, camera, screenW, screenH, safeZone, part = 'all') {
     const rBound = safeZone.radius + 40;
     if (!this.isVisible(safeZone.x - rBound, safeZone.y - rBound, rBound * 2, rBound * 2, camera, screenW, screenH)) {
       return;
@@ -1791,6 +1970,7 @@ class EnvironmentRenderer {
     const pulse = Math.sin(time) * 6;
 
     // 1. Бетонный островок безопасности / площадка под Ларьком Михалыча
+    if (part !== 'dome') {
     const sidewalkPattern = this.patterns['sidewalk'] || '#3b4252';
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.beginPath();
@@ -1804,6 +1984,11 @@ class EnvironmentRenderer {
     ctx.roundRect(safeZone.shopX - 120, safeZone.shopY - 62, 240, 124, 14);
     ctx.fill();
     ctx.stroke();
+    }
+    if (part === 'base') {
+      ctx.restore();
+      return;
+    }
 
     // 2. Мягкое свечение периметра базы (без аллокации createRadialGradient)
     ctx.fillStyle = 'rgba(16, 185, 129, 0.06)';

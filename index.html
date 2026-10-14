@@ -1274,6 +1274,22 @@
       color: #f87171;
     }
 
+    /* Экран загрузки (Loading в src/game.js): перед началом игры и после перехода через пролом */
+    .loading-screen {
+      position: absolute;
+      inset: 0;
+      z-index: 150;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 45%, #1c2230 0%, #07090d 75%);
+    }
+    .loading-box { width: min(420px, 80vw); text-align: center; color: #e2e8f0; }
+    .loading-title { font-size: 26px; font-weight: 900; letter-spacing: 6px; color: #facc15; margin-bottom: 14px; }
+    .loading-bar { height: 10px; border-radius: 6px; background: rgba(255, 255, 255, 0.08); border: 1px solid #334155; overflow: hidden; }
+    .loading-bar > div { height: 100%; width: 0%; background: linear-gradient(90deg, #a16207, #facc15); transition: width 0.15s linear; }
+    .loading-text { margin-top: 10px; font-size: 13px; color: #94a3b8; min-height: 18px; }
+
     /* Comics: intro and the Promzona transition (src/comic.js) */
     .comic {
       position: absolute;
@@ -1685,6 +1701,16 @@
               <button data-v="low" data-t="particles_low">Мало</button>
             </div>
           </div>
+          <!-- Разрешение отрисовки (src/game.js renderScale): на слабой видеокарте 75% почти вдвое легче -->
+          <div class="settings-row">
+            <span data-t="resolution">Разрешение</span>
+            <div class="seg" id="set-scale">
+              <button data-v="auto" data-t="resolution_auto">Авто</button>
+              <button data-v="1">100%</button>
+              <button data-v="0.75">75%</button>
+              <button data-v="0.5">50%</button>
+            </div>
+          </div>
           <label class="settings-row">
             <span data-t="show_fps">Счётчик FPS (F3)</span>
             <input type="checkbox" id="set-fps">
@@ -1715,6 +1741,15 @@
       </div>
     </div>
 
+    <!-- Экран загрузки (src/game.js, Loading) -->
+    <div id="loading-screen" class="loading-screen">
+      <div class="loading-box">
+        <div class="loading-title" data-t="loading_title">ЗАГРУЗКА</div>
+        <div class="loading-bar"><div id="loading-fill"></div></div>
+        <div class="loading-text" id="loading-text"></div>
+      </div>
+    </div>
+
     <!-- Comics: intro and the Promzona transition (src/comic.js) -->
     <div id="comic" class="comic" style="display:none;">
       <img class="comic-img" id="comic-img-a" alt="">
@@ -1730,14 +1765,14 @@
 
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
-  <script src="src/shadows.js?v=1094"></script>
-  <script src="src/environment.js?v=1130"></script>
+  <script src="src/shadows.js?v=1135"></script>
+  <script src="src/environment.js?v=1135"></script>
   <script src="src/three_character.js?v=1125"></script>
-  <script src="src/three_enemies.js?v=1115"></script>
-  <script src="src/three_props.js?v=1122"></script>
+  <script src="src/three_enemies.js?v=1134"></script>
+  <script src="src/three_props.js?v=1133"></script>
   <script src="src/three_boss.js?v=1121"></script>
-  <script src="src/game.js?v=1130"></script>
-  <script src="src/menu.js?v=1130"></script>
+  <script src="src/game.js?v=1135"></script>
+  <script src="src/menu.js?v=1135"></script>
   <script src="src/comic.js?v=1125"></script>
   <script src="src/cards.js?v=1126"></script>
   <script src="src/inventory.js?v=1130"></script>

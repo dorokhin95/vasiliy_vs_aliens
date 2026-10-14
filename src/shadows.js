@@ -15,14 +15,33 @@ const SHADOW = {
   ALPHA: 0.55,
   COLOR: '#03060d',  // чуть синее чёрного — сумерки
   RES: 320,          // разрешение силуэта по большей стороне: тень мягкая, крупнее не нужно
-  BLUR: 2            // размытие края силуэта, px силуэта
+  BLUR: 2,           // размытие края силуэта, px силуэта
+  // Слой теней кадра — в половину разрешения холста: тени размытые, разницы не видно, а слой
+  // накладывается на весь экран — на слабой видеокарте вчетверо меньше пикселей на сборку и наложение
+  LAYER_SCALE: 0.5
 };
+
+// Готовый силуэт переезжает из <canvas> в <img>, как кадры кэша моделей (promoteFrameToImage в
+// three_enemies.js). Chrome «усыпляет» 2D-холсты, когда вкладка скрыта, а холсты, из которых только рисуют,
+// потом не просыпаются: каждое рисование тени дорожало в разы до перезагрузки — после смены вкладки игра
+// превращалась в слайд-шоу (docs/PERFORMANCE.md). Силуэтов сотни: каждый кадр зданий, деревьев и поз жаб
+function promoteSilhouette(s) {
+  s.canvas.toBlob((blob) => {
+    if (!blob) return;
+    const img = new Image();
+    img.src = URL.createObjectURL(blob); // URL не отзываем: браузер может выкинуть пиксели и перечитать src
+    img.decode().then(() => { s.img = img; }).catch(() => {});
+  });
+}
 
 class ShadowCaster {
   constructor() {
     this.silhouettes = new WeakMap(); // кадр → { canvas, pad, w, h, foot }
-    this.layer = document.createElement('canvas');
-    this.lctx = this.layer.getContext('2d');
+    // Слой теней: свой для кадра и для запекания кусков земли (размеры разные — не перевыделять каждый раз)
+    this.layers = {};
+    this.layer = null;
+    this.lctx = null;
+    this.direct = null; // рисование прямо в кадр, без слоя (beginDirect)
     this.live = new Map();            // меняющиеся каждый кадр холсты (Василий, Мясник) → свой силуэт
     this.tmp = document.createElement('canvas');      // маска: остаётся в видеопамяти
     this.tmpCtx = this.tmp.getContext('2d');
@@ -67,7 +86,10 @@ class ShadowCaster {
     sg.filter = `blur(${SHADOW.BLUR}px)`;
     sg.drawImage(t, pad, pad);
     sg.filter = 'none';
-    if (!live) this.silhouettes.set(img, s);
+    if (!live) {
+      this.silhouettes.set(img, s);
+      promoteSilhouette(s);
+    }
     return s;
   }
 
@@ -86,17 +108,27 @@ class ShadowCaster {
   }
 
   // Начать слой теней кадра: тот же размер и та же камера, что у основного холста
-  begin(ctx) {
+  begin(ctx, slot = 'frame') {
     const c = ctx.canvas;
     if (!c.width || !c.height) return; // свёрнутое окно: холст нулевой, рисовать некуда
-    if (this.layer.width !== c.width || this.layer.height !== c.height) {
-      this.layer.width = c.width;
-      this.layer.height = c.height;
+    if (!this.layers[slot]) {
+      const canvas = document.createElement('canvas');
+      this.layers[slot] = { canvas, ctx: canvas.getContext('2d') };
+    }
+    this.layer = this.layers[slot].canvas;
+    this.lctx = this.layers[slot].ctx;
+    this.direct = null;
+    const k = SHADOW.LAYER_SCALE;
+    const lw = Math.ceil(c.width * k), lh = Math.ceil(c.height * k);
+    if (this.layer.width !== lw || this.layer.height !== lh) {
+      this.layer.width = lw;
+      this.layer.height = lh;
     } else {
       this.lctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.lctx.clearRect(0, 0, c.width, c.height);
+      this.lctx.clearRect(0, 0, lw, lh);
     }
-    this.lctx.setTransform(ctx.getTransform());
+    const m = ctx.getTransform();
+    this.lctx.setTransform(m.a * k, m.b * k, m.c * k, m.d * k, m.e * k, m.f * k);
     this.open = true;
   }
 
@@ -105,6 +137,16 @@ class ShadowCaster {
    * opts.footY — где стоит на земле (y карты), иначе по силуэту; opts.flip — кадр отражён по x;
    * opts.live — кадр меняется каждый кадр игры.
    */
+  /**
+   * Тени прямо в кадр, без общего слоя: для того, что двигается (персонажи, лут, тайники), когда тени
+   * неподвижного уже запечены в куски земли. Полноэкранный слой на слабой видеокарте стоил ~9 мс за кадр,
+   * а где тень живого ляжет на запечённую — там чуть темнее, это незаметно
+   */
+  beginDirect(ctx) {
+    this.direct = ctx;
+    this.open = true;
+  }
+
   cast(img, x, y, w, h, opts) {
     if (!this.open || !img) return;
     const live = !!(opts && opts.live);
@@ -119,8 +161,9 @@ class ShadowCaster {
       }
       gy = y + s.foot * h;
     }
-    const g = this.lctx;
+    const g = this.direct || this.lctx;
     g.save();
+    if (this.direct) g.globalAlpha = SHADOW.ALPHA;
     // x' = x + SHEAR·(y − gy), y' = gy + SQUASH·(y − gy): выше опоры — влево и назад
     g.transform(1, 0, SHADOW.SHEAR, SHADOW.SQUASH, -SHADOW.SHEAR * gy, gy * (1 - SHADOW.SQUASH));
     if (opts && opts.flip) {
@@ -129,7 +172,7 @@ class ShadowCaster {
       g.translate(-(x + w / 2), 0);
     }
     const sx = w / s.w, sy = h / s.h;
-    g.drawImage(s.canvas, x - s.pad * sx, y - s.pad * sy, (s.w + s.pad * 2) * sx, (s.h + s.pad * 2) * sy);
+    g.drawImage(s.img || s.canvas, x - s.pad * sx, y - s.pad * sy, (s.w + s.pad * 2) * sx, (s.h + s.pad * 2) * sy);
     g.restore();
   }
 
@@ -137,10 +180,15 @@ class ShadowCaster {
   end(ctx) {
     if (!this.open) return;
     this.open = false;
+    if (this.direct) {
+      this.direct = null;
+      return;
+    }
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = SHADOW.ALPHA;
-    ctx.drawImage(this.layer, 0, 0);
+    const k = SHADOW.LAYER_SCALE;
+    ctx.drawImage(this.layer, 0, 0, this.layer.width / k, this.layer.height / k);
     ctx.restore();
   }
 

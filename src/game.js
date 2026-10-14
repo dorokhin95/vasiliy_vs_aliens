@@ -1053,12 +1053,54 @@ document.getElementById('btn-lang').addEventListener('click', () => {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+// Масштаб отрисовки (настройка «Разрешение»): холст рисуется в renderScale от размера окна, CSS растягивает
+// его на весь экран. На слабой встроенной видеокарте при 1920 px кадр упирается в заливку пикселей (тени,
+// земля, дымка за забором) — при 75% пикселей почти вдвое меньше. Игра живёт в логических пикселях окна
+// viewW × viewH: камера, отсечение, мышь, экранные стрелки; render() ставит масштаб в начале кадра
+let renderScale = 1;
+let renderScaleSetting = 'auto'; // 'auto' | 1 | 0.75 | 0.5 (src/menu.js)
+let viewW = window.innerWidth, viewH = window.innerHeight;
+const RENDER_SCALE_MIN = 0.5;
+
 function resizeCanvas() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  viewW = window.innerWidth;
+  viewH = window.innerHeight;
+  canvas.width = Math.max(1, Math.round(viewW * renderScale));
+  canvas.height = Math.max(1, Math.round(viewH * renderScale));
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
+
+window.setRenderScaleSetting = function(v) {
+  renderScaleSetting = v === 'auto' ? 'auto' : Math.max(RENDER_SCALE_MIN, Math.min(1, Number(v) || 1));
+  renderScale = renderScaleSetting === 'auto' ? 1 : renderScaleSetting;
+  autoScale.reset();
+  resizeCanvas();
+};
+
+// «Авто»: если 3 с игры кадры в основном дольше 28 мс (меньше ~35 FPS), разрешение снижается на ступень
+// (до 50%). Обратно само не поднимается — запас по видеокарте при vsync не измерить; поднимает смена
+// настройки или перезагрузка
+const autoScale = {
+  t: 0, n: 0, slow: 0, holdUntil: 0,
+  reset() { this.t = 0; this.n = 0; this.slow = 0; },
+  // После старта и перехода грузятся модели и прогреваются кадры — эти тормоза разрешение не снижают
+  hold(ms) { this.holdUntil = performance.now() + ms; this.reset(); },
+  frame(dt) {
+    if (renderScaleSetting !== 'auto' || gameState !== 'PLAYING' || document.hidden ||
+        performance.now() < this.holdUntil) { this.reset(); return; }
+    if (dt > 250) return; // пауза, свёрнутая вкладка
+    this.t += dt;
+    this.n++;
+    if (dt > 28) this.slow++;
+    if (this.t < 3000) return;
+    if (this.slow > this.n * 0.6 && renderScale > RENDER_SCALE_MIN) {
+      renderScale = Math.max(RENDER_SCALE_MIN, Math.round((renderScale - 0.15) * 100) / 100);
+      resizeCanvas();
+    }
+    this.reset();
+  }
+};
 
 // Раскладка карты — MAP в environment.js
 const WORLD_WIDTH = MAP.SIZE;
@@ -2272,6 +2314,7 @@ function startGame(save = null) {
   // Локация, где Василий был при сохранении (новый забег — город)
   currentLocation = save && window.Menu ? window.Menu.locationOf(save) : 'city';
   locationWorlds = {};
+  autoScale.hold(6000);
   locationsVisited = new Set(['city', currentLocation]);
   generateWorld();
   if (save && window.Menu) window.Menu.applyRun(save);
@@ -2286,7 +2329,87 @@ function startGame(save = null) {
   if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon || 'none');
   applyHotbarOrder();
   updateHUD(true);
+  Loading.start();
 }
+
+// --- ЭКРАН ЗАГРУЗКИ ---
+// Перед началом игры и после перехода через пролом: догружаются модели локации, прогреваются кадры
+// (обычно это идёт в простое уже в игре — первый показ дёргал кадр) и запекаются куски земли вокруг
+// Василия. Пока идёт загрузка, gameState — 'LOADING' (мир стоит). Если что-то не грузится дольше
+// LOADING_MAX_MS — игра всё равно начинается, остальное догрузится в простое
+const LOADING_MAX_MS = 30000;
+const Loading = {
+  active: false,
+  onDone: null,
+  start(onDone = null) {
+    this.active = true;
+    this.onDone = onDone;
+    this.t0 = performance.now();
+    this.framesTotal = 0;
+    gameState = 'LOADING';
+    const el = document.getElementById('loading-screen');
+    if (el) el.style.display = 'flex';
+    this.step();
+  },
+  // Модели, без которых сцену не показать: окружение, Василий, жабы и пропсы локации, её босс
+  modelsReady() {
+    const er = window.environmentRenderer, tp = window.threeProps, te = window.threeEnemies;
+    const ch = window.threeCharacter;
+    const boss = currentLocation === 'promzona' ? window.threePounder : window.threeBoss;
+    const checks = [
+      !!(er && er.loaded),
+      !ch || ch.isLoaded || ch.loadFailed,
+      !tp || (tp.allSettled() && (currentLocation !== 'promzona' || tp.promzonaRequested)),
+      !te || (te.allSettled() && (currentLocation !== 'promzona' || te.promzonaRequested)),
+      !boss || !boss.loadRequested || boss.isLoaded || boss.loadFailed
+    ];
+    return { done: checks.filter(Boolean).length, total: checks.length };
+  },
+  show(progress, text) {
+    const fill = document.getElementById('loading-fill');
+    const label = document.getElementById('loading-text');
+    if (fill) fill.style.width = `${Math.round(progress * 100)}%`;
+    if (label) label.textContent = text;
+  },
+  step() {
+    if (!this.active) return;
+    const ru = currentLang === 'ru';
+    const timedOut = performance.now() - this.t0 > LOADING_MAX_MS;
+    const m = this.modelsReady();
+    if (m.done < m.total && !timedOut) {
+      this.show(0.05 + 0.4 * m.done / m.total, ru ? 'Загружаем модели…' : 'Loading models…');
+      setTimeout(() => this.step(), 100);
+      return;
+    }
+    // Кадры: очередь прогрева прогоняется кусками по ~30 мс, между ними — обновить полоску
+    const left = window.flushIdleTasks ? window.flushIdleTasks(30) : 0;
+    this.framesTotal = Math.max(this.framesTotal, left);
+    if (left > 0 && !timedOut) {
+      const k = this.framesTotal ? 1 - left / this.framesTotal : 1;
+      this.show(0.45 + 0.45 * k, ru ? `Готовим кадры… ${left}` : `Preparing frames… ${left}`);
+      setTimeout(() => this.step(), 0);
+      return;
+    }
+    // Земля вокруг Василия
+    this.show(0.95, ru ? 'Земля и тени…' : 'Ground and shadows…');
+    setTimeout(() => this.finish(), 0);
+  },
+  finish() {
+    if (!this.active) return;
+    const er = window.environmentRenderer;
+    camera.x = player.x - viewW / 2;
+    camera.y = player.y - viewH / 2;
+    if (er) er.prebakeGround(ctx, camera, viewW, viewH, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, safeZone);
+    this.active = false;
+    const el = document.getElementById('loading-screen');
+    if (el) el.style.display = 'none';
+    gameState = 'PLAYING';
+    autoScale.hold(4000);
+    const done = this.onDone;
+    this.onDone = null;
+    if (done) done();
+  }
+};
 
 function gameOver() {
   gameState = 'GAMEOVER';
@@ -4413,7 +4536,10 @@ function generateBioPuddles() {
       placed++;
     }
   });
-  if (window.environmentRenderer) window.environmentRenderer.bioPuddles = bioPuddles;
+  if (window.environmentRenderer) {
+    window.environmentRenderer.bioPuddles = bioPuddles;
+    window.environmentRenderer.invalidateGround();
+  }
 }
 
 // (x, y) — точка ступней
@@ -4432,7 +4558,7 @@ function inBioPuddle(x, y) {
 function spawnBioPuddleBubbles() {
   if (bioPuddles.length === 0 || Math.random() > 0.35) return;
   const p = bioPuddles[Math.floor(Math.random() * bioPuddles.length)];
-  if (Math.abs(p.x - player.x) > canvas.width * 0.6 || Math.abs(p.y - player.y) > canvas.height * 0.6) return;
+  if (Math.abs(p.x - player.x) > viewW * 0.6 || Math.abs(p.y - player.y) > viewH * 0.6) return;
   const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * 0.8;
   particles.push({
     x: p.x + Math.cos(a) * BIO_PUDDLE_RX * r,
@@ -5371,6 +5497,7 @@ function placePlayerAtBreach() {
 // Переход в другую локацию: мир текущей запоминается тем же снимком, что пишет сохранение,
 // другая строится заново и, если Василий там уже был, восстанавливается
 function travelTo(target) {
+  autoScale.hold(6000);
   if (window.Menu) locationWorlds[currentLocation] = window.Menu.snapshotWorld();
   currentLocation = target;
   locationsVisited.add(target);
@@ -5380,11 +5507,13 @@ function travelTo(target) {
   if (saved && window.Menu) window.Menu.applyWorld(saved);
   placePlayerAtBreach();
   lastPlayerDistrictId = '';
-  gameState = 'PLAYING';
-  showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
-  // Первый раз в Промзоне — оборона у пролома (src/defense.js)
-  if (window.Defense) window.Defense.onEnter();
-  if (window.Menu) window.Menu.requestSave();
+  // Модели новой локации и её кадры — на экране загрузки, а не в игре; оборона — уже после неё
+  Loading.start(() => {
+    showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
+    // Первый раз в Промзоне — оборона у пролома (src/defense.js)
+    if (window.Defense) window.Defense.onEnter();
+    if (window.Menu) window.Menu.requestSave();
+  });
 }
 
 // Надпись на асфальте у пролома и полоска света из него (в сторону карты от забора)
@@ -5461,7 +5590,7 @@ function drawBreachMarker() {
   if (currentLocation !== 'city' || !levelCleared) return;
   const markY = breachFenceY() + breachInward() * 20;
   const sx = fenceBreach.x - camera.x, sy = markY - camera.y;
-  const w = canvas.width, h = canvas.height;
+  const w = viewW, h = viewH;
   if (sx > 0 && sx < w && sy > 0 && sy < h) return;
   const left = 40, right = w - 40, top = 80, bottom = h - 110;
   const cx = (left + right) / 2, cy = (top + bottom) / 2;
@@ -5525,6 +5654,13 @@ function getFumePuff() {
   g.fillStyle = grad;
   g.fillRect(0, 0, 64, 64);
   fumePuffSprite = c;
+  // В <img>, как кадры кэша: «уснувший» при скрытой вкладке холст потом рисуется в разы медленнее
+  c.toBlob((blob) => {
+    if (!blob) return;
+    const img = new Image();
+    img.src = URL.createObjectURL(blob);
+    img.decode().then(() => { fumePuffSprite = img; }).catch(() => {});
+  });
   return c;
 }
 
@@ -8275,8 +8411,8 @@ function update() {
   if (Math.abs(cameraKickX) < 0.05) cameraKickX = 0;
   if (Math.abs(cameraKickY) < 0.05) cameraKickY = 0;
 
-  camera.x = player.x - canvas.width / 2 + cameraKickX;
-  camera.y = player.y - canvas.height / 2 + cameraKickY;
+  camera.x = player.x - viewW / 2 + cameraKickX;
+  camera.y = player.y - viewH / 2 + cameraKickY;
   player.angle = Math.atan2(mouseWorld.y - player.y, mouseWorld.x - player.x);
 
   const angleDeg = (player.angle * 180 / Math.PI + 360) % 360;
@@ -8456,7 +8592,7 @@ function update() {
   checkLevelCleared();
 
   const hasFumeAura = player.hasPerk('fume_aura');
-  const activeSimRadius = Math.max(canvas.width, canvas.height) * 0.72 + 220;
+  const activeSimRadius = Math.max(viewW, viewH) * 0.72 + 220;
 
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
@@ -8995,8 +9131,9 @@ function collectActorShadows(minX, maxX, minY, maxY) {
 
 function render() {
   ctx.save();
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0); // всё ниже — в логических пикселях окна
   ctx.fillStyle = '#0f131a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, viewW, viewH);
 
   ctx.save();
   ctx.translate(-camera.x, -camera.y);
@@ -9008,9 +9145,9 @@ function render() {
   }
 
   const viewMinX = camera.x - 120;
-  const viewMaxX = camera.x + canvas.width + 120;
+  const viewMaxX = camera.x + viewW + 120;
   const viewMinY = camera.y - 120;
-  const viewMaxY = camera.y + canvas.height + 120;
+  const viewMaxY = camera.y + viewH + 120;
 
   // Ступни и высоты фигур на экране: по ним предметы, за которыми кто-то стоит, рисуются поверх (9.2)
   const actors = [{ x: player.x, y: player.y + footDY(player), h: 88 }];
@@ -9023,8 +9160,8 @@ function render() {
   if (window.environmentRenderer) {
     if (window.Defense) window.Defense.addActors(actors);
     window.environmentRenderer.shadowActors = collectActorShadows(viewMinX, viewMaxX, viewMinY, viewMaxY);
-    window.environmentRenderer.planDeferredContainers(actors, containers, camera, canvas.width, canvas.height);
-    window.environmentRenderer.draw(ctx, camera, canvas.width, canvas.height, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
+    window.environmentRenderer.planDeferredContainers(actors, containers, camera, viewW, viewH);
+    window.environmentRenderer.draw(ctx, camera, viewW, viewH, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
   } else {
     ctx.fillStyle = '#161b24';
     ctx.fillRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -9298,11 +9435,11 @@ function render() {
 
   // 9.2. Машины, деревья, фонари и прочее, за чем стоит Василий или враг, — поверх фигур
   if (window.environmentRenderer) {
-    window.environmentRenderer.drawOccludingProps(ctx, actors, camera, canvas.width, canvas.height, buildings);
+    window.environmentRenderer.drawOccludingProps(ctx, actors, camera, viewW, viewH, buildings);
     // 9.25. Предметы в руках громил и в полёте
     drawAirborneProps(ctx);
     // 9.3. Плафоны фонарей, ореолы и конусы света — поверх персонажей
-    window.environmentRenderer.drawLampGlows(ctx, camera, canvas.width, canvas.height);
+    window.environmentRenderer.drawLampGlows(ctx, camera, viewW, viewH);
   }
 
   // 9.5. Направленные дульные вспышки поверх среза ствола
@@ -9362,7 +9499,7 @@ function render() {
 const LAST_ENEMIES_MARKED = 5;
 function drawLastEnemyMarkers() {
   if (gameState !== 'PLAYING' || levelCleared || enemies.length === 0 || enemies.length > LAST_ENEMIES_MARKED) return;
-  const w = canvas.width, h = canvas.height;
+  const w = viewW, h = viewH;
   // Рамка для стрелок: сверху — полоски здоровья и плашка района, снизу — хотбар
   const left = 34, right = w - 34, top = 72, bottom = h - 104;
   const cx = (left + right) / 2, cy = (top + bottom) / 2;
@@ -9390,7 +9527,7 @@ function drawLastEnemyMarkers() {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   }
   ctx.restore();
 }
@@ -9436,16 +9573,18 @@ function drawPerfOverlay() {
     perfStats.hitches > 0
       ? `Фризы >50 мс: ${perfStats.hitches}, последний ${Math.round(perfStats.lastHitchMs)} мс (игра ${perfStats.lastHitchGameMs.toFixed(1)} мс)`
       : 'Фризы >50 мс: нет',
-    `Враги ${enemies.length}  Частицы ${particles.length}  Пули ${bullets.length + enemyBullets.length}`
+    `Враги ${enemies.length}  Частицы ${particles.length}  Пули ${bullets.length + enemyBullets.length}  ` +
+      `Разрешение ${Math.round(renderScale * 100)}%${renderScaleSetting === 'auto' ? ' (авто)' : ''}`
   ];
   ctx.save();
+  ctx.setTransform(renderScale, 0, 0, renderScale, 0, 0);
   ctx.fillStyle = 'rgba(8, 10, 14, 0.78)';
-  ctx.fillRect(10, canvas.height - 95, 420, 85);
+  ctx.fillRect(10, viewH - 95, 420, 85);
   ctx.font = '12px Consolas, monospace';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillStyle = perfStats.frameMs > 18 ? '#f87171' : '#4ade80';
-  lines.forEach((line, i) => ctx.fillText(line, 18, canvas.height - 87 + i * 19));
+  lines.forEach((line, i) => ctx.fillText(line, 18, viewH - 87 + i * 19));
   ctx.restore();
 }
 
@@ -9592,6 +9731,7 @@ function loop(now = performance.now()) {
 
     if (lastRenderTime > 0) {
       perfStats.frameMs += (Math.min(now - lastRenderTime, 250) - perfStats.frameMs) * 0.05;
+      autoScale.frame(now - lastRenderTime);
     }
     lastRenderTime = now;
     perfStats.updateMs += ((t1 - t0) / steps - perfStats.updateMs) * 0.05;

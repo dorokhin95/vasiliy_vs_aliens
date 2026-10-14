@@ -16,19 +16,40 @@
  * Runs small tasks in browser idle time without blocking frames (also used by three_props.js).
  * At least one task runs per callback so the queue still drains when the main thread is never idle.
  */
-function runIdleTasks(tasks) {
-  const requestIdle = window.requestIdleCallback
-    ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
-    : (cb) => setTimeout(() => cb({ timeRemaining: () => 4 }), 50);
+// Общая очередь прогрева кадров (врагов, пропсов). В игре идёт в простое браузера, а экран загрузки
+// (Loading в game.js) прогоняет её сразу — до начала игры кадры уже готовы
+const idleQueue = [];
+let idleScheduled = false;
+const requestIdle = window.requestIdleCallback
+  ? (cb) => window.requestIdleCallback(cb, { timeout: 300 })
+  : (cb) => setTimeout(() => cb({ timeRemaining: () => 4 }), 50);
 
-  const step = (deadline) => {
-    do {
-      tasks.shift()();
-    } while (tasks.length > 0 && deadline.timeRemaining() > 3);
-    if (tasks.length > 0) requestIdle(step);
-  };
-  if (tasks.length > 0) requestIdle(step);
+function scheduleIdleTasks() {
+  if (idleScheduled || idleQueue.length === 0) return;
+  idleScheduled = true;
+  requestIdle((deadline) => {
+    idleScheduled = false;
+    // Очередь могли уже опустошить (экран загрузки прогоняет её сам)
+    while (idleQueue.length > 0) {
+      idleQueue.shift()();
+      if (deadline.timeRemaining() <= 3) break;
+    }
+    scheduleIdleTasks();
+  });
 }
+
+function runIdleTasks(tasks) {
+  idleQueue.push(...tasks);
+  scheduleIdleTasks();
+}
+
+// Прогнать очередь сразу, не дольше budgetMs; возвращает, сколько задач осталось
+window.flushIdleTasks = function (budgetMs) {
+  const t0 = performance.now();
+  while (idleQueue.length > 0 && performance.now() - t0 < budgetMs) idleQueue.shift()();
+  return idleQueue.length;
+};
+window.idleTasksPending = () => idleQueue.length;
 
 /**
  * Replaces a cached frame <canvas> with a decoded <img> once it is ready (also used by three_props.js).
@@ -226,6 +247,12 @@ class ThreeEnemyManager {
   }
 
   loadModels(configs) {
+    // Что запрошено и что уже загрузилось или не смогло — экран загрузки ждёт, пока settled догонит requested
+    if (!this.requested) {
+      this.requested = new Set();
+      this.settled = new Set();
+    }
+    configs.forEach(c => this.requested.add(c.type));
     if (typeof THREE.GLTFLoader === 'undefined') {
       setTimeout(() => this.loadModels(configs), 200);
       return;
@@ -233,7 +260,8 @@ class ThreeEnemyManager {
 
     const loader = new THREE.GLTFLoader();
     let pending = configs.length;
-    const onSettled = () => {
+    const onSettled = (type) => {
+      this.settled.add(type);
       if (--pending === 0) this.schedulePrewarm(configs.map(c => c.type));
     };
 
@@ -280,12 +308,12 @@ class ThreeEnemyManager {
           this.roots[cfg.type].add(model);
           this.isLoaded[cfg.type] = true;
           console.log(`[ThreeEnemyManager] 3D Model loaded: ${cfg.type}`);
-          onSettled();
+          onSettled(cfg.type);
         },
         undefined,
         (err) => {
           console.error(`[ThreeEnemyManager] Failed to load ${cfg.file}:`, err);
-          onSettled();
+          onSettled(cfg.type);
         }
       );
     });
@@ -321,6 +349,11 @@ class ThreeEnemyManager {
    * so shader compilation (~25–55 ms on first render of a type) and new-pose WebGL renders
    * don't cause frame hitches mid-fight.
    */
+  // Все запрошенные модели загрузились или не смогли (экран загрузки)
+  allSettled() {
+    return !!this.requested && [...this.requested].every(t => this.settled.has(t));
+  }
+
   schedulePrewarm(types) {
     const tasks = [];
     for (const type of types) {

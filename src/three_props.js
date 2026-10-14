@@ -227,9 +227,16 @@ class ThreePropsManager {
   }
 
   loadConfigs(configs, onDone) {
+    // Что запрошено и что уже загрузилось или не смогло — экран загрузки ждёт, пока settled догонит requested
+    if (!this.requested) {
+      this.requested = new Set();
+      this.settled = new Set();
+    }
+    configs.forEach(c => this.requested.add(c.key));
     const loader = new THREE.GLTFLoader();
     let pending = configs.length;
-    const onSettled = () => {
+    const onSettled = (key) => {
+      this.settled.add(key);
       if (--pending === 0 && onDone) onDone();
     };
 
@@ -289,15 +296,20 @@ class ThreePropsManager {
           this.roots[cfg.key].add(model);
           this.isLoaded[cfg.key] = true;
           console.log(`[ThreePropsManager] 3D Model loaded: ${cfg.key}`);
-          onSettled();
+          onSettled(cfg.key);
         },
         undefined,
         (err) => {
           console.warn(`[ThreePropsManager] 3D Model not yet available (${cfg.file}):`, err);
-          onSettled();
+          onSettled(cfg.key);
         }
       );
     });
+  }
+
+  // Все запрошенные модели загрузились или не смогли (экран загрузки)
+  allSettled() {
+    return !!this.requested && [...this.requested].every(k => this.settled.has(k));
   }
 
   /**

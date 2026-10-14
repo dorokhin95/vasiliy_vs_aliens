@@ -51,6 +51,7 @@ window.Menu = (() => {
       intro: 'ПРЕДЫСТОРИЯ',
       comic_skip: 'ПРОПУСТИТЬ [ESC]',
       comic_hint: 'Клик или пробел — дальше · ← назад',
+      loading_title: 'ЗАГРУЗКА',
       pause: 'ПАУЗА',
       resume: 'ПРОДОЛЖИТЬ',
       save_now: 'СОХРАНИТЬ',
@@ -69,6 +70,8 @@ window.Menu = (() => {
       particles: 'Частицы и искры',
       particles_high: 'Много',
       particles_low: 'Мало',
+      resolution: 'Разрешение',
+      resolution_auto: 'Авто',
       show_fps: 'Счётчик FPS (F3)',
       sec_controls: 'Управление',
       sec_save: 'Сохранение',
@@ -113,6 +116,7 @@ window.Menu = (() => {
       intro: 'STORY',
       comic_skip: 'SKIP [ESC]',
       comic_hint: 'Click or Space — next · ← back',
+      loading_title: 'LOADING',
       pause: 'PAUSED',
       resume: 'RESUME',
       save_now: 'SAVE',
@@ -131,6 +135,8 @@ window.Menu = (() => {
       particles: 'Particles & sparks',
       particles_high: 'High',
       particles_low: 'Low',
+      resolution: 'Resolution',
+      resolution_auto: 'Auto',
       show_fps: 'FPS counter (F3)',
       sec_controls: 'Controls',
       sec_save: 'Save',
@@ -203,7 +209,9 @@ window.Menu = (() => {
   const round2 = v => Math.round(v * 100) / 100;
 
   // ======================= НАСТРОЙКИ =======================
-  const DEFAULT_SETTINGS = { volume: 100, lang: 'ru', lights: true, particles: 'high', showFps: false };
+  // scale — разрешение отрисовки: 'auto' (снижается само, если кадры не успевают) или доля окна
+  const DEFAULT_SETTINGS = { volume: 100, lang: 'ru', lights: true, particles: 'high', showFps: false, scale: 'auto' };
+  const SCALES = ['auto', '1', '0.75', '0.5'];
   const settings = Object.assign({}, DEFAULT_SETTINGS);
   (function loadSettings() {
     const s = readJSON(SETTINGS_KEY) || {};
@@ -212,6 +220,7 @@ window.Menu = (() => {
     settings.lights = typeof s.lights === 'boolean' ? s.lights : DEFAULT_SETTINGS.lights;
     settings.particles = s.particles === 'low' ? 'low' : 'high';
     settings.showFps = s.showFps === true;
+    settings.scale = SCALES.includes(String(s.scale)) ? String(s.scale) : DEFAULT_SETTINGS.scale;
   })();
 
   function saveSettings() {
@@ -222,6 +231,7 @@ window.Menu = (() => {
     // Квадрат: на слух громкость меняется равномернее, чем при линейном ползунке
     SoundFX.setVolume((settings.volume / 100) ** 2);
     particleScale = settings.particles === 'low' ? 0.4 : 1;
+    if (window.setRenderScaleSetting) window.setRenderScaleSetting(settings.scale);
     if (window.environmentRenderer) window.environmentRenderer.lightsEnabled = settings.lights;
     perfStats.visible = settings.showFps || /[?&]perf\b/.test(location.search);
     frozenFrameState = null; // на паузе перерисовать застывший кадр с новыми настройками
@@ -708,6 +718,7 @@ window.Menu = (() => {
     $('set-fps').checked = settings.showFps;
     document.querySelectorAll('#set-lang button').forEach(b => b.classList.toggle('active', b.dataset.v === currentLang));
     document.querySelectorAll('#set-particles button').forEach(b => b.classList.toggle('active', b.dataset.v === settings.particles));
+    document.querySelectorAll('#set-scale button').forEach(b => b.classList.toggle('active', b.dataset.v === settings.scale));
     const save = loadSave();
     $('set-save-status').textContent = save ? tr('save_status', { d: formatDate(save.savedAt) }) : tr('save_none');
     // Удалять сохранение посреди забега бессмысленно — автосохранение тут же запишет его снова
@@ -827,6 +838,12 @@ window.Menu = (() => {
   });
   document.querySelectorAll('#set-particles button').forEach(b => b.addEventListener('click', () => {
     settings.particles = b.dataset.v;
+    applySettings();
+    saveSettings();
+    syncSettingsUI();
+  }));
+  document.querySelectorAll('#set-scale button').forEach(b => b.addEventListener('click', () => {
+    settings.scale = b.dataset.v;
     applySettings();
     saveSettings();
     syncSettingsUI();
