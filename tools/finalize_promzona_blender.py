@@ -5,7 +5,7 @@
   - склеивает меши, применяет трансформы;
   - Decimate до бюджета треугольников из docs/PERFORMANCE.md;
   - выкидывает карту metallic/roughness (рантайм всё равно ставит roughness>=0.82, metalness<=0.10),
-    оставляет base color + normal, текстуры <= 512 px, экспорт в WebP;
+    оставляет base color + normal, текстуры <= 512 px (цвет зданий — 1024), экспорт в WebP;
   - длинную сторону кладёт вдоль X (у пары closed/_open поворот берётся от закрытой модели),
     фасад смотрит в -Y Blender (= +Z glTF, к камере), центр по XY, низ на Z=0;
   - масштаб в метрах (рантайм всё равно нормализует по targetSpan);
@@ -57,6 +57,9 @@ MODELS = {
 MATCH_HEIGHT = {'safe_cabinet', 'safe_fireproof', 'safe_vault', 'container_barrel'}
 OPEN_EXTRA_TRIS = 1.2   # у открытых вариантов внутри больше деталей
 MAX_TEX = 512
+# Цвет у зданий — 1024: цех на экране шириной до ~1500 px, и в 512 фасад выходил мыльным. Нормали и всё у
+# декора и тайников — 512
+MAX_TEX_BUILDING_COLOR = 1024
 WEBP_QUALITY = 82
 PITCH_DEG = 28          # как у камеры в игре
 
@@ -102,7 +105,7 @@ def import_joined(path, name):
     return obj
 
 
-def slim_materials(obj):
+def slim_materials(obj, color_max=MAX_TEX):
     for mat in obj.data.materials:
         if not mat or not mat.use_nodes:
             continue
@@ -123,8 +126,10 @@ def slim_materials(obj):
                 continue
             img = n.image
             w, h = img.size
-            if max(w, h) > MAX_TEX:
-                k = MAX_TEX / max(w, h)
+            is_color = bsdf is not None and any(l.to_socket == bsdf.inputs['Base Color'] for l in n.outputs[0].links)
+            limit = color_max if is_color else MAX_TEX
+            if max(w, h) > limit:
+                k = limit / max(w, h)
                 img.scale(max(1, round(w * k)), max(1, round(h * k)))
         if bsdf:
             bsdf.inputs['Metallic'].default_value = 0.05
@@ -199,7 +204,7 @@ def process(name, length, budget, rot_z, height=None):
     if rot_z is None:
         lo, hi = bounds(obj)
         rot_z = math.radians(90) if (hi.y - lo.y) > (hi.x - lo.x) * 1.15 else 0.0
-    slim_materials(obj)
+    slim_materials(obj, MAX_TEX_BUILDING_COLOR if name.startswith('building_') else MAX_TEX)
     tris = decimate(obj, budget)
     place(obj, length, rot_z, height)
     out = os.path.join(OUT, name + '.glb')

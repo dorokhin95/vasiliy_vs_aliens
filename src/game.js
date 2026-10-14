@@ -1761,7 +1761,7 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
     const bl = block(1, 1);
     factory('prop_gantry_crane', 2350 - 210, bl.y1 + 520, 420, { noCollide: true, overRails: true });
     factory('prop_pipe_stack', bl.x1 + 120, bl.y1 + 260, 200);
-    factory('prop_cable_reel', bl.x1 + 420, bl.y2 - 260, 80);
+    factory('prop_cable_reel', bl.x1 + 460, bl.y2 - 260, 80);
     factory('prop_pipe_stack', bl.x1 + 200, bl.y2 - 360, 200);
     placeContainer(bl.x2 - 180, bl.y1 + 220, 'barrel');
     placeContainer(bl.x1 + 640, bl.y1 + 900, 'barrel');
@@ -1844,7 +1844,7 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
   {
     const bl = block(2, 3);
     factory('building_admin', bl.x1 + 120, 5420, 760);
-    factory('building_checkpoint', bl.x2 - 330, 5480, 220);
+    factory('building_checkpoint', bl.x2 - 430, 5480, 320);
     placeContainer(bl.x2 - 260, 5720, 'car', 'zhiguli', 0);
     placeContainer(bl.x1 + 140, 5740, 'trash', null, 0);
     spawns(bl, 6);

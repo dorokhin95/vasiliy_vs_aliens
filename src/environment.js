@@ -56,28 +56,42 @@ function isModelBuilding(b) {
 // по наибольшему габариту (PZ_TARGET_SPAN), поэтому из габарита и ширины пятна на карте считается всё:
 // кадр, глубина пятна и насколько модель поднимается над ним (pzFrame)
 const PZ_TARGET_SPAN = 2.15;
+// Высокие модели нормализуются мельче: кадр 2,4 единицы, а камера смотрит в 0,48 высоты — у градирни
+// задний край верхнего кольца уходил за кадр и обрезался
+const PZ_SPAN = { building_cooling_tower: 1.85 };
+function pzSpan(model) {
+  return PZ_SPAN[model] || PZ_TARGET_SPAN;
+}
 const PZ_MODELS = {
-  building_admin: [60, 22.8, 23.2],
-  building_checkpoint: [12, 4.2, 6.0],
-  building_cooling_tower: [39.2, 40, 50.7],
-  building_foundry: [70, 35.2, 28.3],
-  building_gasholder: [34.9, 35, 24.9],
-  building_mech_workshop: [55, 25, 15.4],
-  building_oil_tank: [25, 25, 11.8],
-  building_pump_station: [18, 14.9, 7.5],
-  building_smokestack: [9.8, 10, 21.6],
-  building_warehouse: [50, 23.9, 14.5],
-  prop_locomotive: [17, 5.1, 6.9],
-  prop_gantry_crane: [25, 11.9, 14.3],
-  prop_pipe_rack: [12, 3.4, 5.9],
-  prop_pipe_stack: [8, 6.9, 4.0],
-  prop_cable_reel: [2.2, 1.4, 2.2],
+  building_admin: [60, 31.1, 19.6],
+  building_checkpoint: [12, 2.7, 3.3],
+  building_cooling_tower: [37.6, 37.6, 44.9],
+  building_foundry: [70, 35, 23.7],
+  building_gasholder: [36.0, 36.0, 24.6],
+  building_mech_workshop: [55, 25, 15.5],
+  building_oil_tank: [25.3, 25.3, 13.2],
+  building_pump_station: [18, 10.4, 4.4],
+  building_smokestack: [8.2, 8.2, 26.5],
+  building_warehouse: [50, 27.4, 14.0],
+  prop_locomotive: [16.3, 3.3, 5.3],
+  prop_gantry_crane: [25, 12, 10.8],
+  prop_pipe_rack: [12, 1.2, 5.1],
+  prop_pipe_stack: [8.3, 9.1, 2.8],
+  prop_cable_reel: [2.6, 2.6, 2.2],
   container_boxcar: [14, 3.2, 4.9],
   container_gondola: [14, 3.2, 3.4],
   container_tankcar: [12, 2.9, 4.0],
   container_kamaz: [7.5, 2.6, 3.3],
   container_zil: [6.7, 2.6, 2.8],
   container_barrel: [0.9, 0.9, 1.3]
+};
+// Яркость моделей Промзоны (множитель цвета материала). Цеха и декор сделаны вручную по концептам
+// (tools/model_promzona_blender.py): материал неосвещённый, свет нарисован на концепте — множитель 1.
+// Тайники — модели Rodin, у них по умолчанию 0,86
+const PZ_COLOR = {
+  building_admin: 1, building_checkpoint: 1, building_cooling_tower: 1, building_foundry: 1, building_gasholder: 1,
+  building_mech_workshop: 1, building_oil_tank: 1, building_pump_station: 1, building_smokestack: 1, building_warehouse: 1,
+  prop_cable_reel: 1, prop_gantry_crane: 1, prop_locomotive: 1, prop_pipe_rack: 1, prop_pipe_stack: 1
 };
 // Тайники Промзоны: тип → модель и длина на карте, px (машины города ~40 px/м, вагоны чуть ужаты)
 const PZ_CONTAINERS = {
@@ -95,7 +109,7 @@ const PZ_CONTAINERS = {
 // { x, y, w, h } — кадр (квадрат), depth — глубина пятна на экране, rise — высота модели над пятном
 function pzFrame(model, cx, cy, w) {
   const [mx, md, mh] = PZ_MODELS[model];
-  const s = PZ_TARGET_SPAN / Math.max(mx, md, mh);
+  const s = pzSpan(model) / Math.max(mx, md, mh);
   const H = mh * s;
   const pitch = 28 * Math.PI / 180;
   const th = Math.atan2(6 * Math.sin(pitch) - 0.48 * H, 6 * Math.cos(pitch));

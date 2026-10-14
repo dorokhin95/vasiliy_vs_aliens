@@ -210,7 +210,7 @@ class ThreePropsManager {
       this.roots[key] = new THREE.Group();
       this.roots[key].visible = false;
       this.scene.add(this.roots[key]);
-      configs.push({ key, file: `assets/models/${key}.glb`, targetSpan: PZ_TARGET_SPAN, colorScale: 0.86, frameSize });
+      configs.push({ key, file: `assets/models/${key}.glb`, targetSpan: pzSpan(key.replace(/_open$/, '')), colorScale: PZ_COLOR[key] || 0.86, frameSize });
     };
     Object.keys(PZ_MODELS).forEach(key => {
       // Цеха рисуются до ~1500 px, вагоны и декор — до ~500
@@ -236,7 +236,7 @@ class ThreePropsManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=1030',
+        cfg.file + '?v=1041',
         (gltf) => {
           const model = gltf.scene;
           const cScale = cfg.colorScale || 0.90;
