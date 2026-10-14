@@ -83,7 +83,11 @@ const PZ_MODELS = {
   container_tankcar: [12, 2.9, 4.0],
   container_kamaz: [7.5, 2.6, 3.3],
   container_zil: [6.7, 2.6, 2.8],
-  container_barrel: [0.9, 0.9, 1.3]
+  container_barrel: [0.9, 0.9, 1.3],
+  // Сейфы (src/safes.js) — тоже тайники, с открытым вариантом
+  safe_cabinet: [0.79, 0.76, 1.56],
+  safe_fireproof: [0.85, 0.89, 1.03],
+  safe_vault: [1.29, 1.24, 1.54]
 };
 // Яркость моделей Промзоны (множитель цвета материала). Цеха и декор сделаны вручную по концептам
 // (tools/model_promzona_blender.py): материал неосвещённый, свет нарисован на концепте — множитель 1.
@@ -100,7 +104,11 @@ const PZ_CONTAINERS = {
   tankcar: { model: 'container_tankcar', len: 400 },
   kamaz: { model: 'container_kamaz', len: 270 },
   zil: { model: 'container_zil', len: 245 },
-  barrel: { model: 'container_barrel', len: 36 }
+  barrel: { model: 'container_barrel', len: 36 },
+  // Сейфы чуть крупнее масштаба бочки — их надо замечать
+  safe_cabinet: { model: 'safe_cabinet', len: 44 },
+  safe_fireproof: { model: 'safe_fireproof', len: 48 },
+  safe_vault: { model: 'safe_vault', len: 70 }
 };
 
 // Кадр модели Промзоны, у которой пятно на карте шириной w с центром (cx, cy).

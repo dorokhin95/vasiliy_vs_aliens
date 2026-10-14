@@ -29,6 +29,18 @@ const UPGRADE_TREES = {
         statMods: {},
         locks: ["shaman_carpet"]
       },
+      // Новый ряд — открывается вместе с Промзоной (promzona: true), для сейфов (src/safes.js)
+      stethoscope: {
+        id: "stethoscope",
+        promzona: true,
+        name_ru: "Стетоскоп",
+        name_en: "Stethoscope",
+        desc_ru: "Инженер слышит механизм: сейф сразу выдаёт одну цифру кода",
+        desc_en: "An engineer hears the mechanism: a safe gives away one digit of its code",
+        cost: { bottles: 16, scrap: 24, mil_parts: 2, toad_eye: 2 },
+        statMods: {},
+        locks: []
+      },
       laser_eye: {
         id: "laser_eye",
         name_ru: "Лазерный прицел-глаз",
@@ -1890,6 +1902,24 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
     placeContainer(bl.x1 + 200, 5420, 'zil', null, 0);
     placeContainer(bl.x1 + 120, 5640, 'barrel');
   }
+
+  // --- Сейфы (src/safes.js, раздел 9 плана). Ставятся последними: номера прежних тайников в старых
+  // сохранениях не сдвигаются. [столбец, ряд квартала, доля по x, доля по y, тип]; место рядом найдёт placeContainer
+  [
+    // Кассовые — заводоуправление (касса), резервуарный парк, у градирен
+    [2, 3, 0.62, 0.62, 'safe_vault'], [3, 0, 0.18, 0.86, 'safe_vault'], [0, 1, 0.78, 0.16, 'safe_vault'],
+    // Несгораемые — кабинеты начальников цехов, склады, управление
+    [1, 1, 0.12, 0.2, 'safe_fireproof'], [2, 1, 0.86, 0.2, 'safe_fireproof'], [1, 2, 0.86, 0.16, 'safe_fireproof'],
+    [2, 2, 0.12, 0.86, 'safe_fireproof'], [2, 3, 0.9, 0.2, 'safe_fireproof'], [1, 0, 0.86, 0.5, 'safe_fireproof'],
+    // Железные шкафы — конторки цехов, склады, автобаза, сортировка
+    [1, 0, 0.14, 0.9, 'safe_cabinet'], [2, 0, 0.5, 0.92, 'safe_cabinet'], [2, 0, 0.9, 0.5, 'safe_cabinet'],
+    [3, 2, 0.2, 0.2, 'safe_cabinet'], [3, 2, 0.86, 0.86, 'safe_cabinet'], [0, 3, 0.86, 0.16, 'safe_cabinet'],
+    [1, 3, 0.14, 0.16, 'safe_cabinet'], [1, 2, 0.14, 0.86, 'safe_cabinet'], [2, 2, 0.86, 0.14, 'safe_cabinet'],
+    [1, 1, 0.86, 0.9, 'safe_cabinet'], [3, 1, 0.12, 0.5, 'safe_cabinet'], [0, 2, 0.86, 0.5, 'safe_cabinet']
+  ].forEach(([c, r, fx, fy, type]) => {
+    const bl = block(c, r);
+    placeContainer(bl.x1 + (bl.x2 - bl.x1) * fx, bl.y1 + (bl.y2 - bl.y1) * fy, type, null, 0);
+  });
 }
 
 // Респауна нет, врагов на локации меньше (69 вместо 83) — зато каждый крепче
@@ -2019,6 +2049,8 @@ let shootCooldown = 0;
 let nearbyInteractable = null;
 
 window.addEventListener('keydown', (e) => {
+  // Окно сейфа забирает цифры, Enter, Backspace, ESC и E (src/safes.js)
+  if (window.Safes && gameState === 'PLAYING' && window.Safes.handleKey(e)) return;
   keys[e.code] = true;
   if (e.code === 'KeyE' && gameState === 'PLAYING') handleInteract();
   // ESC: закрыть настройки / магазин, поставить или снять паузу (src/menu.js)
@@ -2236,7 +2268,11 @@ function handleInteract() {
   else if (nearbyInteractable.type === 'breach') {
     if (levelCleared) breakFence();
   }
-  else if (nearbyInteractable.type === 'container') scavengeContainer(nearbyInteractable.target);
+  else if (nearbyInteractable.type === 'container') {
+    const c = nearbyInteractable.target;
+    if (window.Safes && window.Safes.isSafe(c)) window.Safes.open(c);
+    else scavengeContainer(c);
+  }
 }
 
 function spawn3DLootItem(x, y, type, val = 1) {
@@ -2738,6 +2774,7 @@ function renderUpgradeTrees() {
 
     for (const perkKey in tree.perks) {
       const perk = tree.perks[perkKey];
+      if (perk.promzona && !locationsVisited.has('promzona')) continue;
       const isInstalled = player.hasPerk(perk.id);
       const isLocked = player.blockedPerks.has(perk.id);
 
@@ -7981,8 +8018,11 @@ function update() {
     }
   }
 
-  const toadsLeft = enemies.length - (bossRef ? 1 : 0);
-  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}` : '';
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder').length;
+  const safeTarget = nearbyInteractable && nearbyInteractable.type === 'container' && window.Safes &&
+    window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
+  const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
+  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}` : '';
   if (_lastPromptKey !== nextPromptKey) {
     _lastPromptKey = nextPromptKey;
     const promptEl = document.getElementById('interact-prompt');
@@ -7991,7 +8031,7 @@ function update() {
       const type = nearbyInteractable.type;
       promptEl.innerText = type === 'shop' ? t('prompt_shop')
         : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
-        : t('prompt_search');
+        : safePrompt || t('prompt_search');
     } else {
       promptEl.style.display = 'none';
     }
@@ -8107,6 +8147,7 @@ function update() {
 
   updateThrownProps();
   updateRockets();
+  if (window.Safes) window.Safes.update();
   updatePounderRings();
   updateShockwaves();
   updateShieldShards();

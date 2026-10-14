@@ -329,6 +329,56 @@
       max-width: 460px;
     }
     .pause-controls .controls-list { text-align: left; }
+    /* Окно сейфа: справа, мир виден и идёт */
+    .safe-panel {
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 250px;
+      background: linear-gradient(#1f2633, #151a23);
+      border: 2px solid #4b5563;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 40;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      font-family: Consolas, monospace;
+      color: #e2e8f0;
+    }
+    .safe-head { display: flex; justify-content: space-between; align-items: center; }
+    .safe-title { font-weight: 800; font-size: 14px; color: #fde68a; font-family: "Segoe UI", sans-serif; }
+    .safe-close { background: none; border: none; color: #94a3b8; font-size: 16px; cursor: pointer; }
+    .safe-attempts { font-size: 12px; color: #94a3b8; }
+    .safe-hint { font-size: 12px; color: #4ade80; }
+    .safe-rows { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; }
+    .safe-row { display: flex; gap: 6px; justify-content: center; }
+    .safe-slot { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .safe-digit {
+      width: 32px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      background: #0b0f15; border: 1px solid #374151; border-radius: 5px;
+      font-size: 20px; font-weight: 700; color: #fef3c7;
+    }
+    .safe-row.current .safe-digit { border-color: #fbbf24; }
+    .safe-lamp { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #1f2937; border: 1px solid #374151; }
+    .safe-lamp.none { visibility: hidden; }
+    .safe-lamp.green { background: #22c55e; box-shadow: 0 0 6px #22c55e; border-color: #86efac; }
+    .safe-lamp.yellow { background: #eab308; box-shadow: 0 0 6px #eab308; border-color: #fde047; }
+    .safe-legend { font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
+    .safe-keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+    .safe-key {
+      background: #2b3442; border: 1px solid #475569; border-radius: 6px;
+      color: #f1f5f9; font-size: 16px; font-weight: 700; padding: 6px 0; cursor: pointer;
+      font-family: Consolas, monospace;
+    }
+    .safe-key:hover { background: #374151; }
+    .safe-actions { display: flex; gap: 6px; }
+    .safe-key.wide { flex: 1; }
+    .safe-key.ok { background: #14532d; border-color: #22c55e; }
+    .safe-key.ok:disabled { opacity: 0.4; cursor: default; }
     .pause-controls h3 {
       font-size: 12px;
       color: #94a3b8;
@@ -1560,6 +1610,25 @@
       </div>
     </div>
 
+    <!-- Окно вскрытия сейфа (src/safes.js): игра идёт, окно сбоку -->
+    <div id="safe-panel" class="safe-panel" style="display:none;">
+      <div class="safe-head">
+        <div class="safe-title" id="safe-title"></div>
+        <button class="safe-close" id="safe-close" title="ESC / E">✕</button>
+      </div>
+      <div class="safe-attempts" id="safe-attempts"></div>
+      <div class="safe-hint" id="safe-hint"></div>
+      <div class="safe-rows" id="safe-rows"></div>
+      <div class="safe-legend"><i class="safe-lamp green"></i> <span id="safe-l-green"></span>
+        <i class="safe-lamp yellow"></i> <span id="safe-l-yellow"></span>
+        <i class="safe-lamp off"></i> <span id="safe-l-off"></span></div>
+      <div class="safe-keypad" id="safe-keypad"></div>
+      <div class="safe-actions">
+        <button class="safe-key wide" id="safe-erase">⌫</button>
+        <button class="safe-key wide ok" id="safe-ok">OK</button>
+      </div>
+    </div>
+
     <!-- Pause Screen (src/menu.js) -->
     <div id="screen-pause" class="overlay-screen pause-screen" style="display:none;">
       <h1 data-t="pause">ПАУЗА</h1>
@@ -1658,15 +1727,16 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
   <script src="src/shadows.js?v=1094"></script>
-  <script src="src/environment.js?v=1118"></script>
+  <script src="src/environment.js?v=1122"></script>
   <script src="src/three_character.js?v=1094"></script>
   <script src="src/three_enemies.js?v=1115"></script>
-  <script src="src/three_props.js?v=1115"></script>
+  <script src="src/three_props.js?v=1122"></script>
   <script src="src/three_boss.js?v=1121"></script>
-  <script src="src/game.js?v=1121"></script>
+  <script src="src/game.js?v=1122"></script>
   <script src="src/menu.js?v=1121"></script>
   <script src="src/comic.js?v=1094"></script>
   <script src="src/cards.js?v=1119"></script>
   <script src="src/inventory.js?v=1121"></script>
+  <script src="src/safes.js?v=1123"></script>
 </body>
 </html>

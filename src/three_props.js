@@ -213,13 +213,14 @@ class ThreePropsManager {
     Object.keys(PZ_MODELS).forEach(key => {
       // Цеха рисуются до ~1500 px, вагоны и декор — до ~500
       add(key, key.startsWith('building_') ? 1024 : 512);
-      if (key.startsWith('container_')) add(key + '_open', 512);
+      if (key.startsWith('container_') || key.startsWith('safe_')) add(key + '_open', 512);
     });
     this.loadConfigs(configs, () => {
       const frames = [];
       Object.keys(PZ_MODELS).forEach(key => {
         frames.push([key, 0]);
         if (key.startsWith('container_')) frames.push([key, 8], [key + '_open', 0], [key + '_open', 8]);
+        if (key.startsWith('safe_')) frames.push([key + '_open', 0]);
       });
       runIdleTasks(frames.filter(([key]) => this.isLoaded[key]).map(([key, dir]) => () => this.getFrameCanvas(key, dir)));
     });

@@ -1,0 +1,242 @@
+// Сейфы Промзоны (docs/LEVEL2_PROMZONA.md, раздел 9): новый вид тайника, вскрывается подбором кода.
+// После каждой попытки под цифрой загорается лампочка: зелёная — цифра на месте, жёлтая — есть в коде, но
+// не здесь, не горит — такой нет. Цифры в коде не повторяются. Не угадал за все попытки — замок заклинило
+// на JAM_FRAMES, потом код новый. Игра на паузу не встаёт: ударили Василия или он отошёл — окно закрывается.
+// Перк «Стетоскоп» (ветка Кибернизации) сразу подсвечивает одну цифру кода.
+// Скрипты обычные, без модулей: player, containers, currentLang, spawn3DLootItem — из game.js.
+window.Safes = (function () {
+  const $ = id => document.getElementById(id);
+  const L = (r, e) => (currentLang === 'ru' ? r : e);
+
+  // Тип тайника → длина кода, попытки, имя. Модели и размер на карте — PZ_MODELS / PZ_CONTAINERS (environment.js)
+  const SAFE_TYPES = {
+    safe_cabinet: { digits: 3, attempts: 8, name: ['Железный шкаф', 'Iron cabinet'] },
+    safe_fireproof: { digits: 4, attempts: 7, name: ['Несгораемый шкаф', 'Fireproof cabinet'] },
+    safe_vault: { digits: 5, attempts: 6, name: ['Кассовый сейф', 'Cash vault'] }
+  };
+  const JAM_FRAMES = 60 * 30;
+
+  // Что внутри: [тип лута, от, до, шанс]. Пока — из ресурсов, которые уже есть в игре;
+  // чертежи, цветмет, спирт и плазменные ячейки добавит этап нового лута Промзоны
+  const SAFE_LOOT = {
+    safe_cabinet: [['bottle', 3, 5], ['scrap', 4, 7], ['ammo_9x18', 8, 8, 0.5], ['ammo_12g', 4, 4, 0.4], ['bandage', 1, 1, 0.4]],
+    safe_fireproof: [['bottle', 4, 6], ['scrap', 6, 10], ['mil_parts', 1, 2], ['bandage', 1, 1, 0.6], ['stew', 1, 1, 0.5],
+      ['ammo_12g', 6, 6, 0.5]],
+    safe_vault: [['bottle', 8, 10], ['scrap', 10, 14], ['mil_parts', 2, 3], ['alien_core', 2, 3], ['vodka', 1, 1, 0.6],
+      ['bandage', 1, 1]]
+  };
+
+  let cur = null;          // сейф, который сейчас вскрывают
+  let input = [];          // набранные цифры
+  let lastHp = 0;
+  const jammed = new Set();
+
+  const isSafe = c => !!(c && SAFE_TYPES[c.type]);
+  const state = c => c.safe || (c.safe = { code: null, guesses: [], jam: 0, hint: null });
+  const isOpen = () => !!cur;
+
+  function newCode(n) {
+    const d = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    for (let i = d.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [d[i], d[j]] = [d[j], d[i]];
+    }
+    return d.slice(0, n);
+  }
+
+  function open(c) {
+    const s = state(c);
+    if (s.jam > 0) {
+      addFloatingText(c.x - 40, c.y - 60, L('🔒 Заклинило', '🔒 Jammed'), '#f87171');
+      return;
+    }
+    const def = SAFE_TYPES[c.type];
+    if (!s.code) s.code = newCode(def.digits);
+    // Стетоскоп: инженер слышит механизм — одна цифра сразу известна
+    if (s.hint === null && player.hasPerk('stethoscope')) s.hint = Math.floor(Math.random() * def.digits);
+    cur = c;
+    input = [];
+    lastHp = player.hp;
+    render();
+    $('safe-panel').style.display = 'flex';
+  }
+
+  function close() {
+    if (!cur) return;
+    cur = null;
+    input = [];
+    $('safe-panel').style.display = 'none';
+  }
+
+  function press(d) {
+    if (!cur || input.length >= SAFE_TYPES[cur.type].digits) return;
+    input.push(d);
+    SoundFX.emptyClick();
+    render();
+  }
+
+  function erase() {
+    if (!cur) return;
+    input.pop();
+    render();
+  }
+
+  function submit() {
+    if (!cur) return;
+    const def = SAFE_TYPES[cur.type];
+    if (input.length < def.digits) return;
+    const s = state(cur);
+    const lamps = input.map((d, i) => (d === s.code[i] ? 'green' : s.code.includes(d) ? 'yellow' : 'off'));
+    s.guesses.push({ digits: input.slice(), lamps });
+    input = [];
+    if (lamps.every(l => l === 'green')) {
+      crack(cur);
+      return;
+    }
+    if (s.guesses.length >= def.attempts) {
+      // Замок заклинило: подождать и начать заново — уже с другим кодом
+      s.jam = JAM_FRAMES;
+      s.code = null;
+      s.guesses = [];
+      s.hint = null;
+      jammed.add(cur);
+      addFloatingText(cur.x - 50, cur.y - 60, L('🔒 ЗАКЛИНИЛО!', '🔒 JAMMED!'), '#f87171');
+      SoundFX.overheat();
+      close();
+      return;
+    }
+    SoundFX.reload();
+    render();
+  }
+
+  function crack(c) {
+    c.searched = true;
+    const s = state(c);
+    s.code = null;
+    close();
+    const loot = SAFE_LOOT[c.type] || [];
+    const drops = [];
+    loot.forEach(([type, a, b, chance = 1]) => {
+      if (Math.random() < chance) drops.push([type, a + Math.floor(Math.random() * (b - a + 1))]);
+    });
+    const toPlayer = Math.atan2(player.y - c.y, player.x - c.x);
+    drops.forEach(([type, val], i) => {
+      const a = toPlayer + (i - (drops.length - 1) / 2) * 0.5;
+      spawn3DLootItem(c.x + Math.cos(a) * (c.radius + 26), c.y + Math.sin(a) * (c.radius + 20), type, val);
+    });
+    addFloatingText(c.x - 40, c.y - 60, L('🔓 Вскрыт!', '🔓 Cracked!'), '#4ade80');
+    createParticles(c.x, c.y - 20, '#fde047', 16);
+    SoundFX.batSwing(true);
+    if (window.Menu) window.Menu.requestSave();
+    updateHUD(true);
+  }
+
+  // Каждый кадр из update(): заклинившие замки отходят, окно закрывается от удара и если Василий отошёл
+  function update() {
+    jammed.forEach(c => {
+      if (--c.safe.jam <= 0) {
+        c.safe.jam = 0;
+        jammed.delete(c);
+      }
+    });
+    if (!cur) return;
+    if (player.hp < lastHp - 0.5 || cur.searched || !canReachContainer(cur)) {
+      if (player.hp < lastHp - 0.5) addFloatingText(player.x - 40, player.y - 60, L('Сбили!', 'Interrupted!'), '#f87171');
+      close();
+      return;
+    }
+    lastHp = Math.max(lastHp, player.hp);
+  }
+
+  // Клавиши, пока окно открыто: цифры — в код (а не в хотбар), Backspace, Enter, ESC и E — закрыть.
+  // Остальные (WASD, перекат) — игре. true — клавиша съедена
+  function handleKey(e) {
+    if (!cur) return false;
+    const m = /^(?:Digit|Numpad)(\d)$/.exec(e.code);
+    let used = true;
+    if (m) press(Number(m[1]));
+    else if (e.code === 'Backspace') erase();
+    else if (e.code === 'Enter' || e.code === 'NumpadEnter') submit();
+    else if (e.code === 'Escape' || e.code === 'KeyE') close();
+    else used = false;
+    if (used) e.preventDefault();
+    return used;
+  }
+
+  // Подсказка над сейфом
+  function prompt(c) {
+    const s = state(c);
+    if (s.jam > 0) return L(`🔒 Замок заклинило — ${Math.ceil(s.jam / 60)} с`, `🔒 Lock jammed — ${Math.ceil(s.jam / 60)}s`);
+    return L(`[E] Вскрыть: ${SAFE_TYPES[c.type].name[0]}`, `[E] Crack: ${SAFE_TYPES[c.type].name[1]}`);
+  }
+
+  function digitCell(d, lamp, hint) {
+    const cell = document.createElement('div');
+    cell.className = 'safe-digit' + (hint ? ' hint' : '');
+    cell.textContent = d === undefined || d === null ? '' : d;
+    const l = document.createElement('i');
+    l.className = 'safe-lamp ' + (lamp || 'none');
+    const wrap = document.createElement('div');
+    wrap.className = 'safe-slot';
+    wrap.append(cell, l);
+    return wrap;
+  }
+
+  function render() {
+    if (!cur) return;
+    const def = SAFE_TYPES[cur.type];
+    const s = state(cur);
+    $('safe-title').textContent = L(def.name[0], def.name[1]);
+    $('safe-l-green').textContent = L('на месте', 'right place');
+    $('safe-l-yellow').textContent = L('есть, не тут', 'wrong place');
+    $('safe-l-off').textContent = L('нет', 'none');
+    $('safe-attempts').textContent = L(`Попыток осталось: ${def.attempts - s.guesses.length}`,
+      `Attempts left: ${def.attempts - s.guesses.length}`);
+    const hintEl = $('safe-hint');
+    if (s.hint !== null) {
+      hintEl.style.display = 'block';
+      hintEl.textContent = L(`🩺 Стетоскоп: ${s.hint + 1}-я цифра — ${s.code[s.hint]}`,
+        `🩺 Stethoscope: digit ${s.hint + 1} is ${s.code[s.hint]}`);
+    } else {
+      hintEl.style.display = 'none';
+    }
+    const rows = $('safe-rows');
+    rows.innerHTML = '';
+    s.guesses.forEach(g => {
+      const row = document.createElement('div');
+      row.className = 'safe-row';
+      g.digits.forEach((d, i) => row.append(digitCell(d, g.lamps[i])));
+      rows.append(row);
+    });
+    const now = document.createElement('div');
+    now.className = 'safe-row current';
+    for (let i = 0; i < def.digits; i++) now.append(digitCell(input[i], null, false));
+    rows.append(now);
+    rows.scrollTop = rows.scrollHeight;
+    $('safe-ok').disabled = input.length < def.digits;
+  }
+
+  // Лимб: цифры 0–9, стереть, ввести
+  function buildKeypad() {
+    const pad = $('safe-keypad');
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 0].forEach(d => {
+      const b = document.createElement('button');
+      b.className = 'safe-key';
+      b.textContent = d;
+      b.addEventListener('click', () => press(d));
+      pad.append(b);
+    });
+    $('safe-erase').addEventListener('click', erase);
+    $('safe-ok').addEventListener('click', submit);
+    $('safe-close').addEventListener('click', close);
+    // Клики по окну не стреляют и не машут битой; кнопки не забирают фокус, иначе Enter и пробел
+    // «нажимали» бы последнюю кнопку ещё раз
+    ['mousedown', 'mouseup', 'click'].forEach(ev => $('safe-panel').addEventListener(ev, e => {
+      e.stopPropagation();
+      if (ev === 'mousedown') e.preventDefault();
+    }));
+  }
+  buildKeypad();
+
+  return { isSafe, isOpen, open, close, update, handleKey, prompt, SAFE_TYPES };
+})();
