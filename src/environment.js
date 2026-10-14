@@ -825,6 +825,8 @@ class EnvironmentRenderer {
       (x > r.pos - 70 && x < r.pos + r.size + 70) || (y > r.pos - 70 && y < r.pos + r.size + 70));
     const blocked = (x, y, pad) =>
       this.isInShopPlaza(x, y) || (this.location === 'city' && Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430) ||
+      // Площадка обороны у пролома (src/defense.js)
+      (this.location === 'promzona' && window.Defense && window.Defense.inArea(x, y)) ||
       // Площадка логова Долбильщика (POUNDER_HOME в game.js)
       (this.location === 'promzona' && typeof POUNDER_HOME !== 'undefined' &&
         Math.hypot(x - POUNDER_HOME.x, y - POUNDER_HOME.y) < POUNDER_LAIR_R + 90) ||

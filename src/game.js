@@ -1407,6 +1407,7 @@ function generateWorld() {
   rockets = [];
   rocketBlasts = [];
   pounderRings = [];
+  if (window.Defense) window.Defense.onWorld();
   particles = [];
   muzzleFlashes = [];
   shellCasings = [];
@@ -2274,6 +2275,11 @@ function startGame(save = null) {
   locationsVisited = new Set(['city', currentLocation]);
   generateWorld();
   if (save && window.Menu) window.Menu.applyRun(save);
+  // Оборона у пролома: прошла ли (из сохранения) и не начать ли её сейчас, если забег в Промзоне
+  if (window.Defense) {
+    window.Defense.loadState(save ? save.defense : undefined, locationsVisited.has('promzona'));
+    window.Defense.onEnter();
+  }
   // В Промзоне купола Михалыча нет — после загрузки Василий у пролома
   if (currentLocation !== 'city') placePlayerAtBreach();
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
@@ -5376,6 +5382,8 @@ function travelTo(target) {
   lastPlayerDistrictId = '';
   gameState = 'PLAYING';
   showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
+  // Первый раз в Промзоне — оборона у пролома (src/defense.js)
+  if (window.Defense) window.Defense.onEnter();
   if (window.Menu) window.Menu.requestSave();
 }
 
@@ -6149,6 +6157,8 @@ function buildObstacles() {
   });
   // Ларёк Михалыча: тело киоска; подойти к прилавку для торговли можно спереди
   addObstacle({ rect: true, x1: safeZone.shopX - 100, y1: safeZone.shopY - 80, x2: safeZone.shopX + 100, y2: safeZone.shopY + 45 });
+  // Баррикада обороны у пролома в Промзоне (src/defense.js)
+  if (window.Defense) window.Defense.addObstacles();
 
   const env = window.environmentRenderer;
   if (!env) return;
@@ -6223,7 +6233,7 @@ function updateHUD(forceWeaponRefresh = false) {
     _hudCache.bandage = player.items.bandage;
     document.getElementById('count-bandage').innerText = player.items.bandage;
   }
-  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder').length;
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).length;
   // Босс своей локации: Мясник в городе, Долбильщик в Промзоне
   const bossAlive = currentLocation === 'promzona' ? !!pounderRef : !!bossRef;
   const bossStatus = currentLocation === 'promzona'
@@ -8301,7 +8311,7 @@ function update() {
     }
   }
 
-  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder').length;
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).length;
   const safeTarget = nearbyInteractable && nearbyInteractable.type === 'container' && window.Safes &&
     window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
   const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
@@ -8431,6 +8441,7 @@ function update() {
   updateThrownProps();
   updateRockets();
   if (window.Safes) window.Safes.update();
+  if (window.Defense) window.Defense.update();
   updatePounderRings();
   updateShockwaves();
   updateShieldShards();
@@ -9010,6 +9021,7 @@ function render() {
   }
 
   if (window.environmentRenderer) {
+    if (window.Defense) window.Defense.addActors(actors);
     window.environmentRenderer.shadowActors = collectActorShadows(viewMinX, viewMaxX, viewMinY, viewMaxY);
     window.environmentRenderer.planDeferredContainers(actors, containers, camera, canvas.width, canvas.height);
     window.environmentRenderer.draw(ctx, camera, canvas.width, canvas.height, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
@@ -9071,6 +9083,7 @@ function render() {
   drawLairCracks(ctx);
   drawBreachGround(ctx);
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
+  if (window.Defense) window.Defense.drawGround(ctx); // баррикада у пролома — низкая, под фигурами
   drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // куда упадут ракеты
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawShockwaves(ctx);
@@ -9080,6 +9093,9 @@ function render() {
   drawPounderRings(ctx);
   const fumeOn = player.hasPerk('fume_aura');
   if (fumeOn) drawFumeAura(ctx); // облако перегара стелется по земле, под фигурами
+
+  // 6.9. Выжившие обороны у пролома (src/defense.js)
+  if (window.Defense) window.Defense.drawActors(ctx);
 
   // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
   for (let i = 0; i < enemies.length; i++) {
@@ -9136,6 +9152,7 @@ function render() {
   }
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  if (window.Defense) window.Defense.drawShots(ctx);
   enemies.forEach(e => { if (e.type === 'pounder') drawPounderBolt(ctx, e); });
   drawBreachHint(ctx);
 

@@ -257,6 +257,8 @@ window.Menu = (() => {
       savedAt: Date.now(),
       location: currentLocation,
       visited: Array.from(locationsVisited),
+      // Оборона у пролома в Промзоне: 'done' — выжившие ушли; иначе после загрузки начнётся сначала
+      defense: window.Defense ? window.Defense.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),
@@ -302,7 +304,8 @@ window.Menu = (() => {
       // Долбильщик есть только в Промзоне, как Мясник — только в городе
       pounderDefeated: currentLocation === 'promzona' && !pounderRef,
       pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp), phase: pounderRef.phase } : null,
-      enemies: enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder').map(e => ({
+      // Жабы обороны у пролома не сохраняются: незаконченная оборона после загрузки начнётся заново
+      enemies: enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense).map(e => ({
         type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
         armor: e.armor || 0,
         radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
