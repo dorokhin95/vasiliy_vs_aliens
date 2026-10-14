@@ -28,8 +28,11 @@ window.Menu = (() => {
   //     (в каждом то же, что раньше лежало в world); посещённые локации — visited.
   //     Сохранение формата 5 читается как город
   const SAVE_FORMAT = 6;
+  // Раскладка карты: с версии 2 в городе нет штабов, и на их месте встали два тайника — номера тайников
+  // после них сдвинулись. Мир старой раскладки ищет тайник по месту, где тот стоял (applyWorld)
+  const LAYOUT_VERSION = 2;
   const WORLD_FORMAT = 5;
-  const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute']);
+  const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute', 'stormtrooper', 'rocketeer']);
   const CODE_PREFIX = 'VVA1';
   const AUTOSAVE_INTERVAL_MS = 30000;
   const AUTOSAVE_CHECK_MS = 3000;
@@ -272,6 +275,7 @@ window.Menu = (() => {
   // Им же game.js запоминает локацию, из которой Василий ушёл через пролом (travelTo)
   function snapshotWorld() {
     return {
+      layout: LAYOUT_VERSION,
       // [номер, обыскан, x, y, поворот] — только обысканные и переброшенные
       containers: containers.map((c, i) => (c.searched || c.moved)
         ? [i, c.searched ? 1 : 0, Math.round(c.x), Math.round(c.y), typeof c.dirIdx === 'number' ? c.dirIdx : -1]
@@ -413,9 +417,10 @@ window.Menu = (() => {
   function applyWorld(w) {
     w = w || {};
     if (Array.isArray(w.containers)) {
-      // Формат 3: по номеру тайника
+      // Формат 3: по номеру тайника; у старой раскладки — сначала по месту (переброшенные громилой — по номеру)
+      const byPos = (w.layout || 1) < LAYOUT_VERSION ? new Map(containers.map(c => [c.x + ',' + c.y, c])) : null;
       w.containers.forEach(d => {
-        const c = Array.isArray(d) && containers[d[0]];
+        const c = Array.isArray(d) && ((byPos && byPos.get(d[2] + ',' + d[3])) || containers[d[0]]);
         if (!c) return;
         c.searched = !!d[1];
         const x = num(d[2], c.x, 60, WORLD_WIDTH - 60), y = num(d[3], c.y, 60, WORLD_HEIGHT - 60);

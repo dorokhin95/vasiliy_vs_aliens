@@ -31,8 +31,7 @@ class ThreePropsManager {
       heating_pipes: null,
       building_khrushchevka: null,
       building_brezhnevka: null,
-      building_boiler_house: null,
-      building_military_hq: null
+      building_boiler_house: null
     };
 
     this.isLoaded = {
@@ -56,13 +55,13 @@ class ThreePropsManager {
       heating_pipes: false,
       building_khrushchevka: false,
       building_brezhnevka: false,
-      building_boiler_house: false,
-      building_military_hq: false
+      building_boiler_house: false
     };
 
     this.modelHeights = {};
     this.frameSizes = {}; // свой размер кадра у крупных моделей (дома), см. getFrameCanvas
     this.silhouettes = {}; // где модель непрозрачна на кадре — для коллизий (silhouette)
+    this.groundLines = {}; // нижний край модели на кадре (groundLine) — по нему дом встаёт на своё пятно
     this.masks = {}; // попиксельная маска непрозрачности кадра { size, solid } — сколько фигуры закрыто домом (buildingCover)
     this.yaws = {};        // доворот модели, чтобы она смотрела как парная (открытые тайники)
 
@@ -137,8 +136,7 @@ class ThreePropsManager {
       heating_pipes: new THREE.Group(),
       building_khrushchevka: new THREE.Group(),
       building_brezhnevka: new THREE.Group(),
-      building_boiler_house: new THREE.Group(),
-      building_military_hq: new THREE.Group()
+      building_boiler_house: new THREE.Group()
     };
 
     for (const key in this.roots) {
@@ -161,10 +159,10 @@ class ThreePropsManager {
 
     const configs = [
       // Дома рисуются крупно (до ~1000 px) — их кадр рендерится в высоком разрешении (frameSize)
-      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
-      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.88, frameSize: 1024 },
+      // Хрущёвка и брежневка из Rodin светлее остальных домов: colorScale подогнан под среднюю яркость кадров остальных (~130–150)
+      { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.75, frameSize: 1024 },
+      { key: 'building_brezhnevka',   file: 'assets/models/building_brezhnevka.glb',   targetSpan: 2.10, colorScale: 0.62, frameSize: 1024 },
       { key: 'building_boiler_house', file: 'assets/models/building_boiler_house.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
-      { key: 'building_military_hq',  file: 'assets/models/building_military_hq.glb',  targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
       { key: 'mikhalyh_shop',  file: 'assets/models/mikhalyh_shop.glb',  targetSpan: 1.95, colorScale: 0.84 },
       { key: 'car_zhiguli',    file: 'assets/models/car_zhiguli.glb',    targetSpan: 1.95, colorScale: 0.92 },
       { key: 'car_uaz',        file: 'assets/models/car_uaz.glb',        targetSpan: 1.95, colorScale: 0.92 },
@@ -236,7 +234,7 @@ class ThreePropsManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=1041',
+        cfg.file + '?v=1042',
         (gltf) => {
           const model = gltf.scene;
           const cScale = cfg.colorScale || 0.90;
@@ -307,7 +305,7 @@ class ThreePropsManager {
    */
   schedulePrewarm() {
     const frames = [];
-    ['building_khrushchevka', 'building_brezhnevka', 'building_boiler_house', 'building_military_hq',
+    ['building_khrushchevka', 'building_brezhnevka', 'building_boiler_house',
       'mikhalyh_shop', 'garage_block', 'fence_po2', 'fence_po2_b', 'heating_pipes'].forEach(key => frames.push([key, 0]));
     // Пограничный забор вдоль боковых границ стоит торцом
     ['fence_po2', 'fence_po2_b'].forEach(key => frames.push([key, 4]));
@@ -440,7 +438,6 @@ class ThreePropsManager {
    * - building_khrushchevka (320x160 5-story residential panel Khrushchevka)
    * - building_brezhnevka (220x260 multi-story compact panel Brezhnevka tower)
    * - building_boiler_house (320x160 red-brick district heating boiler plant / ТЭЦ)
-   * - building_military_hq (320x160 fortified military command bunker & barracks)
    */
   // Где на карте лежит кадр дома (по типу и масштабу): { propKey, x, y, w, h } или null
   majorBuildingFrame(b) {
@@ -454,7 +451,6 @@ class ThreePropsManager {
     let offsetY = -12;
     const kind = houseKind(b);
     if (kind === 'boiler_house') propKey = 'building_boiler_house';
-    else if (kind === 'military_hq') propKey = 'building_military_hq';
     else if (kind === 'khrushchevka') propKey = 'building_khrushchevka';
     else if (kind === 'brezhnevka') {
       propKey = 'building_brezhnevka';
@@ -465,7 +461,23 @@ class ThreePropsManager {
     if (!propKey) return null;
     const k = houseScale(b);
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2 + offsetY * k;
-    return { propKey, x: cx - renderW * k / 2, y: cy - renderH * k / 2, w: renderW * k, h: renderH * k };
+    const h = renderH * k;
+    // Нижний край модели (фасад у земли) — на нижний край пятна. Иначе модель, опущенная в кадре ниже пятна
+    // (у старой котельной на ~70 px), наезжала фасадом на тротуар: фонари и урна у входа вплотную к стене,
+    // Василий заходил в фасад. Пока модель грузится — прежнее положение по offsetY
+    const ground = this.groundLine(propKey);
+    const y = ground === null ? cy - h / 2 : b.y + b.h - ground * h;
+    return { propKey, x: cx - renderW * k / 2, y, w: renderW * k, h };
+  }
+
+  // Где на кадре нижний край модели (доля высоты кадра) — по силуэту; null, пока модель не загружена
+  groundLine(propKey) {
+    if (propKey in this.groundLines) return this.groundLines[propKey];
+    if (!this.isLoaded[propKey]) return null;
+    const sil = this.silhouette(propKey);
+    if (!sil || sil.length === 0) return null;
+    this.groundLines[propKey] = Math.max(...sil.map(r => r.y + r.h));
+    return this.groundLines[propKey];
   }
 
   /**
@@ -619,24 +631,12 @@ class ThreePropsManager {
     if (!frameCanvas) return false;
 
     ctx.save();
-    // Контактная тень у основания (отбрасываемую тень кладёт слой теней, shadows.js). У цехов пятно включает
-    // крыльца и пристройки — полная тень легла бы чёрной лентой между ними и стеной, поэтому — мягкая, под задней частью
-    ctx.fillStyle = b.type === 'factory' ? 'rgba(0, 0, 0, 0.16)' : 'rgba(0, 0, 0, 0.3)';
+    // Контактная тень у основания (отбрасываемую тень кладёт слой теней, shadows.js) — мягкая, под задней частью
+    // пятна. Тёмная «отмостка» во всё пятно убрана: модели уже пятна, и она торчала тёмной полосой сбоку и сзади
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.16)';
     ctx.beginPath();
-    if (b.type === 'factory') ctx.roundRect(b.x + 4, b.y, b.w - 8, b.h * 0.7, 8);
-    else ctx.roundRect(b.x - 10, b.y + 4, b.w + 20, b.h + 14, 10);
+    ctx.roundRect(b.x + 4, b.y, b.w - 8, b.h * 0.7, 8);
     ctx.fill();
-
-    // Бетонная отмостка — у жилых домов, котельной и штаба; у цехов Промзоны своя площадка в модели
-    if (b.type !== 'factory') {
-      ctx.fillStyle = '#222832';
-      ctx.strokeStyle = '#141820';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(b.x - 6, b.y - 2, b.w + 12, b.h + 8, 6);
-      ctx.fill();
-      ctx.stroke();
-    }
 
     ctx.drawImage(frameCanvas, f.x, f.y, f.w, f.h);
     ctx.restore();

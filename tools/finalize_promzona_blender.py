@@ -1,5 +1,6 @@
 """
 Промзона: сырые GLB из Rodin (blender_assets/promzona_models/) -> игровые GLB в assets/models/.
+Тем же путём идут перегенерированные дома города (CITY_MODELS, сырые — в blender_assets/city_models/).
 
 Что делает с каждой моделью:
   - склеивает меши, применяет трансформы;
@@ -24,6 +25,7 @@ from mathutils import Matrix, Vector
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 RAW = os.path.join(ROOT, 'blender_assets', 'promzona_models')
+CITY_RAW = os.path.join(ROOT, 'blender_assets', 'city_models')
 OUT = os.path.join(ROOT, 'assets', 'models')
 PREVIEW = os.path.join(OUT, 'preview')
 
@@ -54,6 +56,15 @@ MODELS = {
     'prop_pipe_stack':        (8.0, 5000),
     'prop_cable_reel':        (2.2, 4000),
 }
+# Дома города (Rodin Regular: ~36 тыс. треугольников, текстуры 2048): на экране они до ~850 px, а рендерятся
+# один раз в кэш кадров — поэтому без Decimate (он ещё и рвёт карту нормалей: тёмные царапины) и с текстурой 1024.
+# Рантайм нормализует их по targetSpan (three_props.js), длина — только для превью
+CITY_MODELS = {
+    'building_khrushchevka':  (60.0, None),
+    'building_brezhnevka':    (40.0, None),
+    'building_boiler_house':  (35.0, None),
+}
+CITY_MAX_TEX = 1024
 MATCH_HEIGHT = {'safe_cabinet', 'safe_fireproof', 'safe_vault', 'container_barrel'}
 OPEN_EXTRA_TRIS = 1.2   # у открытых вариантов внутри больше деталей
 MAX_TEX = 512
@@ -105,7 +116,7 @@ def import_joined(path, name):
     return obj
 
 
-def slim_materials(obj, color_max=MAX_TEX):
+def slim_materials(obj, color_max=MAX_TEX, other_max=MAX_TEX):
     for mat in obj.data.materials:
         if not mat or not mat.use_nodes:
             continue
@@ -127,7 +138,7 @@ def slim_materials(obj, color_max=MAX_TEX):
             img = n.image
             w, h = img.size
             is_color = bsdf is not None and any(l.to_socket == bsdf.inputs['Base Color'] for l in n.outputs[0].links)
-            limit = color_max if is_color else MAX_TEX
+            limit = color_max if is_color else other_max
             if max(w, h) > limit:
                 k = limit / max(w, h)
                 img.scale(max(1, round(w * k)), max(1, round(h * k)))
@@ -194,8 +205,8 @@ def render_preview(obj, name):
     bpy.ops.render.render(write_still=True)
 
 
-def process(name, length, budget, rot_z, height=None):
-    path = os.path.join(RAW, name + '.glb')
+def process(name, length, budget, rot_z, height=None, raw=RAW, max_tex=None):
+    path = os.path.join(raw, name + '.glb')
     if not os.path.exists(path):
         print(f'[skip] {name}: нет {path}')
         return None
@@ -204,8 +215,12 @@ def process(name, length, budget, rot_z, height=None):
     if rot_z is None:
         lo, hi = bounds(obj)
         rot_z = math.radians(90) if (hi.y - lo.y) > (hi.x - lo.x) * 1.15 else 0.0
-    slim_materials(obj, MAX_TEX_BUILDING_COLOR if name.startswith('building_') else MAX_TEX)
-    tris = decimate(obj, budget)
+    if max_tex:
+        # Дома города из Rodin Regular: все карты до max_tex
+        slim_materials(obj, max_tex, max_tex)
+    else:
+        slim_materials(obj, MAX_TEX_BUILDING_COLOR if name.startswith('building_') else MAX_TEX)
+    tris = decimate(obj, budget) if budget else tris_of(obj)
     place(obj, length, rot_z, height)
     out = os.path.join(OUT, name + '.glb')
     bpy.ops.object.select_all(action='DESELECT')
@@ -267,6 +282,11 @@ def main():
             h = closed_h if name in MATCH_HEIGHT else None
             process(name + '_open', length, int(budget * OPEN_EXTRA_TRIS), rot, h)
             done.append(name + '_open')
+    for name, (length, budget) in CITY_MODELS.items():
+        if only and name not in only:
+            continue
+        if process(name, length, budget, None, raw=CITY_RAW, max_tex=CITY_MAX_TEX) is not None:
+            done.append(name)
     contact_sheet(done)
 
 

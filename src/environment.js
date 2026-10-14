@@ -39,16 +39,16 @@ const MAP = (() => {
   };
 })();
 
-// Какой это дом: хрущёвка, брежневка, котельная, штаб — и во сколько раз он крупнее исходного
+// Какой это дом: хрущёвка, брежневка, котельная — и во сколько раз он крупнее исходного
 // размера модели (на котором замерены подъезды, палисадники и выступ крыши)
-const HOUSE_BASE = { khrushchevka: [320, 160], brezhnevka: [220, 260], boiler_house: [320, 160], military_hq: [320, 160] };
+const HOUSE_BASE = { khrushchevka: [320, 160], brezhnevka: [220, 260], boiler_house: [320, 160] };
 function houseKind(b) {
   if (b.type === 'factory') return b.model;
   return b.type === 'panel' ? (b.subType || (b.w > b.h ? 'khrushchevka' : 'brezhnevka')) : b.type;
 }
 // Здания с 3D-моделью: дома города и цеха Промзоны (factory) — у них силуэтная коллизия, тень, полупрозрачность
 function isModelBuilding(b) {
-  return b.type === 'panel' || b.type === 'boiler_house' || b.type === 'military_hq' || b.type === 'factory';
+  return b.type === 'panel' || b.type === 'boiler_house' || b.type === 'factory';
 }
 
 // --- Модели Промзоны: габарит в метрах [длина, глубина, высота], как их выдаёт tools/finalize_promzona_blender.py.
@@ -193,8 +193,9 @@ class EnvironmentRenderer {
     this.outskirts = null;
     this.bioPuddles = [];
     this.rails = id === 'promzona' ? this.promzonaRails() : [];
-    // Модели Промзоны грузятся при первом заходе в неё, а не на старте города
+    // Модели Промзоны (постройки и новые жабы) грузятся при первом заходе в неё, а не на старте города
     if (id === 'promzona' && window.threeProps) window.threeProps.loadPromzona();
+    if (id === 'promzona' && window.threeEnemies) window.threeEnemies.loadPromzona();
     this.generateDecorations();
   }
 
@@ -284,7 +285,6 @@ class EnvironmentRenderer {
       { key: 'building_panel_320x160', path: 'assets/sprites/buildings/building_panel_320x160.png?v=1024', type: 'building' },
       { key: 'building_panel_220x260', path: 'assets/sprites/buildings/building_panel_220x260.png?v=1024', type: 'building' },
       { key: 'building_boiler_house', path: 'assets/sprites/buildings/building_boiler_house.png?v=1024', type: 'building' },
-      { key: 'building_military_hq', path: 'assets/sprites/buildings/building_military_hq.png?v=1024', type: 'building' },
       { key: 'garage_block_140x100', path: 'assets/sprites/buildings/garage_block_140x100.png?v=1016', type: 'building' },
       { key: 'mikhalyh_shop', path: 'assets/sprites/buildings/mikhalyh_shop.png?v=1016', type: 'building' },
 
@@ -812,7 +812,9 @@ class EnvironmentRenderer {
     const blocked = (x, y, pad) =>
       this.isInShopPlaza(x, y) || (this.location === 'city' && Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430) ||
       onRoad(x, y) || this.onRails(x, y) ||
-      buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad + 30) ||
+      // Цех поднимается над пятном на сотни px: дерево позади него торчало бы кроной из крыши
+      buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y < b.y + b.h + pad + 30 &&
+        y > b.y - pad - (b.type === 'factory' ? pzFrame(b.model, b.x + b.w / 2, b.y + b.h / 2, b.w).rise : 0)) ||
       conts.some(c => Math.hypot(c.x - x, c.y - y) < pad + 60) ||
       this.courtyardTrees.some(t => Math.hypot(t.x - x, t.y - y) < 120) ||
       this.courtyardBushes.some(t => Math.hypot(t.x - x, t.y - y) < 80) ||
@@ -827,7 +829,8 @@ class EnvironmentRenderer {
         const x = Math.round(x1 + 50 + rnd() * (x2 - x1 - 100));
         const y = Math.round(y1 + 120 + rnd() * (y2 - y1 - 170));
         if (trees < nTrees) {
-          if (blocked(x, y, 70)) continue;
+          // Крона проверяется по наибольшему масштабу; случайное число — после проверок, как раньше, чтобы не сдвинуть остальную раскладку
+          if (blocked(x, y, 70) || this.treeHidesContainer({ x, y, variant: 3 + (trees % 2), scale: 1.15 })) continue;
           this.courtyardTrees.push({ x, y, variant: 3 + (trees % 2), scale: 0.9 + rnd() * 0.25 });
           trees++;
         } else {
@@ -844,7 +847,7 @@ class EnvironmentRenderer {
     this.courtyardBuilt = true;
 
     buildings.forEach((b, idx) => {
-      if (b.type !== 'panel' && b.type !== 'boiler_house' && b.type !== 'military_hq') return;
+      if (b.type !== 'panel' && b.type !== 'boiler_house') return;
 
       // 1. Внутридворовой тротуар перед фасадом здания
       const pathY = b.y + b.h + 28;
@@ -868,7 +871,7 @@ class EnvironmentRenderer {
         // Брежневка: 1 центральный подъезд
         entrances = [b.x + 108 * k];
       } else {
-        // Котельная / Военный штаб: центральный вход
+        // Котельная: центральный вход
         entrances = [b.x + b.w * 0.5];
       }
 
@@ -891,7 +894,7 @@ class EnvironmentRenderer {
           this.courtyardBenches.push({ x: benchX, y: benchY, flipX: side });
           this.courtyardBins.push({ x: ex - side * 28, y: b.y + b.h + 14 });
         } else {
-          // У котельной и штаба — урна у входа
+          // У котельной — урна у входа
           this.courtyardBins.push({ x: ex + 34, y: b.y + b.h + 14 });
         }
       });
@@ -910,7 +913,7 @@ class EnvironmentRenderer {
           { x: b.x + 294 * k, y: b.y + b.h + 12, variant: 1, scale: 0.86 }
         );
         // Побеленные осенние деревья по углам двора перед домом
-        this.courtyardTrees.push(
+        this.pushTrees(
           { x: b.x - 28,       y: b.y + b.h + 24, variant: (idx % 2) + 1, scale: 0.95 },
           { x: b.x + b.w + 28, y: b.y + b.h + 28, variant: ((idx + 1) % 2) + 1, scale: 0.92 }
         );
@@ -923,18 +926,18 @@ class EnvironmentRenderer {
           { x: b.x + 36 * k,  y: b.y + b.h + 12, variant: 2, scale: 0.90 },
           { x: b.x + 182 * k, y: b.y + b.h + 12, variant: 1, scale: 0.90 }
         );
-        this.courtyardTrees.push(
+        this.pushTrees(
           { x: b.x - 26,       y: b.y + b.h + 18, variant: ((idx + 1) % 2) + 1, scale: 0.94 },
           { x: b.x + b.w + 26, y: b.y + b.h - 20, variant: (idx % 2) + 1, scale: 0.90 }
         );
       } else {
-        // Озеленение вокруг котельных и штабов (k — масштаб дома)
+        // Озеленение вокруг котельных (k — масштаб дома)
         this.courtyardBushes.push(
           { x: b.x + 34,       y: b.y + b.h + 14, variant: 1, scale: 0.85 },
           { x: b.x + b.w - 34, y: b.y + b.h + 14, variant: 2, scale: 0.85 }
         );
         if (idx % 2 === 0) {
-          this.courtyardTrees.push(
+          this.pushTrees(
             { x: b.x - 30, y: b.y + b.h + 20, variant: 1, scale: 0.90 }
           );
         }
@@ -1014,7 +1017,7 @@ class EnvironmentRenderer {
     // 4.6. ЛАРЁК МИХАЛЫЧА с неоновой вывеской
     this.drawShopKiosk(ctx, camera, screenW, screenH, safeZone);
 
-    // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (3D Хрущевки, Брежневки, Котельные, Штабы, 3D Гаражи, Заборы ПО-2, Теплотрассы)
+    // 5. ЗДАНИЯ И ИНФРАСТРУКТУРА (3D Хрущевки, Брежневки, Котельные, 3D Гаражи, Заборы ПО-2, Теплотрассы)
     this.drawBuildings(ctx, camera, screenW, screenH, buildings);
 
     // 5.2. БЕТОННЫЙ ЗАБОР ПО-2 ПО ПЕРИМЕТРУ КАРТЫ
@@ -1473,6 +1476,18 @@ class EnvironmentRenderer {
     }
   }
 
+  // Тайник за кроной дерева то пропадает за ней, то вылезает поверх (кого рисовать выше, решает, кто стоит
+  // ниже по экрану) — поэтому деревья туда, где крона закроет тайник, не ставятся
+  treeHidesContainer(tr) {
+    const conts = typeof containers !== 'undefined' ? containers : [];
+    const r = this.treeRect(tr);
+    return conts.some(c => c.y < tr.y + 24 && c.y > r.y - 10 && c.x > r.x - 45 && c.x < r.x + r.w + 45);
+  }
+
+  pushTrees(...trees) {
+    trees.forEach(tr => { if (!this.treeHidesContainer(tr)) this.courtyardTrees.push(tr); });
+  }
+
   treeRect(tr) {
     const [, w0, h0] = TREE_SPRITES[tr.variant] || TREE_SPRITES[1];
     const w = w0 * tr.scale;
@@ -1614,7 +1629,27 @@ class EnvironmentRenderer {
         const fade = Math.abs((hidden ? 1 : 0) - was) < 0.02 ? (hidden ? 1 : 0) : was + ((hidden ? 1 : 0) - was) * 0.15;
         if (fade > 0) this.buildingFade.set(b, fade);
         else this.buildingFade.delete(b);
-        if (behind(base, f)) items.push({ y: base, draw: () => tp.drawBuildingSprite(ctx, b, 1 - 0.85 * fade) });
+        // Дом перерисовывается только там, где за ним кто-то стоит: целиком он накрыл бы фонари, урны и фигуры
+        // перед фасадом (они нарисованы раньше). Тех, кто стоит перед домом в той же области, ещё и вырезаем;
+        // перекрытые дырки (evenodd) снова закрашиваются — двое вплотную перед одним домом бывают редко
+        const back = actors.filter(a => a.y < base && this.actorOverlaps(f, a));
+        if (back.length === 0) continue;
+        const front = actors.filter(a => a.y >= base && this.actorOverlaps(f, a));
+        const actorRect = (a) => ctx.rect(a.x - 34, a.y - a.h - 10, 68, a.h + 22);
+        items.push({ y: base, draw: () => {
+          ctx.save();
+          ctx.beginPath();
+          back.forEach(actorRect);
+          ctx.clip();
+          if (front.length) {
+            ctx.beginPath();
+            ctx.rect(f.x, f.y, f.w, f.h);
+            front.forEach(actorRect);
+            ctx.clip('evenodd');
+          }
+          tp.drawBuildingSprite(ctx, b, 1 - 0.85 * fade);
+          ctx.restore();
+        } });
       }
     }
 
@@ -1845,7 +1880,7 @@ class EnvironmentRenderer {
       }
     });
 
-    // 2. Затем отрисовываем основные здания (3D Хрущевки, Брежневки, Котельные ТЭЦ, Военные штабы и 3D-гаражи)
+    // 2. Затем отрисовываем основные здания (3D Хрущевки, Брежневки, Котельные ТЭЦ и 3D-гаражи)
     buildings.forEach(b => {
       if (b.type === 'fence_wall' || b.type === 'heating_line' || b.type === 'border_fence') return;
       if (b.type === 'factory') {
@@ -1860,7 +1895,7 @@ class EnvironmentRenderer {
       }
       if (!this.isVisible(b.x - 40, b.y - 40, b.w + 80, b.h + 80, camera, screenW, screenH)) return;
 
-      if (b.type === 'panel' || b.type === 'boiler_house' || b.type === 'military_hq') {
+      if (b.type === 'panel' || b.type === 'boiler_house') {
         // Путь А: Рендеринг честной 360° 3D-модели здания (.glb) через Three.js WebGL
         if (window.threeProps && window.threeProps.drawMajorBuilding(ctx, b)) {
           return;
@@ -1868,10 +1903,6 @@ class EnvironmentRenderer {
         // Мгновенный 2D-фоллбэк из концепт-арта, пока загружается .glb
         if (b.type === 'boiler_house' && this.buildings['building_boiler_house']) {
           const img = this.buildings['building_boiler_house'];
-          ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
-          return;
-        } else if (b.type === 'military_hq' && this.buildings['building_military_hq']) {
-          const img = this.buildings['building_military_hq'];
           ctx.drawImage(img, b.x - 24, b.y - 24, img.width, img.height);
           return;
         } else if (houseKind(b) === 'khrushchevka' && this.buildings['building_panel_320x160']) {

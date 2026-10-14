@@ -1367,6 +1367,8 @@ function generateWorld() {
   enemies = [];
   bullets = [];
   enemyBullets = [];
+  rockets = [];
+  rocketBlasts = [];
   particles = [];
   muzzleFlashes = [];
   shellCasings = [];
@@ -1593,13 +1595,11 @@ function generateWorld() {
           }
 
         } else if (dist.id === 'cordon') {
-          // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — Командный Бункер/Казарма с РЛС, блокпосты из плит ПО-2, санитарные УАЗы, склады
-          const b1 = tryAddBuilding(x1 + S(70), y1 + S(90), H(320), H(160), 'military_hq');
+          // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — блокпосты из плит ПО-2, санитарные УАЗы, склады (штаба больше нет)
           const g1 = tryAddBuilding(x1 + S(120), y2 - S(165), 140, 100, 'garage');
           const g2 = tryAddBuilding(x2 - S(360), y1 + S(120), 140, 100, 'garage');
 
           // Длинные защитные рубежи из бетонных заборов ПО-2
-          if (b1) tryAddBuilding(b1.x + b1.w + 4, b1.y + b1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
           if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 330, 30, 'fence_wall', { segments: 3 });
           if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
 
@@ -1607,7 +1607,7 @@ function generateWorld() {
           placeContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
           placeContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
           placeContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
-          // УАЗ — на площадке правее гаража: у стены штаба он вставал в проход между штабом и гаражом
+          // УАЗ — на площадке правее гаража
           placeContainer(x1 + S(380), y2 - S(150), 'car', 'uaz', 0);
           placeContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
           placeContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
@@ -1618,10 +1618,11 @@ function generateWorld() {
           }
 
         } else if (dist.id === 'nest') {
-          // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — захваченные командные бункеры и котельные, элитные склады спецхрана (лут ×2.5)
+          // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — захваченные котельные, элитные склады спецхрана (лут ×2.5).
+          // Котельная — в СВ и ЮЗ углах; в СЗ и ЮВ раньше стоял штаб, теперь там пусто
           const g1 = tryAddBuilding(x1 + S(50), y1 + S(70), 140, 100, 'garage');
-          const pType = ((cIdx + rIdx) % 2 === 0) ? 'military_hq' : 'boiler_house';
-          const p1 = tryAddBuilding(x1 + S(50), y2 - S(70) - H(160), H(320), H(160), pType);
+          const p1 = (cIdx + rIdx) % 2 === 1
+            ? tryAddBuilding(x1 + S(50), y2 - S(70) - H(160), H(320), H(160), 'boiler_house') : null;
 
           if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
           if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
@@ -1684,6 +1685,18 @@ const PZ_ENEMY_PROFILE = {
   pz_admin: 'garages', pz_breach: 'garages', pz_railyard: 'heating', pz_depot: 'heating',
   pz_foundry: 'cordon', pz_workshops: 'cordon', pz_warehouses: 'cordon', pz_tankfarm: 'cordon',
   pz_cooling: 'nest', pz_sludge: 'nest'
+};
+// Новые жабы Промзоны (docs/LEVEL2_PROMZONA.md, раздел 3): доля от всех жаб района по его угрозе,
+// остальные — по PZ_ENEMY_PROFILE. Штурмовики — с ★★, ракетчики — с ★★★
+const PZ_NEW_TOADS = {
+  2: { stormtrooper: 0.25, rocketeer: 0 },
+  3: { stormtrooper: 0.25, rocketeer: 0.12 },
+  4: { stormtrooper: 0.2, rocketeer: 0.15 }
+};
+// Здоровье по угрозе района — до ENEMY_HP_SCALE, как у остальных
+const GUNNER_STATS = {
+  stormtrooper: { radius: 22, hp: { 2: 185, 3: 200, 4: 240 }, speed: 2.35, aggroRadius: 430, color: '#f472b6' },
+  rocketeer: { radius: 24, hp: { 3: 300, 4: 360 }, speed: 1.95, aggroRadius: 720, color: '#fb923c' }
 };
 
 /**
@@ -1840,13 +1853,14 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
     spawns(bl, 8);
   }
 
-  // --- Заводоуправление — юг-центр: управление и проходная (здесь оборона выживших, этап 5)
+  // --- Заводоуправление — юг-центр: управление и проходная (здесь оборона выживших, этап 5).
+  // Проходная — у главных ворот: там, где проспект упирается в южный забор, будкой к дороге
   {
     const bl = block(2, 3);
     factory('building_admin', bl.x1 + 120, 5420, 760);
-    factory('building_checkpoint', bl.x2 - 430, 5480, 320);
+    factory('building_checkpoint', bl.x1 + 10, 5700, 320);
     placeContainer(bl.x2 - 260, 5720, 'car', 'zhiguli', 0);
-    placeContainer(bl.x1 + 140, 5740, 'trash', null, 0);
+    placeContainer(bl.x1 + 560, 5760, 'trash', null, 0);
     spawns(bl, 6);
   }
 
@@ -1874,7 +1888,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
 
     const dist = distOverride || getDistrictAt(ex, ey);
     if (dist.id === 'hub') continue;
-    // Районы Промзоны берут состав жаб у городского района той же угрозы (ракетчики и штурмовики — этап 3)
+    // Районы Промзоны берут состав жаб у городского района той же угрозы, часть из них — новые (PZ_NEW_TOADS)
     const kind = PZ_ENEMY_PROFILE[dist.id] || dist.id;
 
     const rand = Math.random();
@@ -1928,6 +1942,16 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
         type = 'sniper'; radius = 17; hp = 180; speed = 2.25; aggroRadius = 420; color = '#84cc16';
       } else {
         type = 'grunt'; radius = 24; hp = 230; speed = 2.92; aggroRadius = 345; color = '#22c55e';
+      }
+    }
+    const pzNew = PZ_ENEMY_PROFILE[dist.id] && PZ_NEW_TOADS[dist.tier];
+    if (pzNew) {
+      const r2 = Math.random();
+      const nt = r2 < pzNew.stormtrooper ? 'stormtrooper'
+        : (r2 < pzNew.stormtrooper + pzNew.rocketeer ? 'rocketeer' : null);
+      if (nt) {
+        const st = GUNNER_STATS[nt];
+        type = nt; radius = st.radius; hp = st.hp[dist.tier]; speed = st.speed; aggroRadius = st.aggroRadius; color = st.color;
       }
     }
     // Ступни этого типа тоже должны стоять на свободном месте (см. footDY)
@@ -3307,6 +3331,74 @@ const SoundFX = {
     nSrc.start(now);
     nSrc.stop(now + 0.37);
   },
+  // Плазменный автомат жабы-штурмовика: короткий низкий выстрел; vol — по расстоянию до Василия
+  toadPlasma(vol = 1) {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(560, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.09);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.09 * vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+    osc.connect(gain);
+    gain.connect(this.out);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  },
+  // Пуск ракеты: шипящий выхлоп
+  rocketLaunch(vol = 1) {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1400, now);
+    filter.frequency.exponentialRampToValueAtTime(380, now + 0.32);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.2 * vol, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+    nSrc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.out);
+    nSrc.start(now);
+    nSrc.stop(now + 0.35);
+  },
+  // Взрыв ракеты: глухой удар и рокот
+  explosion(vol = 1) {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const nSrc = ac.createBufferSource();
+    nSrc.buffer = this.noiseBuf;
+    const filter = ac.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1200, now);
+    filter.frequency.exponentialRampToValueAtTime(110, now + 0.55);
+    const nGain = ac.createGain();
+    nGain.gain.setValueAtTime(0.45 * vol, now);
+    nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+    nSrc.connect(filter);
+    filter.connect(nGain);
+    nGain.connect(this.out);
+    nSrc.start(now);
+    nSrc.stop(now + 0.62);
+    const osc = ac.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, now);
+    osc.frequency.exponentialRampToValueAtTime(32, now + 0.4);
+    const oGain = ac.createGain();
+    oGain.gain.setValueAtTime(0.5 * vol, now);
+    oGain.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
+    osc.connect(oGain);
+    oGain.connect(this.out);
+    osc.start(now);
+    osc.stop(now + 0.43);
+  },
   bossSwing(heavy = false) {
     const ac = this.ensure();
     if (!ac) return;
@@ -3871,13 +3963,12 @@ const BUILDING_ROOF_OVERHANG = {
   khrushchevka: { top: 18, side: 3 },
   brezhnevka: { top: 31, side: 0 },
   boiler_house: { top: 31, side: 3 },
-  military_hq: { top: 13, side: 3 },
   garage: { top: 9, side: 0 },
   fence_wall: { top: 23, side: 0 }
 };
 
 // Насколько модель дома поднимается над его пятном (замерено по силуэтам: до 94 px у брежневки)
-const BUILDING_SPRITE_TOP = { panel: 100, boiler_house: 100, military_hq: 100, garage: 16 };
+const BUILDING_SPRITE_TOP = { panel: 100, boiler_house: 100, garage: 16 };
 function buildingSpriteTop(b) {
   if (b.type === 'factory') return Math.round(pzFrame(b.model, 0, 0, b.w).rise);
   return BUILDING_SPRITE_TOP[b.type] || 0;
@@ -3892,7 +3983,7 @@ function buildingCollisionRect(b) {
 // Дома и гаражи сталкиваются по силуэту своей 3D-модели (threeProps.silhouetteRects): прямоугольник
 // «пятна» с выступом крыши был шире модели у котельной и гаражей — врезались в пустоту рядом.
 // Пока модель грузится — по пятну (b.col)
-const SILHOUETTE_TYPES = new Set(['panel', 'boiler_house', 'military_hq', 'garage', 'factory']);
+const SILHOUETTE_TYPES = new Set(['panel', 'boiler_house', 'garage', 'factory']);
 function buildingShape(b) {
   if (!SILHOUETTE_TYPES.has(b.type) || !window.threeProps || !window.threeProps.silhouetteRects) return null;
   return window.threeProps.silhouetteRects(b);
@@ -3991,7 +4082,7 @@ function obstacleHits(o, x, y, r) {
 // Точка x, y персонажа — середина фигуры, а ступни нарисованы ниже: у Василия на ~31 px, у жаб на ~20,
 // у громилы на ~38, у босса ровно в ней. Ходьба проверяется по ступням: иначе сзади персонаж заходил
 // ногами на машину или кромку крыши, а спереди не мог подойти вплотную.
-const FOOT_DY = { player: 24, grunt: 14, sniper: 12, brute: 30, boss: 0 };
+const FOOT_DY = { player: 24, grunt: 14, sniper: 12, brute: 30, stormtrooper: 14, rocketeer: 14, boss: 0 };
 function footDY(ent) {
   return ent === player ? FOOT_DY.player : (FOOT_DY[ent.type] || 0);
 }
@@ -4418,6 +4509,451 @@ function drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
     ctx.beginPath();
     ctx.ellipse(fx, fy, SLAM_RADIUS, SLAM_RADIUS * GROUND_SQUASH, 0, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// --- НОВЫЕ ЖАБЫ ПРОМЗОНЫ: ШТУРМОВИК И РАКЕТЧИК (docs/LEVEL2_PROMZONA.md, раздел 3) ---
+// Позы оружия — e.gunPose ('aim' | 'fire' | 'rest' | null), их рисует three_enemies.js; дуло — gunMuzzle
+
+// Где дуло на карте сейчас. Пока модель грузится — примерно у правого бедра
+function gunMuzzle(e) {
+  const m = window.threeEnemies && window.threeEnemies.getMuzzle(e);
+  if (m) return { x: e.x + m.x, y: e.y + m.y, behind: m.behind };
+  const a = e.angle || 0;
+  return { x: e.x + Math.cos(a) * 30, y: e.y + Math.sin(a) * 30 - 18, behind: Math.sin(a) < -0.2 };
+}
+
+// Громкость выстрелов жаб: чем дальше от Василия, тем тише; за экраном не слышно
+function enemySoundVolume(x, y) {
+  return Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 950);
+}
+
+// Штурмовик держит среднюю дистанцию и ходит боком, стреляя очередями из плазменного автомата.
+// После ST_OVERHEAT_SHOTS выстрелов подряд автомат перегревается: ствол светится, из радиаторов пар,
+// ST_OVERHEAT кадров стрелять нельзя — окно, чтобы подойти. Нагрев спадает, только если давно не стрелял
+const ST_RANGE_MIN = 180;
+const ST_RANGE_MAX = 380;
+const ST_AIM_RANGE = 460;          // ближе — вскидывает автомат
+const ST_BURST = 4;
+const ST_SHOT_GAP = 7;
+const ST_BURST_PAUSE = 40;         // + до 20 случайно
+const ST_FIRST_BURST = 40;         // + до 30: заметив Василия, сначала вскидывает автомат
+const ST_OVERHEAT_SHOTS = 12;
+const ST_COOL_DELAY = 100;
+const ST_OVERHEAT = 240;           // 4 с
+const ST_BULLET_SPEED = 10.5;
+const ST_SPREAD = 0.07;
+const ST_DAMAGE = { 2: 6, 3: 8, 4: 10 };
+const ST_STRAFE = 0.65;            // доля скорости, с которой ходит боком
+
+function updateStormtrooper(e, distToPlayer, angle, eSpeed) {
+  if (e.heat === undefined) {
+    e.heat = 0;
+    e.sinceShot = 0;
+    e.burstLeft = ST_BURST;
+    e.overheat = 0;
+    e.shootCooldown = ST_FIRST_BURST + Math.floor(Math.random() * 30);
+    e.strafeDir = Math.random() < 0.5 ? 1 : -1;
+    e.strafeTimer = 60 + Math.floor(Math.random() * 90);
+  }
+  e.angle = angle;
+  e.sinceShot++;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+
+  if (e.overheat > 0) {
+    // Остывает: автомат опущен, пар из радиаторов, от Василия пятится
+    e.gunPose = 'rest';
+    e.overheat--;
+    if (e.overheat % 4 === 0) spawnSteam(gunMuzzle(e));
+    if (distToPlayer < ST_RANGE_MIN + 40) slideMove(e, -cos * eSpeed * 0.6, -sin * eSpeed * 0.6, e.radius, true);
+    if (e.overheat === 0) {
+      e.heat = 0;
+      e.burstLeft = ST_BURST;
+      e.shootCooldown = 20;
+    }
+    return;
+  }
+  if (e.sinceShot > ST_COOL_DELAY) e.heat = Math.max(0, e.heat - 0.04);
+
+  // Подходит или отступает к своей дистанции, а в зоне стрельбы ещё и смещается боком
+  let mx = 0, my = 0;
+  if (distToPlayer > ST_RANGE_MAX) { mx = cos; my = sin; }
+  else if (distToPlayer < ST_RANGE_MIN) { mx = -cos; my = -sin; }
+  if (--e.strafeTimer <= 0) {
+    e.strafeTimer = 80 + Math.floor(Math.random() * 90);
+    e.strafeDir = -e.strafeDir;
+  }
+  if (distToPlayer < ST_RANGE_MAX + 60) {
+    mx += -sin * e.strafeDir * ST_STRAFE;
+    my += cos * e.strafeDir * ST_STRAFE;
+  }
+  const len = Math.hypot(mx, my);
+  if (len > 0.01) {
+    const k = eSpeed * Math.min(1, len) / len;
+    const bx = e.x, by = e.y;
+    slideMove(e, mx * k, my * k, e.radius, true);
+    // Упёрся — в другую сторону
+    if (Math.hypot(e.x - bx, e.y - by) < eSpeed * 0.2) e.strafeDir = -e.strafeDir;
+  }
+
+  const inRange = distToPlayer < ST_AIM_RANGE;
+  e.gunPose = inRange ? 'aim' : null;
+  if (e.fireKick > 0) {
+    e.fireKick--;
+    e.gunPose = 'fire';
+  }
+  if (e.shootCooldown > 0) e.shootCooldown--;
+  if (!inRange || e.shootCooldown > 0) return;
+
+  stormtrooperShot(e);
+  e.burstLeft--;
+  if (e.burstLeft > 0) {
+    e.shootCooldown = ST_SHOT_GAP;
+  } else {
+    e.burstLeft = ST_BURST;
+    e.shootCooldown = ST_BURST_PAUSE + Math.floor(Math.random() * 20);
+  }
+  if (e.heat >= ST_OVERHEAT_SHOTS) {
+    e.overheat = ST_OVERHEAT;
+    e.fireKick = 0;
+    e.gunPose = 'rest';
+    if (enemySoundVolume(e.x, e.y) > 0.2) SoundFX.overheat();
+    addFloatingText(e.x, e.y - 58, currentLang === 'ru' ? 'ПЕРЕГРЕВ' : 'OVERHEAT', '#fb923c');
+  }
+}
+
+function stormtrooperShot(e) {
+  e.fireKick = 4;
+  e.gunPose = 'fire';
+  e.heat++;
+  e.sinceShot = 0;
+  const m = gunMuzzle(e);
+  const a = Math.atan2(player.y - m.y, player.x - m.x) + (Math.random() - 0.5) * 2 * ST_SPREAD;
+  enemyBullets.push({
+    x: m.x, y: m.y,
+    vx: Math.cos(a) * ST_BULLET_SPEED, vy: Math.sin(a) * ST_BULLET_SPEED,
+    angle: a, radius: 5, kind: 'plasma',
+    damage: ST_DAMAGE[e.tier] || ST_DAMAGE[3]
+  });
+  muzzleFlashes.push({ x: m.x, y: m.y, angle: a, type: 'toad_plasma', life: 3, maxLife: 3, scale: 0.8 });
+  spawnDirectionalSparks(m.x, m.y, a, 0.5, 3, '#f0abfc', 3, 7, 8);
+  const vol = enemySoundVolume(e.x, e.y);
+  if (vol > 0) SoundFX.toadPlasma(vol);
+}
+
+// Пар из радиаторов перегретого автомата
+function spawnSteam(m) {
+  const maxL = 26 + Math.floor(Math.random() * 10);
+  particles.push({
+    x: m.x + (Math.random() - 0.5) * 10, y: m.y - 4,
+    vx: (Math.random() - 0.5) * 0.8, vy: -1.1 - Math.random() * 0.8,
+    radius: 3 + Math.random() * 3,
+    color: '#e2e8f0', type: 'smoke', drag: 0.96,
+    life: maxL, maxLife: maxL
+  });
+}
+
+// Раскалённый ствол перегретого автомата: пульсирующее оранжевое свечение у дула
+function drawOverheatGlow(ctx, e) {
+  if (!(e.overheat > 0)) return;
+  const m = gunMuzzle(e);
+  const k = Math.min(1, e.overheat / 60);
+  const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 70);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = 0.55 * k * pulse;
+  ctx.fillStyle = '#f97316';
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, 11, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 0.8 * k * pulse;
+  ctx.fillStyle = '#fde68a';
+  ctx.beginPath();
+  ctx.arc(m.x, m.y, 4.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// Ракетчик держится далеко, 350–700 px. Залп — RK_SALVO ракет подряд; перед залпом на земле загораются
+// круги мест попадания. Взрывы задевают и жаб. После залпа пусковая пуста RK_RELOAD кадров: ракетчик
+// с опущенной пусковой отходит подальше — это окно, чтобы его догнать
+const RK_RANGE_MIN = 350;
+const RK_RANGE_MAX = 700;
+const RK_FIRE_MAX = 780;           // дальше не стреляет
+const RK_FIRE_MIN = 120;           // в упор тоже: накроет себя
+const RK_SALVO = 4;
+const RK_WINDUP = 54;              // круги уже горят, ракетчик целится
+const RK_GAP = 18;                 // кадров между ракетами залпа: 4 ракеты ~1,2 с вместе с прицелом
+const RK_RELOAD = 2400;            // 40 с
+const RK_FIRST = 90;               // + до 90 случайно: первый залп после того, как заметил
+const RK_BLAST_R = 70;
+const RK_DAMAGE = { 3: 30, 4: 36 };
+let rockets = [];
+let rocketBlasts = [];             // вспышки взрывов
+
+// Места попадания: первая ракета — туда, где Василий стоит, остальные — вокруг, не в стены
+function pickRocketTargets() {
+  const px = player.x, py = player.y + footDY(player);
+  const list = [{ x: px, y: py }];
+  const base = Math.random() * Math.PI * 2;
+  for (let i = 1; i < RK_SALVO; i++) {
+    let t = null;
+    for (let k = 0; k < 6 && !t; k++) {
+      const a = base + (i - 1) * (Math.PI * 2 / (RK_SALVO - 1)) + (Math.random() - 0.5) * 0.9;
+      const d = 75 + Math.random() * 60;
+      const x = px + Math.cos(a) * d, y = py + Math.sin(a) * d * GROUND_SQUASH;
+      if (!checkBuildingCollision(x, y, 10)) t = { x, y };
+    }
+    list.push(t || { x: px + (Math.random() - 0.5) * 40, y: py + (Math.random() - 0.5) * 24 });
+  }
+  return list;
+}
+
+function updateRocketeer(e, distToPlayer, angle, eSpeed) {
+  if (!e.rk) e.rk = { phase: 'ready', t: RK_FIRST + Math.floor(Math.random() * 90), shots: 0, targets: null };
+  const R = e.rk;
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+  if (e.fireKick > 0) e.fireKick--;
+
+  if (R.phase === 'reload') {
+    // Пусковая пуста: опускает её и уходит от Василия
+    e.gunPose = 'rest';
+    if (--R.t <= 0) {
+      R.phase = 'ready';
+      R.t = 30;
+    }
+    if (distToPlayer < RK_RANGE_MAX + 150) {
+      e.angle = angle + Math.PI;
+      slideMove(e, -cos * eSpeed, -sin * eSpeed, e.radius, true);
+    } else {
+      e.angle = angle;
+    }
+    return;
+  }
+
+  e.angle = angle;
+  if (R.phase === 'ready') {
+    e.gunPose = distToPlayer < RK_FIRE_MAX + 100 ? 'aim' : null;
+    const step = distToPlayer > RK_RANGE_MAX ? eSpeed : (distToPlayer < RK_RANGE_MIN ? -eSpeed : 0);
+    if (step !== 0) slideMove(e, cos * step, sin * step, e.radius, true);
+    if (R.t > 0) R.t--;
+    else if (distToPlayer < RK_FIRE_MAX && distToPlayer > RK_FIRE_MIN) {
+      R.phase = 'windup';
+      R.t = 0;
+      R.shots = 0;
+      R.targets = pickRocketTargets();
+    }
+    return;
+  }
+
+  // Прицел и залп — стоит на месте
+  e.gunPose = e.fireKick > 0 ? 'fire' : 'aim';
+  R.t++;
+  if (R.phase === 'windup') {
+    if (R.t < RK_WINDUP) return;
+    R.phase = 'salvo';
+    R.t = 0;
+  }
+  if (R.shots < RK_SALVO && R.t >= R.shots * RK_GAP) {
+    launchRocket(e, R.targets[R.shots]);
+    R.shots++;
+  }
+  if (R.shots >= RK_SALVO && R.t >= RK_SALVO * RK_GAP) {
+    R.phase = 'reload';
+    R.t = RK_RELOAD;
+    R.targets = null;
+  }
+}
+
+// Стрелок потерял Василия: прицел и залп обрываются (выпущенные ракеты долетают), перегрев и перезарядка идут дальше
+function updateGunnerIdle(e) {
+  e.fireKick = 0;
+  if (e.type === 'stormtrooper') {
+    if (e.overheat > 0 && --e.overheat === 0) e.heat = 0;
+    e.gunPose = e.overheat > 0 ? 'rest' : null;
+    return;
+  }
+  const R = e.rk;
+  if (R && (R.phase === 'windup' || R.phase === 'salvo')) {
+    R.phase = R.shots > 0 ? 'reload' : 'ready';
+    R.t = R.shots > 0 ? RK_RELOAD : RK_FIRST;
+    R.targets = null;
+  }
+  if (R && R.phase === 'reload' && --R.t <= 0) {
+    R.phase = 'ready';
+    R.t = RK_FIRST;
+  }
+  e.gunPose = R && R.phase === 'reload' ? 'rest' : null;
+}
+
+function launchRocket(e, target) {
+  e.fireKick = 6;
+  e.gunPose = 'fire';
+  const m = gunMuzzle(e);
+  const fx = e.x, fy = e.y + footDY(e);
+  const d = Math.hypot(target.x - fx, target.y - fy);
+  rockets.push({
+    mx: m.x, my: m.y, fx, fy, tx: target.x, ty: target.y,
+    t: 0, T: Math.round(26 + d / 12), peak: 50 + d * 0.18,
+    x: m.x, y: m.y, prevX: m.x, prevY: m.y, gx: fx, gy: fy,
+    dmg: RK_DAMAGE[e.tier] || RK_DAMAGE[3]
+  });
+  const a = Math.atan2(target.y - m.y, target.x - m.x);
+  muzzleFlashes.push({ x: m.x, y: m.y, angle: a, type: 'shotgun', life: 4, maxLife: 4, scale: 0.7 });
+  spawnGunpowderSmoke(m.x, m.y, a + Math.PI, 4);
+  const vol = enemySoundVolume(e.x, e.y);
+  if (vol > 0) SoundFX.rocketLaunch(vol);
+}
+
+function updateRockets() {
+  for (let i = rockets.length - 1; i >= 0; i--) {
+    const r = rockets[i];
+    r.t++;
+    const s = Math.min(1, r.t / r.T);
+    r.prevX = r.x;
+    r.prevY = r.y;
+    // Летит дугой: по экрану — от дула к цели, выше на высоту полёта; тень — от ног ракетчика к цели
+    r.x = r.mx + (r.tx - r.mx) * s;
+    r.y = r.my + (r.ty - r.my) * s - 4 * r.peak * s * (1 - s);
+    r.gx = r.fx + (r.tx - r.fx) * s;
+    r.gy = r.fy + (r.ty - r.fy) * s;
+    if (r.t % 2 === 0) {
+      particles.push({
+        x: r.x, y: r.y, vx: (Math.random() - 0.5) * 0.6, vy: -0.3,
+        radius: 3 + Math.random() * 2, color: '#a8a29e', type: 'smoke', drag: 0.94, life: 24, maxLife: 24
+      });
+    }
+    if (s >= 1) {
+      rocketExplode(r);
+      rockets.splice(i, 1);
+    }
+  }
+  for (let i = rocketBlasts.length - 1; i >= 0; i--) {
+    if (++rocketBlasts[i].t >= rocketBlasts[i].life) rocketBlasts.splice(i, 1);
+  }
+}
+
+function rocketExplode(r) {
+  const x = r.tx, y = r.ty;
+  spawnShockwave(x, y, RK_BLAST_R + 18, '#fb923c', 22);
+  spawnDirectionalSparks(x, y - 6, -Math.PI / 2, Math.PI * 2, 14, '#fde047', 4, 11, 14);
+  createParticles(x, y - 6, '#f97316', 12);
+  spawnGunpowderSmoke(x, y - 4, -Math.PI / 2, 6);
+  rocketBlasts.push({ x, y, t: 0, life: 12 });
+  const near = Math.hypot(player.x - x, player.y - y);
+  if (near < 600) {
+    const kick = 14 * (1 - near / 600);
+    cameraKickX += (Math.random() - 0.5) * kick;
+    cameraKickY += (Math.random() - 0.5) * kick;
+  }
+  const vol = enemySoundVolume(x, y);
+  if (vol > 0) SoundFX.explosion(vol);
+
+  const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
+  if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5)
+      && !playerDodged()) {
+    player.hp -= r.dmg;
+    const a = Math.atan2(player.y - y, player.x - x);
+    slideMove(player, Math.cos(a) * 18, Math.sin(a) * 18, player.radius);
+    createParticles(player.x, player.y, '#ef4444', 10);
+    addFloatingText(player.x, player.y - 30, `-${r.dmg}`, '#ef4444');
+    if (player.hp <= 0) gameOver();
+  }
+  // Своих не жалеет: взрыв бьёт и жаб
+  enemies.forEach(en => {
+    if (en.type === 'boss') return;
+    if (inGroundEllipse(en.x, en.y + footDY(en), x, y, RK_BLAST_R + en.radius * 0.5)) {
+      const hit = damageEnemy(en, r.dmg, 'rocket', x, y);
+      en.hitFlash = 6;
+      addFloatingText(en.x, en.y - 22, `-${Math.round(hit.dealt)}`, '#fbbf24');
+    }
+  });
+}
+
+// Круги мест попадания — под фигурами: горят с начала прицела, пока ракета не упадёт.
+// Внутренний круг растёт по мере подлёта
+function drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  const pulse = Math.sin(performance.now() / 1000 * 14);
+  const mark = (x, y, k) => {
+    if (x < viewMinX - 100 || x > viewMaxX + 100 || y < viewMinY - 100 || y > viewMaxY + 100) return;
+    const r = RK_BLAST_R;
+    ctx.save();
+    ctx.globalAlpha = 0.35 + 0.45 * k;
+    ctx.fillStyle = 'rgba(249, 115, 22, 0.2)';
+    ctx.strokeStyle = '#f97316';
+    ctx.lineWidth = 2 + pulse * 0.8;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * GROUND_SQUASH, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (k > 0) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * k, r * GROUND_SQUASH * k, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+  for (let i = 0; i < enemies.length; i++) {
+    const R = enemies[i].rk;
+    if (!R || !R.targets) continue;
+    for (let j = R.shots; j < R.targets.length; j++) mark(R.targets[j].x, R.targets[j].y, 0);
+  }
+  for (let i = 0; i < rockets.length; i++) mark(rockets[i].tx, rockets[i].ty, Math.min(1, rockets[i].t / rockets[i].T));
+}
+
+// Ракеты в полёте и вспышки взрывов — поверх фигур
+function drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  for (let i = 0; i < rockets.length; i++) {
+    const r = rockets[i];
+    if (r.x < viewMinX || r.x > viewMaxX || r.y < viewMinY - 300 || r.y > viewMaxY) continue;
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(r.gx, r.gy, 7, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.rotate(Math.atan2(r.y - r.prevY, r.x - r.prevX));
+    // Факел двигателя, корпус, красная боеголовка
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.fillStyle = 'rgba(251, 146, 60, 0.85)';
+    ctx.beginPath();
+    ctx.moveTo(-6, -3);
+    ctx.lineTo(-15 - Math.random() * 6, 0);
+    ctx.lineTo(-6, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#57534e';
+    ctx.fillRect(-7, -2.5, 12, 5);
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.moveTo(5, -2.5);
+    ctx.lineTo(10, 0);
+    ctx.lineTo(5, 2.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  for (let i = 0; i < rocketBlasts.length; i++) {
+    const b = rocketBlasts[i];
+    if (b.x < viewMinX - 100 || b.x > viewMaxX + 100 || b.y < viewMinY - 100 || b.y > viewMaxY + 100) continue;
+    const k = b.t / b.life;
+    const grow = 0.5 + 0.6 * k;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = (1 - k) * 0.9;
+    ctx.fillStyle = '#fb923c';
+    ctx.beginPath();
+    ctx.ellipse(b.x, b.y - 10, RK_BLAST_R * grow, RK_BLAST_R * 0.75 * grow, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fef3c7';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y - 12, RK_BLAST_R * 0.35 * (1 - k), 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
   }
 }
@@ -5588,7 +6124,9 @@ function addFloatingText(x, y, text, color) {
 const TROPHY_DROPS = {
   grunt: [['toad_leg', 0.5], ['toad_eye', 0.15], ['toad_liver', 0.08]],
   sniper: [['toad_eye', 0.65], ['toad_leg', 0.15], ['toad_liver', 0.05]],
-  brute: [['toad_liver', 0.65], ['toad_eye', 0.2], ['toad_leg', 0.2]]
+  brute: [['toad_liver', 0.65], ['toad_eye', 0.2], ['toad_leg', 0.2]],
+  stormtrooper: [['toad_leg', 0.45], ['toad_eye', 0.3], ['toad_liver', 0.1]],
+  rocketeer: [['toad_liver', 0.45], ['toad_eye', 0.35], ['toad_leg', 0.25]]
 };
 const TROPHY_NEST_BONUS = 0.15;
 // С жаб чермета больше, чем раньше: тайники урезаны (STASH_YIELD), доход сдвинут в сторону боя
@@ -5617,12 +6155,14 @@ function spawnLootDrop(enemyOrX, yOpt) {
   const x = isEnemyObj ? enemyOrX.x : enemyOrX;
   const y = isEnemyObj ? enemyOrX.y : yOpt;
   const eType = isEnemyObj ? (enemyOrX.type || 'grunt') : 'grunt';
+  // Свой лут у новых жаб — на этапе 4 (новые ресурсы); пока штурмовик — как снайпер, ракетчик — как громила
+  const lootType = eType === 'stormtrooper' ? 'sniper' : (eType === 'rocketeer' ? 'brute' : eType);
   const dist = getDistrictAt(x, y);
   const prof = PZ_ENEMY_PROFILE[dist.id] || dist.id; // район Промзоны — как городской той же угрозы
   const bMult = dist.bottleMult || 1.0;
   const sMult = (dist.scrapMult || 1.0) * ENEMY_SCRAP_YIELD;
 
-  if (eType === 'brute') {
+  if (lootType === 'brute') {
     const scrapVal = Math.round((2 + Math.floor(Math.random() * 3)) * sMult);
     const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * bMult);
     spawn3DLootItem(x - 16, y - 6, 'scrap', scrapVal);
@@ -5637,7 +6177,7 @@ function spawnLootDrop(enemyOrX, yOpt) {
       const supplyPool = ['vodka', 'stew', 'bandage'];
       spawn3DLootItem(x, y + 16, supplyPool[Math.floor(Math.random() * supplyPool.length)], 1);
     }
-  } else if (eType === 'sniper') {
+  } else if (lootType === 'sniper') {
     const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * bMult);
     spawn3DLootItem(x - 10, y, 'bottle', bottleVal);
     if (prof === 'nest' && Math.random() < 0.2) {
@@ -6879,6 +7419,7 @@ function update() {
   }
 
   updateThrownProps();
+  updateRockets();
   updateShockwaves();
   updateShieldShards();
   updateSpeech();
@@ -6984,6 +7525,10 @@ function update() {
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
         }
+      } else if (e.type === 'stormtrooper') {
+        updateStormtrooper(e, distToPlayer, angle, eSpeed);
+      } else if (e.type === 'rocketeer') {
+        updateRocketeer(e, distToPlayer, angle, eSpeed);
       } else if (e.type === 'sniper') {
         e.angle = angle;
         // Держит дистанцию 200–320 px: подходит или отступает, но, как и все, не сквозь стены
@@ -7035,6 +7580,7 @@ function update() {
       e.lunge = null;
       e.squash = 0;
       e.slam = null;
+      if (e.type === 'stormtrooper' || e.type === 'rocketeer') updateGunnerIdle(e);
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -7053,7 +7599,7 @@ function update() {
     const eb = enemyBullets[i];
     eb.x += eb.vx; eb.y += eb.vy;
     if (checkBuildingCollision(eb.x, eb.y, eb.radius)) {
-      spawnDirectionalSparks(eb.x, eb.y, (eb.angle || 0) + Math.PI, 1.0, 5, '#84cc16', 3, 7, 9);
+      spawnDirectionalSparks(eb.x, eb.y, (eb.angle || 0) + Math.PI, 1.0, 5, eb.kind === 'plasma' ? '#f0abfc' : '#84cc16', 3, 7, 9);
       enemyBullets.splice(i, 1);
       continue;
     }
@@ -7306,6 +7852,19 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.closePath();
       ctx.fill();
 
+    } else if (mf.type === 'toad_plasma') {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `rgba(232, 121, 249, ${0.9 * t})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -4 * s);
+      ctx.lineTo(18 * s, 0);
+      ctx.lineTo(0, 4 * s);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(2, 0, 5 * s, 0, Math.PI * 2);
+      ctx.fill();
+
     } else if (mf.type === 'boss_slash') {
       // Широкий росчерк тесака Золотого Мясника (серп как у биты, но крупнее)
       const prog = 1.0 - t;
@@ -7411,7 +7970,7 @@ function render() {
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
-    actors.push({ x: e.x, y: e.y + footDY(e), h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 110 : 62) });
+    actors.push({ x: e.x, y: e.y + footDY(e), h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 110 : (GUNNER_STATS[e.type] ? 72 : 62)) });
   }
 
   if (window.environmentRenderer) {
@@ -7475,6 +8034,7 @@ function render() {
   drawLairCracks(ctx);
   drawBreachGround(ctx);
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
+  drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // куда упадут ракеты
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawShockwaves(ctx);
   if (bossRef) drawBossTelegraph(ctx, bossRef);
@@ -7512,6 +8072,9 @@ function render() {
     // Язык жабы, отвернувшейся от камеры, уходит за её голову — рисуется до фигуры
     const tongueBehind = e.lunge && Math.sin(e.angle || 0) < -0.2;
     if (tongueBehind) drawGruntTongue(ctx, e);
+    // Раскалённый ствол штурмовика: за фигурой, если жаба стоит спиной
+    const glowBehind = e.overheat > 0 && gunMuzzle(e).behind;
+    if (glowBehind) drawOverheatGlow(ctx, e);
     if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
       if (e.type === 'grunt') {
         SpriteRenderer.drawToadGrunt(ctx, e);
@@ -7523,9 +8086,11 @@ function render() {
       }
     }
     if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
+    if (e.overheat > 0 && !glowBehind) drawOverheatGlow(ctx, e);
     if (tipsy) drawFumeTipsy(ctx, e);
   }
   drawShieldShards(ctx);
+  drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawBreachHint(ctx);
 
   // 8. Выстрелы и баллистические трассеры — только в пределах экрана
@@ -7536,6 +8101,24 @@ function render() {
     const a = eb.angle !== undefined ? eb.angle : Math.atan2(eb.vy, eb.vx);
     const cosA = Math.cos(a);
     const sinA = Math.sin(a);
+
+    if (eb.kind === 'plasma') {
+      // Сгусток плазмы штурмовика: розовый ореол и белое ядро
+      ctx.strokeStyle = 'rgba(217, 70, 239, 0.5)';
+      ctx.lineWidth = 7;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(eb.x - cosA * 14, eb.y - sinA * 14);
+      ctx.lineTo(eb.x, eb.y);
+      ctx.stroke();
+      ctx.strokeStyle = '#fdf4ff';
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(eb.x - cosA * 7, eb.y - sinA * 7);
+      ctx.lineTo(eb.x + cosA * 2, eb.y + sinA * 2);
+      ctx.stroke();
+      continue;
+    }
 
     // Кислотный шлейф
     ctx.strokeStyle = 'rgba(132, 204, 22, 0.45)';
@@ -7815,8 +8398,10 @@ const BALANCE_ROWS = [
 ];
 const BALANCE_NAMES = {
   bat: 'Бита', makarov: 'ПМ', drill: 'Дрель', shotgun: 'Обрез', plasma: 'Плазма',
-  grunt: 'Пех', sniper: 'Снай', brute: 'Гром', boss: 'МЯСНИК',
-  courtyards: 'дв', garages: 'гар', heating: 'тепл', cordon: 'корд', nest: 'гн'
+  grunt: 'Пех', sniper: 'Снай', brute: 'Гром', stormtrooper: 'Штур', rocketeer: 'Ракет', boss: 'МЯСНИК',
+  courtyards: 'дв', garages: 'гар', heating: 'тепл', cordon: 'корд', nest: 'гн',
+  pz_breach: 'прол', pz_admin: 'упр', pz_railyard: 'сорт', pz_depot: 'авто', pz_foundry: 'лит',
+  pz_workshops: 'мех', pz_warehouses: 'скл', pz_tankfarm: 'рез', pz_cooling: 'град', pz_sludge: 'шлам'
 };
 
 // Урон одного попадания (для обреза — одной дробины)
