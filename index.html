@@ -213,21 +213,127 @@
       transition: width 0.12s linear;
     }
 
-    /* Resources HUD */
-    .resources {
+    /* Кнопки инвентаря и персонажа (вместо постоянной строки ресурсов) */
+    .hud-menu-btns {
       position: absolute;
       top: 15px;
       right: 15px;
       display: flex;
-      gap: 14px;
-      background: rgba(12, 16, 24, 0.92);
-      padding: 7px 14px;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      font-weight: 800;
-      font-size: 14px;
+      gap: 8px;
       z-index: 10;
+    }
+    .hud-menu-btn {
+      background: rgba(12, 16, 24, 0.92);
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 16px;
+      padding: 4px 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.65);
+    }
+    .hud-menu-btn:hover { border-color: #64748b; }
+    .hud-menu-btn kbd {
+      font-family: Consolas, monospace;
+      font-size: 11px;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+    /* Окно инвентаря / персонажа */
+    .char-panel {
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 10, 14, 0.78);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 60;
+      padding: 20px;
+    }
+    .char-content {
+      background: #151922;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 18px 20px;
+      width: min(620px, 100%);
+      max-height: 86vh;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7);
+    }
+    .char-tabs { display: flex; gap: 8px; }
+    .char-tab {
+      flex: 1;
+      background: #0f172a;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 8px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .char-tab.active { color: #f8fafc; border-color: #38bdf8; background: #172033; }
+    .char-body { overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+    .inv-section h3 {
+      font-size: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin: 0 0 8px;
+    }
+    .inv-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 8px;
+    }
+    .inv-cell {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .inv-cell img { width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.8)); }
+    .inv-cell .inv-name { flex: 1; }
+    .inv-cell b { color: #f8fafc; font-size: 14px; }
+    .inv-empty { color: #94a3b8; text-align: center; padding: 30px 0; }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      color: #cbd5e1;
+      padding: 5px 2px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .stat-row b { color: #f8fafc; }
+    .stat-row.perk-row b { color: #94a3b8; font-weight: 400; text-align: right; }
+    .char-section-grid { display: flex; flex-direction: column; }
+    .char-close { align-self: center; }
+    .pause-controls {
+      margin-top: 18px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 12px 16px;
+      max-width: 460px;
+    }
+    .pause-controls .controls-list { text-align: left; }
+    .pause-controls h3 {
+      font-size: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin: 0 0 8px;
     }
     .resource-item {
       display: flex;
@@ -1287,38 +1393,10 @@
     <!-- Language Selector -->
     <button class="lang-btn" id="btn-lang">RU / EN</button>
 
-    <!-- Top Right Resources (4 Zone Resources with Real PNG Renders) -->
-    <div class="resources">
-      <div class="resource-item" title="Стеклотара (Дворы)">
-        <img class="res-icon" src="assets/sprites/loot/loot_bottle.png?v=1026" alt="Стеклотара">
-        <span id="res-bottles">0</span>
-      </div>
-      <div class="resource-item" title="Чермет (Гаражи и Теплосеть)">
-        <img class="res-icon" src="assets/sprites/loot/loot_scrap.png?v=1026" alt="Чермет">
-        <span id="res-scrap">0</span>
-      </div>
-      <div class="resource-item" title="Оружейные детали (Военный Кордон)">
-        <img class="res-icon" src="assets/sprites/loot/loot_mil_parts.png?v=1026" alt="Детали">
-        <span id="res-mil-parts" style="color:#f87171;">0</span>
-      </div>
-      <div class="resource-item" title="Квако-ядра (Квако-Гнёзда)">
-        <img class="res-icon" src="assets/sprites/loot/loot_alien_core.png?v=1026" alt="Квако-ядра">
-        <span id="res-alien-core" style="color:#c084fc;">0</span>
-      </div>
-      <!-- Жабьи трофеи: падают только с жаб, на них ставятся перки -->
-      <div class="res-divider"></div>
-      <div class="resource-item" title="Жабьи глаза (чаще со снайперов)">
-        <img class="res-icon" src="assets/sprites/loot/loot_toad_eye.png?v=1" alt="Глаза">
-        <span id="res-toad_eye" style="color:#fde047;">0</span>
-      </div>
-      <div class="resource-item" title="Жабьи лапки (чаще с пехотинцев)">
-        <img class="res-icon" src="assets/sprites/loot/loot_toad_leg.png?v=1" alt="Лапки">
-        <span id="res-toad_leg" style="color:#86efac;">0</span>
-      </div>
-      <div class="resource-item" title="Жабья печень (чаще с громил)">
-        <img class="res-icon" src="assets/sprites/loot/loot_toad_liver.png?v=1" alt="Печень">
-        <span id="res-toad_liver" style="color:#fda4af;">0</span>
-      </div>
+    <!-- Инвентарь и персонаж (src/inventory.js): ресурсы больше не висят строкой — только по кнопке -->
+    <div class="hud-menu-btns">
+      <button class="hud-menu-btn" id="hud-btn-inventory" title="Инвентарь [I]">🎒 <kbd>I</kbd></button>
+      <button class="hud-menu-btn" id="hud-btn-stats" title="Персонаж [C]">👤 <kbd>C</kbd></button>
     </div>
 
     <!-- Interaction Prompt Hint -->
@@ -1470,6 +1548,18 @@
       </div>
     </div>
 
+    <!-- Инвентарь / Персонаж (src/inventory.js) -->
+    <div id="char-panel" class="char-panel" style="display:none;">
+      <div class="char-content">
+        <div class="char-tabs">
+          <button class="char-tab" id="char-tab-inventory"></button>
+          <button class="char-tab" id="char-tab-stats"></button>
+        </div>
+        <div class="char-body" id="char-body"></div>
+        <button class="btn-secondary char-close" id="char-close"></button>
+      </div>
+    </div>
+
     <!-- Pause Screen (src/menu.js) -->
     <div id="screen-pause" class="overlay-screen pause-screen" style="display:none;">
       <h1 data-t="pause">ПАУЗА</h1>
@@ -1479,6 +1569,11 @@
         <button class="btn-secondary" id="btn-pause-save" data-t="save_now">СОХРАНИТЬ</button>
         <button class="btn-secondary" id="btn-pause-settings" data-t="settings">НАСТРОЙКИ</button>
         <button class="btn-secondary" id="btn-pause-exit" data-t="exit_menu">ВЫЙТИ В МЕНЮ</button>
+      </div>
+      <!-- Подсказки по управлению — тот же список, что в настройках -->
+      <div class="pause-controls">
+        <h3 data-t="sec_controls">Управление</h3>
+        <div class="controls-list" id="pause-controls"></div>
       </div>
     </div>
 
@@ -1563,14 +1658,15 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
   <script src="src/shadows.js?v=1094"></script>
-  <script src="src/environment.js?v=1116"></script>
+  <script src="src/environment.js?v=1118"></script>
   <script src="src/three_character.js?v=1094"></script>
   <script src="src/three_enemies.js?v=1115"></script>
   <script src="src/three_props.js?v=1115"></script>
-  <script src="src/three_boss.js?v=1094"></script>
-  <script src="src/game.js?v=1116"></script>
-  <script src="src/menu.js?v=1115"></script>
+  <script src="src/three_boss.js?v=1121"></script>
+  <script src="src/game.js?v=1121"></script>
+  <script src="src/menu.js?v=1121"></script>
   <script src="src/comic.js?v=1094"></script>
-  <script src="src/cards.js?v=1094"></script>
+  <script src="src/cards.js?v=1119"></script>
+  <script src="src/inventory.js?v=1121"></script>
 </body>
 </html>

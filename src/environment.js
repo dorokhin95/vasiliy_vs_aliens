@@ -196,6 +196,7 @@ class EnvironmentRenderer {
     // Модели Промзоны (постройки и новые жабы) грузятся при первом заходе в неё, а не на старте города
     if (id === 'promzona' && window.threeProps) window.threeProps.loadPromzona();
     if (id === 'promzona' && window.threeEnemies) window.threeEnemies.loadPromzona();
+    if (id === 'promzona' && window.threePounder) window.threePounder.load();
     this.generateDecorations();
   }
 
@@ -811,6 +812,9 @@ class EnvironmentRenderer {
       (x > r.pos - 70 && x < r.pos + r.size + 70) || (y > r.pos - 70 && y < r.pos + r.size + 70));
     const blocked = (x, y, pad) =>
       this.isInShopPlaza(x, y) || (this.location === 'city' && Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430) ||
+      // Площадка логова Долбильщика (POUNDER_HOME в game.js)
+      (this.location === 'promzona' && typeof POUNDER_HOME !== 'undefined' &&
+        Math.hypot(x - POUNDER_HOME.x, y - POUNDER_HOME.y) < POUNDER_LAIR_R + 90) ||
       onRoad(x, y) || this.onRails(x, y) ||
       // Цех поднимается над пятном на сотни px: дерево позади него торчало бы кроной из крыши
       buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y < b.y + b.h + pad + 30 &&

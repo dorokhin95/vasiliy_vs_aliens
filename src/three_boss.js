@@ -1,6 +1,7 @@
 /**
  * ThreeBossManager
- * Live 2.5D WebGL renderer for the boss «Золотой Мясник» (assets/models/boss_golden_butcher.glb).
+ * Live 2.5D WebGL renderer for the bosses: «Золотой Мясник» (assets/models/boss_golden_butcher.glb, city)
+ * and «Межпространственный Долбильщик» (assets/models/boss_dolbilshchik.glb, Promzona) — one instance each.
  *
  * Unlike the toads (pose cache), there is only one boss, so it is rendered live every frame
  * like Vasiliy: smooth animation at any angle and no cache memory.
@@ -11,9 +12,12 @@
  */
 
 class ThreeBossManager {
-  constructor() {
+  // cfg: { file, name, attackClips, lazy } — lazy: модель грузится по load(), а не сразу
+  constructor(cfg) {
+    this.cfg = cfg;
     this.isLoaded = false;
     this.loadFailed = false;
+    this.loadRequested = false;
 
     // Frustum covers the spin reach (~1.8 m) and the overhead chop (~2.9 m); 80 screen px per metre
     this.frustumSize = 4.4;
@@ -61,17 +65,14 @@ class ThreeBossManager {
     this.materials = [];
 
     // Phase lengths of each attack clip in frames (must match the Blender keyframes)
-    this.attackClips = {
-      slash: { clip: 'Attack_Slash', phases: [34, 8, 30] },
-      chop: { clip: 'Attack_Chop', phases: [52, 6, 50] },
-      spin: { clip: 'Attack_Spin', phases: [38, 30, 44] },
-      lunge: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
-      // Захват: своего клипа нет — тот же рывок вперёд, только на месте и быстрее
-      grab: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
-      // Землетрясение берсерка: тот же удар сверху, меч уходит в землю
-      quake: { clip: 'Attack_Chop', phases: [52, 6, 50] }
-    };
+    this.attackClips = cfg.attackClips;
 
+    if (!cfg.lazy) this.load();
+  }
+
+  load() {
+    if (this.loadRequested) return;
+    this.loadRequested = true;
     this.loadModel();
   }
 
@@ -82,7 +83,7 @@ class ThreeBossManager {
     }
     const loader = new THREE.GLTFLoader();
     loader.load(
-      'assets/models/boss_golden_butcher.glb?v=1',
+      this.cfg.file,
       (gltf) => {
         const model = gltf.scene;
         model.traverse((child) => {
@@ -108,7 +109,7 @@ class ThreeBossManager {
         this.renderer.render(this.scene, this.camera);
 
         this.isLoaded = true;
-        console.log('[ThreeBoss] Golden Butcher loaded:', Object.keys(this.actions).join(', '));
+        console.log(`[ThreeBoss] ${this.cfg.name} loaded:`, Object.keys(this.actions).join(', '));
       },
       undefined,
       (err) => {
@@ -138,7 +139,10 @@ class ThreeBossManager {
     const cfg = this.attackClips[a.key];
     const [windupF, activeF, recoverF] = cfg.phases;
     let frame;
-    if (a.phase === 'windup') {
+    if (cfg.hold !== undefined && a.phase !== 'recover') {
+      // Держит позу (юла Долбильщика: руки с молотом разведены), пока крутится
+      frame = a.phase === 'windup' ? cfg.hold * Math.min(1, a.t / a.windup) : cfg.hold;
+    } else if (a.phase === 'windup') {
       frame = windupF * Math.min(1, a.t / a.windup);
     } else if (a.phase === 'active') {
       frame = windupF + activeF * Math.min(1, a.t / Math.max(1, activeF));
@@ -149,7 +153,10 @@ class ThreeBossManager {
   }
 
   updatePose(e) {
-    if (e.attack && this.attackClips[e.attack.key]) {
+    if (e.blinkAnim > 0 && !e.attack && this.actions['Blink']) {
+      // Мерцание Долбильщика: вздрагивает, пока перескакивает
+      this.playClip('Blink', (16 - e.blinkAnim) / 60);
+    } else if (e.attack && this.attackClips[e.attack.key]) {
       this.playClip(this.attackClips[e.attack.key].clip, this.attackClipTime(e));
     } else if (e.isMoving) {
       // Walk cadence follows movement speed (clip stride matches ~1.9 px/frame)
@@ -169,7 +176,21 @@ class ThreeBossManager {
 
     // Hit flash (white) and enraged glow (pulsing orange) through the material emissive
     let r = 0, g = 0, b = 0;
-    if (e.invuln > 0) {
+    if (e.type === 'pounder') {
+      // Долбильщик: мерцая — фиолетовый пульс, в ярости — ровное фиолетовое свечение ядра
+      if (e.hitFlash > 0) {
+        r = g = b = 0.45;
+      } else if (e.blinking > 0) {
+        const pulse = 0.3 + Math.sin(e.animTimer * 0.6) * 0.15;
+        r = pulse * 0.7; g = pulse * 0.25; b = pulse;
+      } else if (e.isClone) {
+        // Копия: ровный холодный фиолетовый отсвет
+        r = 0.22; g = 0.1; b = 0.38;
+      } else if (e.phase >= 2) {
+        const pulse = 0.12 + Math.sin(e.animTimer * 0.2) * 0.05;
+        r = pulse * 0.6; g = pulse * 0.15; b = pulse;
+      }
+    } else if (e.invuln > 0) {
       // Входит в берсерк, неуязвим: раскалённое золото, частый пульс
       const pulse = 0.34 + Math.sin(e.animTimer * 0.5) * 0.14;
       r = pulse; g = pulse * 0.72; b = pulse * 0.18;
@@ -191,6 +212,8 @@ class ThreeBossManager {
     if (!this.isLoaded) return null;
     const drawSize = this.frustumSize * this.pxPerMeter;
     const feetOffset = this.lookAtY * Math.cos(this.pitch) * this.pxPerMeter;
+    // В прыжке тень остаётся на земле, а фигура уходит вверх (e.z) — тень от неё не рисуем
+    if (e.z > 20) return null;
     return { img: this.canvas, x: e.x - drawSize / 2, y: e.y - drawSize / 2 - feetOffset, w: drawSize, h: drawSize, footY: e.y, live: true };
   }
 
@@ -212,7 +235,15 @@ class ThreeBossManager {
     ctx.ellipse(0, 4, 50, 20, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (e.invuln > 0) {
+    if (e.type === 'pounder') {
+      if (e.blinking > 0 || e.phase >= 2) {
+        ctx.strokeStyle = `rgba(168, 85, 247, ${(e.blinking > 0 ? 0.7 : 0.45) + Math.sin(e.animTimer * 0.4) * 0.25})`;
+        ctx.lineWidth = e.blinking > 0 ? 5 : 3;
+        ctx.beginPath();
+        ctx.ellipse(0, 4, 58, 24, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    } else if (e.invuln > 0) {
       ctx.strokeStyle = `rgba(250, 204, 21, ${0.7 + Math.sin(e.animTimer * 0.5) * 0.3})`;
       ctx.lineWidth = 6;
       ctx.beginPath();
@@ -228,10 +259,56 @@ class ThreeBossManager {
       ctx.stroke();
     }
 
-    ctx.drawImage(this.canvas, -drawSize / 2, -drawSize / 2 - feetOffset, drawSize, drawSize);
+    const top = -drawSize / 2 - feetOffset - (e.z || 0);
+    if (e.blinking > 0) {
+      // Мерцает между измерениями: полупрозрачный, полосы кадра съезжают вбок
+      const strips = 12, sh = drawSize / strips;
+      ctx.globalAlpha = 0.5 + Math.sin(e.animTimer * 0.9) * 0.15;
+      for (let i = 0; i < strips; i++) {
+        const glitch = Math.random() < 0.25 ? (Math.random() - 0.5) * 26 : 0;
+        ctx.drawImage(this.canvas, 0, i * this.height / strips, this.width, this.height / strips,
+          -drawSize / 2 + glitch, top + i * sh, drawSize, sh);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      // Копия Долбильщика полупрозрачная — видно, кто настоящий
+      if (e.isClone) ctx.globalAlpha = 0.72;
+      ctx.drawImage(this.canvas, -drawSize / 2, top, drawSize, drawSize);
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
     return true;
   }
 }
 
-window.threeBoss = new ThreeBossManager();
+window.threeBoss = new ThreeBossManager({
+  name: 'Golden Butcher',
+  file: 'assets/models/boss_golden_butcher.glb?v=1',
+  attackClips: {
+    slash: { clip: 'Attack_Slash', phases: [34, 8, 30] },
+    chop: { clip: 'Attack_Chop', phases: [52, 6, 50] },
+    spin: { clip: 'Attack_Spin', phases: [38, 30, 44] },
+    lunge: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
+    // Захват: своего клипа нет — тот же рывок вперёд, только на месте и быстрее
+    grab: { clip: 'Attack_Lunge', phases: [40, 14, 36] },
+    // Землетрясение берсерка: тот же удар сверху, меч уходит в землю
+    quake: { clip: 'Attack_Chop', phases: [52, 6, 50] }
+  }
+});
+
+// Босс Промзоны: грузится при первом заходе в неё (environment.setLocation). Фазы клипов —
+// tools/build_promzona_boss_blender.py; у прыжка «замах» — присед и полёт (36 + 34)
+window.threePounder = new ThreeBossManager({
+  name: 'Interdimensional Pounder',
+  file: 'assets/models/boss_dolbilshchik.glb?v=1',
+  lazy: true,
+  attackClips: {
+    slam: { clip: 'Attack_Slam', phases: [44, 6, 42] },
+    sweep: { clip: 'Attack_Sweep', phases: [30, 10, 34] },
+    electric: { clip: 'Attack_Electric', phases: [56, 12, 40] },
+    leap: { clip: 'Attack_Leap', phases: [70, 6, 44] },
+    // Электробуря — тот же удар в землю; юла — поза конца размаха, крутится сама модель
+    storm: { clip: 'Attack_Slam', phases: [44, 6, 42] },
+    spin: { clip: 'Attack_Sweep', phases: [30, 10, 34], hold: 40 }
+  }
+});

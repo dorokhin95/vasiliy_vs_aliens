@@ -29,8 +29,9 @@ window.Menu = (() => {
   //     Сохранение формата 5 читается как город
   const SAVE_FORMAT = 6;
   // Раскладка карты: с версии 2 в городе нет штабов, и на их месте встали два тайника — номера тайников
-  // после них сдвинулись. Мир старой раскладки ищет тайник по месту, где тот стоял (applyWorld)
-  const LAYOUT_VERSION = 2;
+  // после них сдвинулись; с версии 3 в СЗ углу Промзоны логово Долбильщика. Мир старой раскладки ищет
+  // тайник по месту, где тот стоял (applyWorld)
+  const LAYOUT_VERSION = 3;
   const WORLD_FORMAT = 5;
   const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute', 'stormtrooper', 'rocketeer']);
   const CODE_PREFIX = 'VVA1';
@@ -94,8 +95,11 @@ window.Menu = (() => {
         ['Пробел', 'Перекат (тратит выносливость)'],
         ['E', 'Обыскать тайник / лавка Михалыча'],
         ['R', 'Перезарядка'],
-        ['Q', 'Следующее оружие'],
+        ['Q', 'Ближнее ↔ дальнее оружие'],
+        ['Колесо', 'Сменить оружие'],
         ['1–8', 'Слоты хотбара (порядок — перетаскиванием мышью)'],
+        ['I', 'Инвентарь'],
+        ['C', 'Персонаж: характеристики, перки, карты'],
         ['ESC', 'Пауза / закрыть окно'],
         ['F3', 'Счётчик FPS']
       ]
@@ -152,8 +156,11 @@ window.Menu = (() => {
         ['Space', 'Dodge roll (uses stamina)'],
         ['E', 'Scavenge / Mikhalych\'s shop'],
         ['R', 'Reload'],
-        ['Q', 'Next weapon'],
+        ['Q', 'Melee ↔ ranged weapon'],
+        ['Wheel', 'Switch weapon'],
         ['1–8', 'Hotbar slots (drag with the mouse to reorder)'],
+        ['I', 'Inventory'],
+        ['C', 'Character: stats, perks, cards'],
         ['ESC', 'Pause / close window'],
         ['F3', 'FPS counter']
       ]
@@ -226,7 +233,7 @@ window.Menu = (() => {
   let lastSaveAt = 0;
   let saveRequested = false;
 
-  const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED';
+  const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED' || gameState === 'INVENTORY';
 
   // Бой — когда рядом есть враг, который гонится за Василием. Иначе можно было бы сохраниться
   // посреди драки и обновлением страницы сбежать к Михалычу со всем добытым в бою
@@ -290,7 +297,10 @@ window.Menu = (() => {
       fence: { state: fenceBreach.state, cracks: fenceBreach.cracks },
       loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
       enemyTotal: levelEnemyTotal,
-      enemies: enemies.filter(e => e.type !== 'boss').map(e => ({
+      // Долбильщик есть только в Промзоне, как Мясник — только в городе
+      pounderDefeated: currentLocation === 'promzona' && !pounderRef,
+      pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp), phase: pounderRef.phase } : null,
+      enemies: enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder').map(e => ({
         type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
         armor: e.armor || 0,
         radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
@@ -449,6 +459,15 @@ window.Menu = (() => {
         placeObstacleFor(b, 'bin');
       });
     }
+    if (w.pounderDefeated && pounderRef) {
+      const i = enemies.indexOf(pounderRef);
+      if (i >= 0) enemies.splice(i, 1);
+      pounderRef = null;
+    } else if (w.pounder && pounderRef) {
+      pounderRef.hp = num(w.pounder.hp, pounderRef.maxHp, 1, pounderRef.maxHp);
+      // Фаза не повторяется после загрузки; копии 20% не сохраняются — после загрузки их нет
+      pounderRef.phase = Math.floor(num(w.pounder.phase, 1, 1, 3));
+    }
     if (w.bossDefeated && bossRef) {
       const i = enemies.indexOf(bossRef);
       if (i >= 0) enemies.splice(i, 1);
@@ -472,7 +491,7 @@ window.Menu = (() => {
     // Живые враги (формат 2). В формате 1 их нет — остаются только что расставленные
     if (Array.isArray(w.enemies)) {
       for (let i = enemies.length - 1; i >= 0; i--) {
-        if (enemies[i].type !== 'boss') enemies.splice(i, 1);
+        if (enemies[i].type !== 'boss' && enemies[i].type !== 'pounder') enemies.splice(i, 1);
       }
       w.enemies.forEach(d => {
         if (!d || !ENEMY_TYPES.has(d.type)) return;
@@ -743,8 +762,10 @@ window.Menu = (() => {
       if (!el.dataset.armed) el.textContent = tr(el.dataset.t);
     });
     document.querySelectorAll('[data-tp]').forEach(el => { el.placeholder = tr(el.dataset.tp); });
-    const list = $('set-controls');
-    if (list) {
+    // Подсказки по управлению — в настройках и в меню паузы
+    ['set-controls', 'pause-controls'].forEach(id => {
+      const list = $(id);
+      if (!list) return;
       list.innerHTML = '';
       tr('controls').forEach(([key, what]) => {
         const k = document.createElement('kbd');
@@ -753,7 +774,7 @@ window.Menu = (() => {
         d.textContent = what;
         list.append(k, d);
       });
-    }
+    });
     refreshMenu();
     if (gameState === 'PAUSED') updatePauseStatus();
     if (settingsOpen()) syncSettingsUI();
@@ -762,6 +783,7 @@ window.Menu = (() => {
   function onEscape() {
     if (settingsOpen()) closeSettings();
     else if (gameState === 'SHOP') closeShop();
+    else if (gameState === 'INVENTORY') window.CharacterPanel.close();
     else if (gameState === 'PLAYING') pause();
     else if (gameState === 'PAUSED') resume();
   }

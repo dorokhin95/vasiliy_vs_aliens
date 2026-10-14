@@ -28,6 +28,7 @@ window.BossCards = (function () {
   const SWAPS = 5;
   const TEXT = {
     kicker: { ru: 'ТРОФЕЙ ЗОЛОТОГО МЯСНИКА', en: 'GOLDEN BUTCHER\'S TROPHY' },
+    kicker_pounder: { ru: 'ТРОФЕЙ МЕЖПРОСТРАНСТВЕННОГО ДОЛБИЛЬЩИКА', en: 'THE INTERDIMENSIONAL POUNDER\'S TROPHY' },
     remember: { ru: 'Запомни карты…', en: 'Remember the cards…' },
     shuffle: { ru: 'Михалыч тасует…', en: 'Mikhalych shuffles…' },
     pick: { ru: 'Тяни одну карту', en: 'Draw one card' },
@@ -106,10 +107,11 @@ window.BossCards = (function () {
     }
   }
 
-  function open(onPick) {
+  // kicker — чей трофей (ключ TEXT): Мясника в городе, Долбильщика в Промзоне
+  function open(onPick, kicker = 'kicker') {
     const modal = $('cards-modal');
     build();
-    $('cards-kicker').textContent = tx('kicker');
+    $('cards-kicker').textContent = tx(kicker);
     $('cards-title').textContent = tx('remember');
     $('cards-sub').textContent = '';
     const btn = $('cards-continue');

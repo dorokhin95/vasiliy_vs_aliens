@@ -884,6 +884,13 @@ const LANGS = {
     toads_left: "Жаб осталось",
     boss_alive: "☠ Мясник жив",
     boss_dead: "✓ Мясник повержен",
+    pounder_name: "МЕЖПРОСТРАНСТВЕННЫЙ ДОЛБИЛЬЩИК",
+    pounder_storm: "ЭЛЕКТРОБУРЯ!",
+    pounder_clones: "Расслоился между измерениями — две копии!",
+    pounder_blink: "МЕРЦАЕТ — неуязвим",
+    pounder_defeated: "🏆 ДОЛБИЛЬЩИК ПОВЕРЖЕН!",
+    pounder_alive: "☠ Долбильщик жив",
+    pounder_dead: "✓ Долбильщик повержен",
     cleared_hud: "✅ ЛОКАЦИЯ ЗАЧИЩЕНА",
     level_cleared: "ЛОКАЦИЯ ЗАЧИЩЕНА",
     level_cleared_sub: "Ни одной жабы не осталось. Забор за логовом Мясника треснул — иди и проломи его.",
@@ -962,6 +969,13 @@ const LANGS = {
     toads_left: "Toads left",
     boss_alive: "☠ Butcher alive",
     boss_dead: "✓ Butcher down",
+    pounder_name: "THE INTERDIMENSIONAL POUNDER",
+    pounder_storm: "ELECTRIC STORM!",
+    pounder_clones: "Split across dimensions — two copies!",
+    pounder_blink: "BLINKING — invulnerable",
+    pounder_defeated: "🏆 THE POUNDER IS DOWN!",
+    pounder_alive: "☠ Pounder alive",
+    pounder_dead: "✓ Pounder down",
     cleared_hud: "✅ AREA CLEARED",
     level_cleared: "AREA CLEARED",
     level_cleared_sub: "Not a single toad left. The fence behind the Butcher's lair has cracked — go and smash it.",
@@ -1361,6 +1375,7 @@ function generateWorld() {
   // Декор (фонари, дворы, рельсы, дымка за забором) у каждой локации свой — до buildObstacles, который его раскладывает
   if (window.environmentRenderer) window.environmentRenderer.setLocation(currentLocation);
   bossRef = null;
+  pounderRef = null;
   buildings = [];
   roads = [];
   containers = [];
@@ -1369,6 +1384,7 @@ function generateWorld() {
   enemyBullets = [];
   rockets = [];
   rocketBlasts = [];
+  pounderRings = [];
   particles = [];
   muzzleFlashes = [];
   shellCasings = [];
@@ -1677,6 +1693,7 @@ function generateWorld() {
   generateBioPuddles();
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   if (currentLocation === 'city') spawnBoss();
+  else if (currentLocation === 'promzona') spawnPounder();
   levelEnemyTotal = enemies.filter(e => e.type !== 'boss').length;
   levelCleared = false;
 }
@@ -1732,14 +1749,17 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
   const TRACK_A = 4950, TRACK_B = 5070;
 
   // --- Градирни (квако-гнездо) — северо-запад, два квартала
+  // В самом углу (0, 0) — логово Долбильщика (POUNDER_HOME): градирня, насосная и эстакада только в (0, 1)
   [block(0, 0), block(0, 1)].forEach((bl, i) => {
-    factory('building_cooling_tower', bl.x1 + 200, bl.y2 - 400, 520);
-    factory('building_pump_station', bl.x1 + 120, bl.y2 - 120 - depthOf('building_pump_station', 240), 240);
-    factory('prop_pipe_rack', bl.x2 - 330, bl.y1 + 260 + i * 120, 260, { noCollide: true });
+    if (i === 1) {
+      factory('building_cooling_tower', bl.x1 + 200, bl.y2 - 400, 520);
+      factory('building_pump_station', bl.x1 + 120, bl.y2 - 120 - depthOf('building_pump_station', 240), 240);
+      factory('prop_pipe_rack', bl.x2 - 330, bl.y1 + 260 + i * 120, 260, { noCollide: true });
+    }
     placeContainer(bl.x2 - 200, bl.y2 - 140, 'barrel');
     placeContainer(bl.x2 - 150, bl.y2 - 120, 'barrel');
     placeContainer(bl.x1 + 120, bl.y1 + 160, 'barrel');
-    spawns(bl, 7);
+    spawns(bl, i === 0 ? 4 : 7);
   });
 
   // --- Шлам-пруды — запад между проспектом и южной кольцевой: лужи шлама (generateBioPuddles), эстакады
@@ -1885,6 +1905,8 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
 
     // Не спавнить внутри зданий/заборов/труб
     if (checkWalkCollision(ex, ey, 36)) continue;
+    // И на площадке логова Долбильщика
+    if (currentLocation === 'promzona' && Math.hypot(ex - POUNDER_HOME.x, ey - POUNDER_HOME.y) < POUNDER_LAIR_R + 60) continue;
 
     const dist = distOverride || getDistrictAt(ex, ey);
     if (dist.id === 'hub') continue;
@@ -2003,6 +2025,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
     if (window.Menu) window.Menu.onEscape();
     else if (gameState === 'SHOP') closeShop();
+  }
+
+  // I — инвентарь, C — персонаж (src/inventory.js); та же клавиша закрывает
+  if ((e.code === 'KeyI' || e.code === 'KeyC') && window.CharacterPanel && (gameState === 'PLAYING' || gameState === 'INVENTORY')) {
+    window.CharacterPanel.toggle(e.code === 'KeyI' ? 'inventory' : 'stats');
+    return;
   }
 
   if (gameState === 'PLAYING') {
@@ -3028,6 +3056,14 @@ function armorFactor(armor, weapon) {
 // Возвращает фактический урон и как он прошёл, чтобы место вызова показало цифру
 function damageEnemy(e, dmg, weapon, fromX, fromY) {
   if (e.type === 'boss') return damageBoss(e, dmg, weapon, fromX, fromY);
+  if (e.type === 'pounder' && e.blinking > 0) {
+    // Мерцает между измерениями: удары проходят насквозь
+    e.isAggroed = true;
+    const ha = Math.atan2(fromY - e.y, fromX - e.x);
+    spawnDirectionalSparks(e.x + Math.cos(ha) * 36, e.y - 60 + Math.sin(ha) * 30, ha, 1.4, 4, '#d8b4fe', 3, 9, 8);
+    sayLine('say_boss_invuln');
+    return { dealt: 0, invuln: true };
+  }
   const armor = e.armor || 0;
   let fromBehind = false;
   if (armor > 0) {
@@ -3630,7 +3666,7 @@ function shootPlayerWeapon() {
           e.hitFlash = 6;
 
           // Отбрасывание жабы шипованной битой (чтобы можно было держать дистанцию в стартовой зоне!)
-          const kb = e.type === 'boss' ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
+          const kb = (e.type === 'boss' || e.type === 'pounder') ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
           const kx = e.x + Math.cos(toEnemyAngle) * kb;
           const ky = e.y + Math.sin(toEnemyAngle) * kb;
           if (!checkWalkCollision(kx, ky, e.radius, footDY(e))) {
@@ -4082,7 +4118,7 @@ function obstacleHits(o, x, y, r) {
 // Точка x, y персонажа — середина фигуры, а ступни нарисованы ниже: у Василия на ~31 px, у жаб на ~20,
 // у громилы на ~38, у босса ровно в ней. Ходьба проверяется по ступням: иначе сзади персонаж заходил
 // ногами на машину или кромку крыши, а спереди не мог подойти вплотную.
-const FOOT_DY = { player: 24, grunt: 14, sniper: 12, brute: 30, stormtrooper: 14, rocketeer: 14, boss: 0 };
+const FOOT_DY = { player: 24, grunt: 14, sniper: 12, brute: 30, stormtrooper: 14, rocketeer: 14, boss: 0, pounder: 0 };
 function footDY(ent) {
   return ent === player ? FOOT_DY.player : (FOOT_DY[ent.type] || 0);
 }
@@ -4862,7 +4898,7 @@ function rocketExplode(r) {
   }
   // Своих не жалеет: взрыв бьёт и жаб
   enemies.forEach(en => {
-    if (en.type === 'boss') return;
+    if (en.type === 'boss' || en.type === 'pounder') return;
     if (inGroundEllipse(en.x, en.y + footDY(en), x, y, RK_BLAST_R + en.radius * 0.5)) {
       const hit = damageEnemy(en, r.dmg, 'rocket', x, y);
       en.hitFlash = 6;
@@ -4981,7 +5017,7 @@ function playerDodged() {
 function offerBossCards() {
   if (!window.BossCards || gameState !== 'PLAYING') return;
   gameState = 'CARDS';
-  window.BossCards.open(applyBossCard);
+  window.BossCards.open(applyBossCard, currentLocation === 'promzona' ? 'kicker_pounder' : 'kicker');
 }
 
 function applyBossCard(id) {
@@ -5162,11 +5198,11 @@ function drawBreachHint(ctx) {
   ctx.restore();
 }
 
-// Когда локация зачищена, золотая стрелка у края экрана показывает, где пролом, и сколько до него
+// Когда город зачищен, золотая стрелка у края экрана показывает, где пролом, и сколько до него
 function drawBreachMarker() {
   if (gameState !== 'PLAYING' || fenceBreach.state === 'intact') return;
-  // В городе — когда он зачищен; в Промзоне пролом — единственная дорога к Михалычу, стрелка видна всегда
-  if (currentLocation === 'city' && !levelCleared) return;
+  // Только в городе, когда он зачищен: показывает, куда идти дальше. В Промзоне стрелки нет
+  if (currentLocation !== 'city' || !levelCleared) return;
   const markY = breachFenceY() + breachInward() * 20;
   const sx = fenceBreach.x - camera.x, sy = markY - camera.y;
   const w = canvas.width, h = canvas.height;
@@ -5267,7 +5303,7 @@ function drawFumeAura(ctx) {
 // Хмельная жаба: над головой кружат пузыри перегара
 function drawFumeTipsy(ctx, e) {
   const t = performance.now() / 1000 + e.x * 0.01;
-  const headY = e.y - (e.type === 'boss' ? 118 : e.type === 'brute' ? 92 : 52);
+  const headY = e.y - (e.type === 'boss' || e.type === 'pounder' ? 118 : e.type === 'brute' ? 92 : 52);
   ctx.save();
   for (let k = 0; k < 3; k++) {
     const a = t * 3 + k * (Math.PI * 2 / 3);
@@ -5751,7 +5787,7 @@ function landThrowable(f) {
   }
   // По своим тоже прилетает
   enemies.forEach(en => {
-    if (en === f.thrower || en.type === 'boss') return;
+    if (en === f.thrower || en.type === 'boss' || en.type === 'pounder') return;
     if (Math.hypot(en.x - x, en.y + footDY(en) - y) < hitR) {
       const hit = damageEnemy(en, def.dmg, 'thrown', x, y);
       en.hitFlash = 6;
@@ -5939,44 +5975,26 @@ function updateHUD(forceWeaponRefresh = false) {
     _hudCache.bandage = player.items.bandage;
     document.getElementById('count-bandage').innerText = player.items.bandage;
   }
-  const toadsLeft = enemies.length - (bossRef ? 1 : 0);
-  const clearKey = levelCleared ? 'cleared' + currentLang : `${toadsLeft}/${levelEnemyTotal}/${bossRef ? 1 : 0}/${currentLang}`;
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder').length;
+  // Босс своей локации: Мясник в городе, Долбильщик в Промзоне
+  const bossAlive = currentLocation === 'promzona' ? !!pounderRef : !!bossRef;
+  const bossStatus = currentLocation === 'promzona'
+    ? (bossAlive ? t('pounder_alive') : t('pounder_dead'))
+    : (bossAlive ? t('boss_alive') : t('boss_dead'));
+  const clearKey = levelCleared ? 'cleared' + currentLang : `${toadsLeft}/${levelEnemyTotal}/${bossAlive ? 1 : 0}/${currentLocation}/${currentLang}`;
   if (_hudCache.clearKey !== clearKey) {
     _hudCache.clearKey = clearKey;
     const el = document.getElementById('clear-counter');
     el.classList.toggle('done', levelCleared);
     el.textContent = levelCleared ? t('cleared_hud')
-      : `🐸 ${t('toads_left')}: ${toadsLeft} / ${levelEnemyTotal}  ·  ${bossRef ? t('boss_alive') : t('boss_dead')}`;
+      : `🐸 ${t('toads_left')}: ${toadsLeft} / ${levelEnemyTotal}  ·  ${bossStatus}`;
   }
   const cdPct = Math.ceil(player.itemCooldown / CONSUMABLE_COOLDOWN * 20) * 5;
   if (_hudCache.cdPct !== cdPct) {
     _hudCache.cdPct = cdPct;
     document.querySelectorAll('.slot-cd').forEach(el => { el.style.height = cdPct + '%'; });
   }
-  if (_hudCache.scrap !== player.resources.scrap) {
-    _hudCache.scrap = player.resources.scrap;
-    document.getElementById('res-scrap').innerText = player.resources.scrap;
-  }
-  if (_hudCache.bottles !== player.resources.bottles) {
-    _hudCache.bottles = player.resources.bottles;
-    document.getElementById('res-bottles').innerText = player.resources.bottles;
-  }
-  if (_hudCache.mil_parts !== player.resources.mil_parts) {
-    _hudCache.mil_parts = player.resources.mil_parts;
-    const el = document.getElementById('res-mil-parts');
-    if (el) el.innerText = player.resources.mil_parts;
-  }
-  if (_hudCache.alien_core !== player.resources.alien_core) {
-    _hudCache.alien_core = player.resources.alien_core;
-    const el = document.getElementById('res-alien-core');
-    if (el) el.innerText = player.resources.alien_core;
-  }
-  for (const k in TROPHY_NAMES) {
-    if (_hudCache[k] === player.resources[k]) continue;
-    _hudCache[k] = player.resources[k];
-    const el = document.getElementById('res-' + k);
-    if (el) el.innerText = player.resources[k];
-  }
+  // Ресурсы и трофеи на экране не висят — они в инвентаре (I, src/inventory.js)
 
   if (_hudCache.inSlime !== !!player.inSlime) {
     _hudCache.inSlime = !!player.inSlime;
@@ -6012,9 +6030,16 @@ function updateHUD(forceWeaponRefresh = false) {
   }
 
   // Полоска здоровья босса — пока он сражается с Василием
-  const showBossBar = !!(bossRef && bossRef.isAggroed && (gameState === 'PLAYING' || gameState === 'PAUSED'));
+  const hudBoss = bossRef || pounderRef;
+  const showBossBar = !!(hudBoss && hudBoss.isAggroed && (gameState === 'PLAYING' || gameState === 'PAUSED'));
   setHudStyle(document.getElementById('boss-bar'), 'display', showBossBar ? 'flex' : 'none');
-  if (showBossBar) {
+  if (showBossBar && hudBoss === pounderRef) {
+    const pct = Math.max(0, Math.round((pounderRef.hp / pounderRef.maxHp) * 1000) / 10);
+    setHudStyle(document.getElementById('boss-bar-fill'), 'width', `${pct}%`);
+    setHudStyle(document.getElementById('boss-shield-bg'), 'display', 'none');
+    const tag = pounderRef.blinking > 0 ? t('pounder_blink') : pounderRef.phase >= 2 ? t('boss_enraged') : '';
+    setHudText(document.getElementById('boss-name'), tag ? `${t('pounder_name')} — ${tag}` : t('pounder_name'));
+  } else if (showBossBar) {
     const bossPct = Math.max(0, Math.round((bossRef.hp / bossRef.maxHp) * 1000) / 10);
     setHudStyle(document.getElementById('boss-bar-fill'), 'width', `${bossPct}%`);
     const shieldPct = Math.max(0, Math.round((bossRef.shield / BOSS_SHIELD_MAX) * 1000) / 10);
@@ -6217,11 +6242,673 @@ function handleEnemyKilled(index) {
     onBossDefeated(dead);
     return;
   }
+  if (dead.type === 'pounder') {
+    enemies.splice(index, 1);
+    onPounderDefeated(dead);
+    return;
+  }
   if (dead.throwState) cancelThrow(dead);
   createParticles(dead.x, dead.y, dead.type === 'brute' ? '#a855f7' : '#16a34a', 22);
   spawnLootDrop(dead);
   enemies.splice(index, 1);
   // Респауна нет: цель локации — перебить всех (см. checkLevelCleared)
+}
+
+// --- БОСС ПРОМЗОНЫ «МЕЖПРОСТРАНСТВЕННЫЙ ДОЛБИЛЬЩИК» (логово в СЗ углу у градирен, docs/LEVEL2_PROMZONA.md, этап 9) ---
+// Молот-долбёжник: удар сверху (кольцо перед собой), размах на 240°, электрический молот — разряд по земле
+// прямой с оглушением, прыжок с ударом при приземлении. Фазы:
+//   - с 50% здоровья — «электробуря»: удар в землю, от него расходятся электрические кольца (урон и
+//     оглушение, перекатом можно перепрыгнуть), сразу за ним — юла: крутится с молотом и несётся на Василия;
+//     потом шатается — окно для атаки. Комбо повторяется раз в POUNDER_STORM_CD;
+//   - с 20% — мерцание: 15 с неуязвим и перескакивает, и расслаивается — две копии чуть слабее, с теми же
+//     приёмами. Мерцание повторяется раз в 40 с. Погиб он — копии рассыпаются.
+// Щита, как у Мясника, нет. Рисует его window.threePounder (three_boss.js), клипы —
+// tools/build_promzona_boss_blender.py
+const POUNDER_HOME = { x: 660, y: 640 };
+const POUNDER_LAIR_R = 330;            // площадка логова на земле; жабы и деревья туда не ставятся
+const POUNDER_LEASH = 1050;            // дальше Василий — уходит домой и зализывает раны
+const POUNDER_MAX_HP = 6500;
+const POUNDER_ARMOR = 0.35;            // ржавые наплечники спереди, со спины — полный урон
+const POUNDER_REGEN = 0.0004;          // доля здоровья за кадр вне боя
+// Тайминги — кадры при 60 Гц, как фазы клипов. reach — насколько впереди центр кольца удара сверху;
+// arc — половина угла размаха; у прыжка windup = присед (squat) + полёт
+const POUNDER_ATTACKS = {
+  slam: { windup: 44, active: 6, recover: 42, range: 160, reach: 70, damage: 70 },
+  sweep: { windup: 30, active: 10, recover: 34, range: 190, arc: 2.09, damage: 50 },
+  electric: { windup: 56, active: 12, recover: 40, range: 480, width: 64, damage: 35, stun: 90, cooldown: 540 },
+  leap: { windup: 70, squat: 36, active: 6, recover: 44, range: 140, maxJump: 400, height: 120, damage: 60, cooldown: 420 },
+  // Электробуря: удар в землю, кольца расходятся (rings штук через ringGap кадров, ringSpeed px/кадр до range)
+  storm: { windup: 50, active: 6, recover: 20, range: 560, rings: 3, ringGap: 26, ringSpeed: 6, ringWidth: 26, damage: 25, stun: 60 },
+  // Юла: active кадров несётся на Василия, доворачивая не быстрее turn рад/кадр; касание — урон раз в hitEvery
+  spin: { windup: 16, active: 240, recover: 110, speed: 3.7, turn: 0.035, range: 70, damage: 30, hitEvery: 30 }
+};
+const POUNDER_STORM_AT = 0.5;
+const POUNDER_STORM_CD = 1200;         // 20 с между электробурями
+const POUNDER_CLONES_AT = 0.2;
+const POUNDER_CLONE_HP = 0.25;         // доля здоровья хозяина у копии
+const POUNDER_CLONE_DMG = 0.75;        // и доля урона
+const POUNDER_BLINK = 900;             // 15 с неуязвимости
+const POUNDER_BLINK_CD = 2400;         // 40 с перезарядки после мерцания
+const POUNDER_HOP = 120;               // перескок раз в ~2 с (+ до 40 случайно)
+let pounderRef = null;
+let pounderRings = [];                 // электрические кольца бури: { x, y, r, life, owner, hit }
+
+function newPounder(x, y, hp, extra) {
+  return Object.assign({
+    type: 'pounder',
+    x, y,
+    radius: 40,
+    hp, maxHp: hp,
+    armor: POUNDER_ARMOR,
+    dmgMult: 1,
+    speed: 1.8,
+    aggroRadius: 420,
+    isAggroed: false,
+    districtId: 'pz_cooling', tier: 4,
+    hitFlash: 0,
+    angle: Math.PI / 2,
+    animTimer: 0,
+    isMoving: false,
+    attack: null,
+    attackCooldown: 0,
+    electricCd: 0,
+    leapCd: 0,
+    stormCd: 0,
+    phase: 1,
+    blinking: 0,
+    blinkCd: 0,
+    hopTimer: 0,
+    blinkAnim: 0,
+    z: 0,
+    introShown: false
+  }, extra);
+}
+
+function spawnPounder() {
+  pounderRef = newPounder(POUNDER_HOME.x, POUNDER_HOME.y, POUNDER_MAX_HP, {});
+  enemies.push(pounderRef);
+}
+
+// Свободное место в 120–200 px от точки, внутри логова
+function pounderFreeSpot(e, cx, cy) {
+  for (let k = 0; k < 16; k++) {
+    const a = Math.random() * Math.PI * 2, r = 120 + Math.random() * 80;
+    const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * GROUND_SQUASH;
+    if (Math.hypot(x - POUNDER_HOME.x, y - POUNDER_HOME.y) > POUNDER_LEASH * 0.8) continue;
+    if (x < 80 || y < 80 || checkWalkCollision(x, y, e.radius, footDY(e))) continue;
+    return { x, y };
+  }
+  return null;
+}
+
+// Перескок через измерения: вспышка там и тут
+function pounderHop(e, tx, ty) {
+  let x = tx, y = ty;
+  if (x === undefined) {
+    const s = pounderFreeSpot(e, e.x, e.y);
+    if (!s) return;
+    x = s.x;
+    y = s.y;
+  }
+  spawnDirectionalSparks(e.x, e.y - 60, -Math.PI / 2, Math.PI * 2, 14, '#c084fc', 3, 10, 14);
+  createParticles(e.x, e.y - 40, '#a855f7', 10);
+  e.x = x;
+  e.y = y;
+  e.blinkAnim = 16;
+  spawnDirectionalSparks(x, y - 60, -Math.PI / 2, Math.PI * 2, 14, '#e9d5ff', 3, 10, 14);
+  const vol = enemySoundVolume(x, y);
+  if (vol > 0) SoundFX.toadPlasma(vol);
+}
+
+// 20%: расслаивается — две копии рядом, сразу в бой
+function spawnPounderClones(e) {
+  for (let i = 0; i < 2; i++) {
+    const s = pounderFreeSpot(e, e.x, e.y) || { x: e.x + (i ? 90 : -90), y: e.y };
+    const c = newPounder(s.x, s.y, Math.round(e.maxHp * POUNDER_CLONE_HP), {
+      isClone: true, dmgMult: POUNDER_CLONE_DMG, isAggroed: true, introShown: true,
+      phase: 2, stormCd: 300 + i * 360, electricCd: 120 + i * 200, blinkAnim: 16, attackCooldown: 40 + i * 30
+    });
+    enemies.push(c);
+    spawnDirectionalSparks(s.x, s.y - 60, -Math.PI / 2, Math.PI * 2, 20, '#e9d5ff', 4, 12, 16);
+  }
+}
+
+function startPounderAttack(e, key) {
+  const def = POUNDER_ATTACKS[key];
+  const tempo = e.phase >= 2 ? 0.85 : 1.0;
+  const a = {
+    key, phase: 'windup', t: 0,
+    windup: Math.round(def.windup * tempo),
+    recover: Math.round(def.recover * tempo),
+    aim: Math.atan2(player.y - e.y, player.x - e.x),
+    hit: false
+  };
+  if (key === 'electric') e.electricCd = def.cooldown;
+  if (key === 'leap') {
+    e.leapCd = def.cooldown;
+    a.squat = Math.round(def.squat * tempo);
+  }
+  if (key === 'storm') e.stormCd = POUNDER_STORM_CD;
+  e.attack = a;
+}
+
+// Куда приземлится прыжок: к Василию, не дальше maxJump, на свободное место
+function pounderLeapTarget(e, def) {
+  const d = Math.min(def.maxJump, Math.hypot(player.x - e.x, player.y - e.y));
+  const a = Math.atan2(player.y - e.y, player.x - e.x);
+  for (let s = d; s > 0; s -= 20) {
+    const x = e.x + Math.cos(a) * s, y = e.y + Math.sin(a) * s;
+    if (!checkWalkCollision(x, y, e.radius, footDY(e))) return { x, y };
+  }
+  return { x: e.x, y: e.y };
+}
+
+// Центр кольца удара сверху: молот бьёт в землю перед ним
+function pounderSlamCenter(e, a) {
+  const def = POUNDER_ATTACKS.slam;
+  return { x: e.x + Math.cos(a.aim) * def.reach, y: e.y + 4 + Math.sin(a.aim) * def.reach * GROUND_SQUASH };
+}
+
+// Удар по Василию с учётом силы копии
+function pounderHit(e, damage) {
+  bossHitPlayer(e, Math.round(damage * e.dmgMult));
+}
+
+function onPounderStrike(e, a, def) {
+  if (a.key === 'slam') {
+    const c = pounderSlamCenter(e, a);
+    spawnShockwave(c.x, c.y, def.range, '#a855f7', 28);
+    spawnDirectionalSparks(c.x, c.y, -Math.PI / 2, Math.PI * 2, 16, '#c084fc', 4, 12, 16);
+    shakeScreen(16, 14);
+    SoundFX.bossSwing(true);
+  } else if (a.key === 'sweep') {
+    muzzleFlashes.push({ x: e.x, y: e.y - 30, angle: a.aim, type: 'boss_slash', life: 12, maxLife: 12, scale: def.range / 54 });
+    SoundFX.bossSwing(false);
+  } else if (a.key === 'electric') {
+    // Боёк в землю — разряд бежит по земле прямой
+    a.bolt = { x: e.x + Math.cos(a.aim) * 50, y: e.y + 4 + Math.sin(a.aim) * 50 * GROUND_SQUASH };
+    spawnDirectionalSparks(a.bolt.x, a.bolt.y, -Math.PI / 2, Math.PI * 2, 18, '#e9d5ff', 4, 12, 14);
+    shakeScreen(10, 8);
+    SoundFX.bossSwing(true);
+    const vol = enemySoundVolume(e.x, e.y);
+    if (vol > 0) SoundFX.explosion(vol * 0.6);
+  } else if (a.key === 'leap') {
+    e.z = 0;
+    spawnShockwave(e.x, e.y + 4, def.range, '#a855f7', 30);
+    spawnDirectionalSparks(e.x, e.y, -Math.PI / 2, Math.PI * 2, 20, '#c084fc', 4, 12, 16);
+    shakeScreen(22, 18);
+    SoundFX.bossSwing(true);
+  } else if (a.key === 'storm') {
+    spawnShockwave(e.x, e.y + 4, 180, '#c084fc', 30);
+    spawnDirectionalSparks(e.x, e.y, -Math.PI / 2, Math.PI * 2, 26, '#e9d5ff', 4, 13, 18);
+    shakeScreen(28, 20);
+    SoundFX.bossSwing(true);
+    const vol = enemySoundVolume(e.x, e.y);
+    if (vol > 0) SoundFX.explosion(vol * 0.8);
+    a.ringsLeft = def.rings;
+    a.ringTimer = 0;
+  } else if (a.key === 'spin') {
+    SoundFX.bossSwing(true);
+  }
+}
+
+function updatePounderStrike(e, a, def) {
+  const dx = player.x - e.x, dy = player.y - e.y;
+  const dist = Math.hypot(dx, dy);
+  const footY = player.y + footDY(player);
+  if (a.key === 'slam') {
+    const c = pounderSlamCenter(e, a);
+    if (a.t === 1 && inGroundEllipse(player.x, footY, c.x, c.y, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
+  } else if (a.key === 'sweep') {
+    if (a.t === 3 && dist < def.range + player.radius) {
+      let diff = Math.atan2(dy, dx) - a.aim;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const hp0 = player.hp;
+      if (Math.abs(diff) < def.arc) pounderHit(e, def.damage);
+      if (player.hp < hp0) {
+        // Размах отбрасывает
+        player.stunTimer = Math.max(player.stunTimer || 0, 14);
+        player.knockFrames = 14;
+        player.knockVx = Math.cos(Math.atan2(dy, dx)) * 12;
+        player.knockVy = Math.sin(Math.atan2(dy, dx)) * 12;
+      }
+    }
+  } else if (a.key === 'electric') {
+    // Фронт разряда за active кадров пробегает всю длину; кого догнал в полосе — урон и оглушение
+    const front = def.range * Math.min(1, a.t / def.active);
+    const along = (player.x - a.bolt.x) * Math.cos(a.aim) + (footY - a.bolt.y) * Math.sin(a.aim);
+    const across = Math.abs(-(player.x - a.bolt.x) * Math.sin(a.aim) + (footY - a.bolt.y) * Math.cos(a.aim));
+    const fx = a.bolt.x + Math.cos(a.aim) * front, fy = a.bolt.y + Math.sin(a.aim) * front;
+    spawnDirectionalSparks(fx, fy, -Math.PI / 2, Math.PI * 1.5, 3, '#d8b4fe', 3, 8, 10);
+    if (!a.hit && along > -player.radius && along < front && across < def.width / 2 + player.radius * 0.5) {
+      a.hit = true;   // кого фронт прошёл — того уже не ударит, даже если увернулся
+      const hp0 = player.hp;
+      pounderHit(e, def.damage);
+      if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
+    }
+  } else if (a.key === 'leap') {
+    if (a.t === 1 && inGroundEllipse(player.x, footY, e.x, e.y + 4, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
+  } else if (a.key === 'storm') {
+    // Кольца выпускаются и в фазе восстановления — см. advancePounderAttack
+  } else if (a.key === 'spin') {
+    // Юла: несётся на Василия, доворачивая медленно — от неё можно уйти в сторону
+    const want = Math.atan2(dy, dx);
+    a.dir = turnToward(a.dir === undefined ? want : a.dir, want, def.turn);
+    const px = e.x, py = e.y;
+    slideMove(e, Math.cos(a.dir) * def.speed, Math.sin(a.dir) * def.speed, e.radius, true);
+    a.aim += 0.55;                          // модель крутится
+    if (a.t % 3 === 0) spawnDirectionalSparks(e.x, e.y - 20, a.aim, 0.6, 2, '#c084fc', 3, 9, 10);
+    if (a.t % 4 === 0) createParticles(e.x, e.y + 10, '#78716c', 2);
+    a.hitCd = Math.max(0, (a.hitCd || 0) - 1);
+    if (a.hitCd === 0 && dist < def.range + player.radius) {
+      a.hitCd = def.hitEvery;
+      const hp0 = player.hp;
+      pounderHit(e, def.damage);
+      if (player.hp < hp0) {
+        player.stunTimer = Math.max(player.stunTimer || 0, 12);
+        player.knockFrames = 12;
+        player.knockVx = Math.cos(want) * 14;
+        player.knockVy = Math.sin(want) * 14;
+      }
+    }
+    // Упёрся в стену надолго — раскрутка кончается раньше
+    a.stuck = Math.hypot(e.x - px, e.y - py) < def.speed * 0.2 ? (a.stuck || 0) + 1 : 0;
+    if (a.stuck > 40) a.t = def.active;
+  }
+}
+
+// Кольца бури расходятся и после удара, пока он стоит в восстановлении
+function emitStormRings(e, a) {
+  const def = POUNDER_ATTACKS.storm;
+  if (!(a.ringsLeft > 0)) return;
+  if (--a.ringTimer > 0) return;
+  a.ringTimer = def.ringGap;
+  a.ringsLeft--;
+  pounderRings.push({ x: e.x, y: e.y + 4, r: 30, owner: e, hit: false });
+}
+
+function updatePounderRings() {
+  const def = POUNDER_ATTACKS.storm;
+  for (let i = pounderRings.length - 1; i >= 0; i--) {
+    const ring = pounderRings[i];
+    const prev = ring.r;
+    ring.r += def.ringSpeed;
+    if (ring.r > def.range) {
+      pounderRings.splice(i, 1);
+      continue;
+    }
+    // Василий там, где прошла кромка кольца: оглушение и урон, перекат — перепрыгнул
+    if (ring.hit || player.isRolling) continue;
+    const d = Math.hypot((player.x - ring.x), (player.y + footDY(player) - ring.y) / GROUND_SQUASH);
+    if (d > prev - def.ringWidth / 2 && d < ring.r + def.ringWidth / 2) {
+      ring.hit = true;
+      const hp0 = player.hp;
+      pounderHit(ring.owner, def.damage);
+      if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
+    }
+  }
+}
+
+function advancePounderAttack(e) {
+  const a = e.attack;
+  const def = POUNDER_ATTACKS[a.key];
+  a.t++;
+  if (a.phase === 'windup') {
+    if (a.key === 'leap') {
+      if (a.t <= a.squat) {
+        // Приседает и целится: место приземления — где Василий в конце приседа
+        a.aim = Math.atan2(player.y - e.y, player.x - e.x);
+        a.target = pounderLeapTarget(e, def);
+        a.from = { x: e.x, y: e.y };
+      } else {
+        const k = Math.min(1, (a.t - a.squat) / Math.max(1, a.windup - a.squat));
+        e.x = a.from.x + (a.target.x - a.from.x) * k;
+        e.y = a.from.y + (a.target.y - a.from.y) * k;
+        e.z = 4 * def.height * k * (1 - k);
+      }
+    } else if (a.windup - a.t > BOSS_AIM_LOCK_FRAMES) {
+      a.aim = Math.atan2(player.y - e.y, player.x - e.x);
+    }
+    e.angle = a.aim;
+    if (a.t >= a.windup) {
+      a.phase = 'active';
+      a.t = 0;
+      onPounderStrike(e, a, def);
+    }
+  } else if (a.phase === 'active') {
+    updatePounderStrike(e, a, def);
+    if (a.key === 'storm') emitStormRings(e, a);
+    if (a.t >= def.active) {
+      a.phase = 'recover';
+      a.t = 0;
+      if (a.key === 'spin') addFloatingText(e.x - 30, e.y - 150, currentLang === 'ru' ? '💫 шатается' : '💫 dizzy', '#e9d5ff');
+    }
+  } else {
+    if (a.key === 'storm') emitStormRings(e, a);
+    if (a.t >= a.recover && !(a.ringsLeft > 0)) {
+      // За бурей — сразу юла
+      if (a.key === 'storm') {
+        startPounderAttack(e, 'spin');
+        return;
+      }
+      e.attack = null;
+      e.attackCooldown = e.phase >= 2 ? 14 : 26;
+    }
+  }
+}
+
+function choosePounderAttack(e, dist) {
+  if (e.phase >= 2 && e.stormCd <= 0 && dist < 500) return 'storm';
+  if (dist < 150) return Math.random() < 0.45 ? 'slam' : 'sweep';
+  if (dist < 470 && dist > 160 && e.electricCd <= 0) return 'electric';
+  if (dist > 250 && dist < 470 && e.leapCd <= 0) return 'leap';
+  return null;
+}
+
+// Домой — шагом; застрял — домой перескоком (он же межпространственный)
+function pounderWalkHome(e, speed) {
+  const hx = POUNDER_HOME.x - e.x, hy = POUNDER_HOME.y - e.y;
+  const d = Math.hypot(hx, hy);
+  e.isMoving = d > 6;
+  if (!e.isMoving) return;
+  e.angle = Math.atan2(hy, hx);
+  const step = Math.min(speed, d);
+  const px = e.x, py = e.y;
+  slideMove(e, (hx / d) * step, (hy / d) * step, e.radius, true);
+  e.stuckFrames = Math.hypot(e.x - px, e.y - py) < step * 0.2 ? (e.stuckFrames || 0) + 1 : 0;
+  if (e.stuckFrames > 120) {
+    e.stuckFrames = 0;
+    pounderHop(e, POUNDER_HOME.x, POUNDER_HOME.y);
+  }
+}
+
+// Переходы фаз — только у хозяина, не у копий
+function updatePounderPhases(e) {
+  if (e.phase < 2 && e.hp < e.maxHp * POUNDER_STORM_AT) {
+    e.phase = 2;
+    e.stormCd = 0;
+    addFloatingText(e.x - 60, e.y - 150, `⚡ ${t('pounder_storm')}`, '#c084fc');
+    spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 24, '#a855f7', 4, 11, 18);
+    SoundFX.bossSwing(true);
+  }
+  if (e.phase < 3 && e.hp < e.maxHp * POUNDER_CLONES_AT) {
+    e.phase = 3;
+    e.attack = null;
+    e.z = 0;
+    e.blinking = POUNDER_BLINK;
+    e.hopTimer = 30;
+    e.blinkAnim = 16;
+    addFloatingText(e.x - 120, e.y - 150, `✦ ${t('pounder_clones')}`, '#e9d5ff');
+    spawnDirectionalSparks(e.x, e.y - 60, -Math.PI / 2, Math.PI * 2, 30, '#c084fc', 4, 12, 18);
+    shakeScreen(24, 16);
+    spawnPounderClones(e);
+  }
+}
+
+function updatePounder(e, playerInSafe, hasFumeAura) {
+  e.animTimer++;
+  if (e.hitFlash > 0) e.hitFlash--;
+  if (e.attackCooldown > 0) e.attackCooldown--;
+  if (e.electricCd > 0) e.electricCd--;
+  if (e.leapCd > 0) e.leapCd--;
+  if (e.stormCd > 0) e.stormCd--;
+  if (e.blinkAnim > 0) e.blinkAnim--;
+  if (!(e.z > 0)) unstickBoss(e);
+
+  const dx = player.x - e.x, dy = player.y - e.y;
+  const dist = Math.hypot(dx, dy);
+  const playerInLair = Math.hypot(player.x - POUNDER_HOME.x, player.y - POUNDER_HOME.y) < POUNDER_LEASH;
+  if (!e.isAggroed && dist < e.aggroRadius && !playerInSafe) e.isAggroed = true;
+  if (e.isAggroed && (!playerInLair || playerInSafe) && !(e.attack && e.attack.key === 'leap')) {
+    e.isAggroed = false;
+    e.attack = null;
+    e.z = 0;
+  }
+  if (e.isAggroed && !e.introShown) {
+    e.introShown = true;
+    addFloatingText(e.x - 110, e.y - 150, `⚔ ${t('pounder_name')}`, '#c084fc');
+  }
+
+  let speed = e.speed * (e.phase >= 2 ? 1.2 : 1.0);
+  if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
+
+  if (!e.isAggroed) {
+    // Василий ушёл из логова: мерцание гаснет, возвращается домой и зализывает раны.
+    // Копия без хозяина рядом не нужна — растворяется
+    if (e.isClone) {
+      e.hp = 0;
+      return;
+    }
+    e.blinking = 0;
+    pounderWalkHome(e, speed);
+    if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * POUNDER_REGEN);
+    return;
+  }
+
+  if (!e.isClone) updatePounderPhases(e);
+
+  // Мерцание (с 20%): неуязвим, раз в ~2 с перескакивает, но бить не перестаёт
+  if (e.blinking > 0) {
+    e.blinking--;
+    if (e.blinking === 0) e.blinkCd = POUNDER_BLINK_CD;
+    else if (!e.attack && --e.hopTimer <= 0) {
+      pounderHop(e);
+      e.hopTimer = POUNDER_HOP + Math.floor(Math.random() * 40);
+    }
+  } else if (e.phase >= 3 && !e.isClone) {
+    if (e.blinkCd > 0) e.blinkCd--;
+    else if (!e.attack) {
+      e.blinking = POUNDER_BLINK;
+      e.hopTimer = 30;
+      e.blinkAnim = 16;
+      addFloatingText(e.x - 80, e.y - 150, `✦ ${t('pounder_blink')}`, '#e9d5ff');
+      spawnDirectionalSparks(e.x, e.y - 60, -Math.PI / 2, Math.PI * 2, 24, '#c084fc', 4, 12, 18);
+    }
+  }
+
+  if (e.attack) {
+    e.isMoving = false;
+    advancePounderAttack(e);
+    return;
+  }
+
+  e.angle = Math.atan2(dy, dx);
+  if (e.attackCooldown <= 0) {
+    const key = choosePounderAttack(e, dist);
+    if (key) {
+      e.isMoving = false;
+      startPounderAttack(e, key);
+      return;
+    }
+  }
+  e.isMoving = dist > 100;
+  if (e.isMoving) slideMove(e, (dx / dist) * speed, (dy / dist) * speed, e.radius, true);
+
+  // Тело непроходимое: выталкивает Василия
+  const overlap = e.radius + player.radius - dist;
+  if (overlap > 0 && dist > 0.01 && !player.isRolling) {
+    const px = player.x + (dx / dist) * overlap, py = player.y + (dy / dist) * overlap;
+    if (!checkWalkCollision(px, py, player.radius, footDY(player))) {
+      player.x = px;
+      player.y = py;
+    }
+  }
+}
+
+// Разовая награда за Долбильщика: больше, чем за Мясника — он сильнее
+const POUNDER_REWARD = [
+  ['alien_core', 3], ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4], ['mil_parts', 4],
+  ['scrap', 25], ['scrap', 25], ['bottle', 25], ['bottle', 25],
+  ['ammo_12g', 16], ['ammo_9x18', 30], ['vodka', 3], ['bandage', 4]
+];
+
+// Копия рассыпается без награды; хозяин — с наградой, и его копии рассыпаются вместе с ним
+function onPounderDefeated(e) {
+  if (e.isClone) {
+    spawnDirectionalSparks(e.x, e.y - 60, -Math.PI / 2, Math.PI * 2, 22, '#e9d5ff', 4, 12, 16);
+    createParticles(e.x, e.y - 40, '#a855f7', 24);
+    return;
+  }
+  pounderRef = null;
+  pounderRings = [];
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    if (enemies[i].isClone) {
+      onPounderDefeated(enemies[i]);
+      enemies.splice(i, 1);
+    }
+  }
+  if (window.Menu) window.Menu.requestSave();
+  createParticles(e.x, e.y, '#a855f7', 40);
+  spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 30, '#e9d5ff', 5, 14, 22);
+  shakeScreen(30, 18);
+  SoundFX.bossSwing(true);
+  addFloatingText(e.x - 140, e.y - 100, t('pounder_defeated'), '#c084fc');
+  player.pendingCards = true;
+  cardOfferTimer = 150;
+  POUNDER_REWARD.forEach(([type, val], i) => {
+    const a = (i / POUNDER_REWARD.length) * Math.PI * 2;
+    spawn3DLootItem(e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 42, type, val);
+  });
+}
+
+// Площадка логова: выжженный круг с фиолетовой кромкой
+function drawPounderLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  if (currentLocation !== 'promzona') return;
+  const R = POUNDER_LAIR_R;
+  if (POUNDER_HOME.x + R < viewMinX || POUNDER_HOME.x - R > viewMaxX || POUNDER_HOME.y + R < viewMinY || POUNDER_HOME.y - R > viewMaxY) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(12, 8, 18, 0.42)';
+  ctx.strokeStyle = 'rgba(168, 85, 247, 0.35)';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([14, 10]);
+  ctx.beginPath();
+  ctx.ellipse(POUNDER_HOME.x, POUNDER_HOME.y + 10, R, R * GROUND_SQUASH, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Зоны будущих ударов — под фигурами: заливка растёт с замахом, после фиксации прицела контур светлеет
+function drawPounderTelegraph(ctx, e) {
+  const a = e.attack;
+  if (!a || a.phase !== 'windup') return;
+  const def = POUNDER_ATTACKS[a.key];
+  const p = Math.min(1, a.t / a.windup);
+  const locked = a.key === 'leap' ? a.t > a.squat : a.windup - a.t <= BOSS_AIM_LOCK_FRAMES;
+  const stroke = locked ? 'rgba(243, 232, 255, 0.95)' : 'rgba(168, 85, 247, 0.7)';
+  ctx.save();
+  ctx.lineWidth = locked ? 3 : 2;
+  if (a.key === 'slam' || a.key === 'leap' || a.key === 'storm' || a.key === 'spin') {
+    const c = a.key === 'slam' ? pounderSlamCenter(e, a)
+      : (a.key === 'leap' && a.target ? { x: a.target.x, y: a.target.y + 4 } : { x: e.x, y: e.y + 4 });
+    const r = a.key === 'spin' ? def.range * 2 : def.range;
+    ctx.fillStyle = `rgba(168, 85, 247, ${(a.key === 'storm' ? 0.04 : 0.08) + 0.18 * p})`;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, r * p, r * GROUND_SQUASH * p, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.setLineDash([12, 8]);
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, r, r * GROUND_SQUASH, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (a.key === 'sweep') {
+    ctx.translate(e.x, e.y);
+    ctx.scale(1, GROUND_SQUASH);
+    ctx.fillStyle = `rgba(168, 85, 247, ${0.1 + 0.2 * p})`;
+    ctx.strokeStyle = stroke;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, def.range, a.aim - def.arc, a.aim + def.arc);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (a.key === 'electric') {
+    // Линия разряда по земле
+    ctx.translate(e.x, e.y + 4);
+    ctx.rotate(a.aim);
+    ctx.fillStyle = `rgba(192, 132, 252, ${0.1 + 0.22 * p})`;
+    ctx.strokeStyle = stroke;
+    ctx.beginPath();
+    ctx.rect(40, -def.width / 2, def.range, def.width);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Ломаная молния вдоль пути: от (x, y) по направлению dir на len
+function drawZigzag(ctx, x, y, cos, sin, len, jitter) {
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  for (let s = 24; s < len; s += 24) {
+    const j = (Math.random() - 0.5) * jitter;
+    ctx.lineTo(x + cos * s - sin * j, y + sin * s + cos * j * GROUND_SQUASH);
+  }
+  ctx.lineTo(x + cos * len, y + sin * len);
+  ctx.stroke();
+}
+
+// Разряд электрического молота и кольца бури — поверх земли
+function drawPounderBolt(ctx, e) {
+  const a = e.attack;
+  if (!a || a.key !== 'electric' || !a.bolt || a.phase === 'windup') return;
+  const def = POUNDER_ATTACKS.electric;
+  const k = a.phase === 'active' ? Math.min(1, a.t / def.active) : 1;
+  const fade = a.phase === 'active' ? 1 : Math.max(0, 1 - a.t / 16);
+  if (fade <= 0) return;
+  const len = def.range * k;
+  const cos = Math.cos(a.aim), sin = Math.sin(a.aim);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = fade;
+  [[7, 'rgba(168, 85, 247, 0.7)'], [2.5, '#f5f3ff']].forEach(([w, c]) => {
+    ctx.strokeStyle = c;
+    ctx.lineWidth = w;
+    drawZigzag(ctx, a.bolt.x, a.bolt.y, cos, sin, len, 22);
+  });
+  ctx.restore();
+}
+
+// Электрические кольца бури: рваная кромка, к краю логова гаснут
+function drawPounderRings(ctx) {
+  if (pounderRings.length === 0) return;
+  const def = POUNDER_ATTACKS.storm;
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  pounderRings.forEach(ring => {
+    const fade = Math.max(0, 1 - ring.r / def.range);
+    const n = Math.max(24, Math.round(ring.r / 10));
+    [[def.ringWidth * 0.6, `rgba(168, 85, 247, ${0.45 * fade + 0.1})`], [2.5, `rgba(245, 243, 255, ${0.8 * fade + 0.2})`]].forEach(([w, c]) => {
+      ctx.strokeStyle = c;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const ang = (i / n) * Math.PI * 2;
+        const rr = ring.r + (Math.random() - 0.5) * 10;
+        const x = ring.x + Math.cos(ang) * rr, y = ring.y + Math.sin(ang) * rr * GROUND_SQUASH;
+        if (i) ctx.lineTo(x, y);
+        else ctx.moveTo(x, y);
+      }
+      ctx.stroke();
+    });
+  });
+  ctx.restore();
+}
+
+// Пока модель грузится — фиолетовый силуэт с молотом
+function drawPounder(ctx, e) {
+  if (window.threePounder && window.threePounder.draw(ctx, e)) return;
+  ctx.save();
+  ctx.translate(e.x, e.y - (e.z || 0));
+  ctx.globalAlpha = e.blinking > 0 || e.isClone ? 0.5 : 1;
+  ctx.fillStyle = '#3b2f4a';
+  ctx.beginPath();
+  ctx.ellipse(0, -60, 30, 60, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#a855f7';
+  ctx.fillRect(28, -90, 10, 70);
+  ctx.restore();
 }
 
 // --- БОСС «ЗОЛОТОЙ МЯСНИК» (логово в СВ Квако-гнезде, появляется один раз за забег) ---
@@ -7382,7 +8069,7 @@ function update() {
         e.hitFlash = 5;
 
         const hitAngle = b.angle !== undefined ? b.angle : Math.atan2(b.vy, b.vx);
-        const bloodColor = e.type === 'brute' ? '#a855f7' : (e.type === 'boss' ? '#facc15' : '#22c55e');
+        const bloodColor = e.type === 'brute' || e.type === 'pounder' ? '#a855f7' : (e.type === 'boss' ? '#facc15' : '#22c55e');
         spawnDirectionalSparks(b.x, b.y, hitAngle, 0.85, 5, b.weaponType === 'plasma' ? '#38bdf8' : '#fde047', 4, 10, 9);
         for (let k = 0; k < 4; k++) {
           const spA = hitAngle + (Math.random() - 0.5) * 0.9;
@@ -7420,6 +8107,7 @@ function update() {
 
   updateThrownProps();
   updateRockets();
+  updatePounderRings();
   updateShockwaves();
   updateShieldShards();
   updateSpeech();
@@ -7439,6 +8127,10 @@ function update() {
     const e = enemies[i];
     if (e.type === 'boss') {
       updateBoss(e, inSafe, hasFumeAura);
+      continue;
+    }
+    if (e.type === 'pounder') {
+      updatePounder(e, inSafe, hasFumeAura);
       continue;
     }
     const dxP = player.x - e.x;
@@ -7931,9 +8623,9 @@ function collectActorShadows(minX, maxX, minY, maxY) {
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < minX || e.x > maxX || e.y < minY || e.y > maxY) continue;
-    const sp = e.type === 'boss'
-      ? window.threeBoss && window.threeBoss.shadowSprite(e)
-      : window.threeEnemies && window.threeEnemies.shadowSprite(e);
+    const sp = e.type === 'boss' ? window.threeBoss && window.threeBoss.shadowSprite(e)
+      : e.type === 'pounder' ? window.threePounder && window.threePounder.shadowSprite(e)
+        : window.threeEnemies && window.threeEnemies.shadowSprite(e);
     if (sp) list.push(sp);
   }
   const tp = window.threeProps;
@@ -7970,7 +8662,7 @@ function render() {
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
-    actors.push({ x: e.x, y: e.y + footDY(e), h: e.type === 'boss' ? 160 : (e.type === 'brute' ? 110 : (GUNNER_STATS[e.type] ? 72 : 62)) });
+    actors.push({ x: e.x, y: e.y + footDY(e), h: e.type === 'boss' || e.type === 'pounder' ? 160 : (e.type === 'brute' ? 110 : (GUNNER_STATS[e.type] ? 72 : 62)) });
   }
 
   if (window.environmentRenderer) {
@@ -8031,6 +8723,7 @@ function render() {
 
   // 6.5. Логово босса и красные зоны его ударов (под фигурами)
   drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  drawPounderLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawLairCracks(ctx);
   drawBreachGround(ctx);
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
@@ -8038,6 +8731,9 @@ function render() {
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawShockwaves(ctx);
   if (bossRef) drawBossTelegraph(ctx, bossRef);
+  // Телеграфы и кольца бури — у хозяина и у копий
+  enemies.forEach(e => { if (e.type === 'pounder') drawPounderTelegraph(ctx, e); });
+  drawPounderRings(ctx);
   const fumeOn = player.hasPerk('fume_aura');
   if (fumeOn) drawFumeAura(ctx); // облако перегара стелется по земле, под фигурами
 
@@ -8049,6 +8745,11 @@ function render() {
     const tipsy = fumeOn && Math.hypot(e.x - player.x, e.y - player.y) < FUME_AURA_RADIUS;
     if (e.type === 'boss') {
       drawBoss(ctx, e);
+      if (tipsy) drawFumeTipsy(ctx, e);
+      continue;
+    }
+    if (e.type === 'pounder') {
+      drawPounder(ctx, e);
       if (tipsy) drawFumeTipsy(ctx, e);
       continue;
     }
@@ -8091,6 +8792,7 @@ function render() {
   }
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  enemies.forEach(e => { if (e.type === 'pounder') drawPounderBolt(ctx, e); });
   drawBreachHint(ctx);
 
   // 8. Выстрелы и баллистические трассеры — только в пределах экрана
@@ -8398,7 +9100,7 @@ const BALANCE_ROWS = [
 ];
 const BALANCE_NAMES = {
   bat: 'Бита', makarov: 'ПМ', drill: 'Дрель', shotgun: 'Обрез', plasma: 'Плазма',
-  grunt: 'Пех', sniper: 'Снай', brute: 'Гром', stormtrooper: 'Штур', rocketeer: 'Ракет', boss: 'МЯСНИК',
+  grunt: 'Пех', sniper: 'Снай', brute: 'Гром', stormtrooper: 'Штур', rocketeer: 'Ракет', boss: 'МЯСНИК', pounder: 'ДОЛБ',
   courtyards: 'дв', garages: 'гар', heating: 'тепл', cordon: 'корд', nest: 'гн',
   pz_breach: 'прол', pz_admin: 'упр', pz_railyard: 'сорт', pz_depot: 'авто', pz_foundry: 'лит',
   pz_workshops: 'мех', pz_warehouses: 'скл', pz_tankfarm: 'рез', pz_cooling: 'град', pz_sludge: 'шлам'
