@@ -1,9 +1,10 @@
-// Три карты после босса уровня: «Скорость», «Ловкость», «Живучесть».
+// Три карты после босса уровня. За Золотого Мясника — «Скорость», «Ловкость», «Живучесть», за
+// Межпространственного Долбильщика — «Лазерный бластер», «Рывок», «Гиперрегенерация»; рубашка общая.
 // Карты показываются лицом, переворачиваются рубашкой вверх и тасуются — Василий тянет одну.
 // Здесь только показ; что даёт каждая карта — CARD_EFFECTS и applyBossCard в game.js.
 // Скрипты обычные, без модулей: currentLang и SoundFX — из game.js.
 window.BossCards = (function () {
-  const CARDS = [
+  const BUTCHER_CARDS = [
     {
       id: 'speed', img: 'assets/cards/card_speed.webp', icon: '⚡', color: '#38bdf8',
       title: { ru: 'СКОРОСТЬ', en: 'SPEED' },
@@ -23,6 +24,35 @@ window.BossCards = (function () {
       desc: { ru: '+40 к здоровью, бинт лечит на 50% больше', en: '+40 max HP, bandages heal 50% more' }
     }
   ];
+  const POUNDER_CARDS = [
+    {
+      id: 'laser', img: 'assets/cards/card_laser.webp', icon: '🔴', color: '#f87171',
+      title: { ru: 'ЛАЗЕРНЫЙ БЛАСТЕР', en: 'LASER BLASTER' },
+      desc: {
+        ru: 'Новое оружие: высокая скорострельность, средний урон, 30 с огня без остановки, 5 с — перезарядка накопителя',
+        en: 'New weapon: high fire rate, medium damage, 30 s of nonstop fire, 5 s to recharge the cell'
+      }
+    },
+    {
+      id: 'dash', img: 'assets/cards/card_dash.webp', icon: '💨', color: '#38bdf8',
+      title: { ru: 'РЫВОК', en: 'DASH' },
+      desc: {
+        ru: 'ПКМ: рывок на 15 м туда, куда бежишь (стоя — куда целишься), перезарядка 10 с',
+        en: 'RMB: dash 15 m where you run (standing — where you aim), 10 s cooldown'
+      }
+    },
+    {
+      id: 'regen', img: 'assets/cards/card_regen.webp', icon: '💚', color: '#4ade80',
+      title: { ru: 'ГИПЕРРЕГЕНЕРАЦИЯ', en: 'HYPER-REGENERATION' },
+      desc: {
+        ru: 'ПКМ: 10 с восстанавливает по 3 здоровья в секунду, перезарядка 90 с',
+        en: 'RMB: restores 3 HP per second for 10 s, 90 s cooldown'
+      }
+    }
+  ];
+  // Набор карт по тому, чей это трофей (ключ подписи TEXT)
+  const SETS = { kicker: BUTCHER_CARDS, kicker_pounder: POUNDER_CARDS };
+  let CARDS = BUTCHER_CARDS;
   const BACK_IMG = 'assets/cards/card_back.webp';
   const SLOT_X = [-230, 0, 230];
   const SWAPS = 5;
@@ -73,7 +103,9 @@ window.BossCards = (function () {
       front.appendChild(faceImage(c.img, c.icon, c.color));
       const label = document.createElement('div');
       label.className = 'bcard-label';
-      label.innerHTML = `<b style="color:${c.color}">${c.title[lang()]}</b><span>${c.desc[lang()]}</span>`;
+      const title = c.title[lang()];
+      const long = Math.max(...title.split(' ').map(w => w.length)) > 11;
+      label.innerHTML = `<b class="${long ? 'long' : ''}" style="color:${c.color}">${title}</b><span>${c.desc[lang()]}</span>`;
       front.appendChild(label);
       card.querySelector('.bcard-back').appendChild(faceImage(BACK_IMG, '🐸', '#a16207'));
       card.dataset.idx = i;
@@ -110,6 +142,7 @@ window.BossCards = (function () {
   // kicker — чей трофей (ключ TEXT): Мясника в городе, Долбильщика в Промзоне
   function open(onPick, kicker = 'kicker') {
     const modal = $('cards-modal');
+    CARDS = SETS[kicker] || BUTCHER_CARDS;
     build();
     $('cards-kicker').textContent = tx(kicker);
     $('cards-title').textContent = tx('remember');
@@ -164,5 +197,7 @@ window.BossCards = (function () {
     };
   }
 
-  return { open };
+  // Карты обоих боссов — для экрана персонажа (src/inventory.js)
+  const ALL = [...BUTCHER_CARDS, ...POUNDER_CARDS];
+  return { open, ALL };
 })();

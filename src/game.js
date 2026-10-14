@@ -882,12 +882,6 @@ const LANGS = {
     breach_sub: "За логовом Мясника — путь в Промзону",
     breach_here: "ПРОЛОМИ ЗАБОР",
     breach_marker: "ПРОЛОМ",
-    transit_kicker: "ЛОКАЦИЯ 2",
-    transit_title: "ПРОМЗОНА",
-    transit_text: "За карантинным забором — градообразующий завод, на котором когда-то держался весь Новохмуринск: остывшие трубы, цеха, склады, железнодорожные ветки. Что жабы устроили там, Василию ещё предстоит узнать.",
-    transit_wip: "🚧 Промзона строится: пока на ней только дороги и рельсы. Цеха, тайники и жабы появятся с новыми моделями.",
-    transit_back: "ОСТАТЬСЯ В НОВОХМУРИНСКЕ",
-    transit_go: "ВОЙТИ В ПРОМЗОНУ",
     location_city: "НОВОХМУРИНСК",
     location_promzona: "ПРОМЗОНА",
     location_sub: "Пролом в заборе — дорога обратно",
@@ -967,12 +961,6 @@ const LANGS = {
     breach_sub: "Behind the Butcher's lair — the way to the Industrial Zone",
     breach_here: "SMASH THE FENCE",
     breach_marker: "BREACH",
-    transit_kicker: "LOCATION 2",
-    transit_title: "INDUSTRIAL ZONE",
-    transit_text: "Beyond the quarantine fence lies the plant that once kept all of Novokhmurinsk alive: cold pipes, workshops, warehouses, railway sidings. What the toads have built there, Vasiliy is yet to find out.",
-    transit_wip: "🚧 The Industrial Zone is being built: so far it has only roads and rails. Workshops, stashes and toads will arrive with the new models.",
-    transit_back: "STAY IN NOVOKHMURINSK",
-    transit_go: "ENTER THE INDUSTRIAL ZONE",
     location_city: "NOVOKHMURINSK",
     location_promzona: "INDUSTRIAL ZONE",
     location_sub: "The fence breach is the way back",
@@ -1014,6 +1002,8 @@ function updateUILanguage() {
   if (lblDrill) lblDrill.innerText = currentLang === 'ru' ? 'Дрель' : 'Drill';
   const lblPlasma = document.getElementById('lbl-w-plasma');
   if (lblPlasma) lblPlasma.innerText = currentLang === 'ru' ? 'Плазма' : 'Plasma';
+  const lblLaser = document.getElementById('lbl-w-laser');
+  if (lblLaser) lblLaser.innerText = currentLang === 'ru' ? 'Лазер' : 'Laser';
   document.getElementById('safe-zone-tag').innerText = t('safe_zone');
   document.getElementById('status-badge').innerText = t('status_drunk');
   document.getElementById('btn-lang').innerText = currentLang.toUpperCase();
@@ -1114,15 +1104,23 @@ const player = {
     alien_core: 0,
     toad_eye: 0,
     toad_leg: 0,
-    toad_liver: 0
+    toad_liver: 0,
+    // Лут Промзоны (PZ_LOOT_NAMES)
+    nonferrous: 0,
+    blueprint: 0,
+    tech_spirit: 0,
+    plasma_cell: 0,
+    kvako_charge: 0
   },
-  cards: { speed: 0, agility: 0, vitality: 0 }, // карты, выбранные после боссов
+  // карты, выбранные после боссов: Мясника — speed, agility, vitality; Долбильщика — laser, dash, regen
+  cards: { speed: 0, agility: 0, vitality: 0, laser: 0, dash: 0, regen: 0 },
   unlockedWeapons: {
     bat: true,
     makarov: false,
     drill: false,
     shotgun: false,
-    plasma: false
+    plasma: false,
+    laser: false // только картой Долбильщика
   },
   ammo: {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
@@ -1134,6 +1132,11 @@ const player = {
   plasmaHeat: 0,
   plasmaOverheated: false,
   plasmaOverheatTimer: 0,
+  laserCharge: 0,       // накопитель лазерного бластера, кадры огня (до CARD_EFFECTS.laserCharge)
+  laserRecharge: 0,     // идёт перезарядка накопителя, кадров осталось
+  abilityCd: 0,         // перезарядка способности на ПКМ (рывок / гиперрегенерация), кадры
+  regenLeft: 0,         // гиперрегенерация: сколько кадров ещё лечит
+  isDashing: false,     // рывок — быстрый перекат (isRolling) без кувырка
   currentWeapon: 'bat',
   equipped: { bat: true }, // что из купленного Василий носит с собой (остальное — у Михалыча)
   unlockedPerks: new Set(),
@@ -1263,50 +1266,57 @@ const PROMZONA_DISTRICTS = {
   pz_admin: {
     id: 'pz_admin', tier: 1,
     name_ru: '🟡 ЗАВОДОУПРАВЛЕНИЕ', name_en: '🟡 PLANT ADMINISTRATION',
-    meta_ru: 'Угроза: ★☆☆☆ | Ресурс: Стеклотара, Бинты',
-    meta_en: 'Threat: ★☆☆☆ | Loot: Bottles, Bandages',
-    color: '#eab308', bottleMult: 1.2, scrapMult: 1.0
+    meta_ru: 'Угроза: ★☆☆☆ | Ресурс: Стеклотара, Бинты, Техспирт',
+    meta_en: 'Threat: ★☆☆☆ | Loot: Bottles, Bandages, Tech alcohol',
+    color: '#eab308', bottleMult: 1.2, scrapMult: 1.0,
+    pzLoot: [['tech_spirit', 0.12]] // заводская лаборатория
   },
   pz_railyard: {
     id: 'pz_railyard', tier: 2,
     name_ru: '🟠 Ж/Д СОРТИРОВКА', name_en: '🟠 RAIL YARD',
-    meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет, Тушёнка',
-    meta_en: 'Threat: ★★☆☆ | Loot: Scrap, Stew',
+    meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет, Тушёнка, Цветмет',
+    meta_en: 'Threat: ★★☆☆ | Loot: Scrap, Stew, Non-ferrous',
+    pzLoot: [['nonferrous', 0.1]],
     color: '#f97316', bottleMult: 1.4, scrapMult: 1.5
   },
   pz_depot: {
     id: 'pz_depot', tier: 2,
     name_ru: '🟠 АВТОБАЗА', name_en: '🟠 TRUCK DEPOT',
-    meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет ×1.5',
-    meta_en: 'Threat: ★★☆☆ | Loot: Scrap ×1.5',
+    meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет ×1.5, Цветмет',
+    meta_en: 'Threat: ★★☆☆ | Loot: Scrap ×1.5, Non-ferrous',
+    pzLoot: [['nonferrous', 0.12]],
     color: '#f97316', bottleMult: 1.4, scrapMult: 1.6
   },
   pz_foundry: {
     id: 'pz_foundry', tier: 3,
     name_ru: '🔴 ЛИТЕЙНЫЙ ЦЕХ', name_en: '🔴 FOUNDRY',
-    meta_ru: 'Угроза: ★★★☆ | Ресурс: Чермет, Детали',
-    meta_en: 'Threat: ★★★☆ | Loot: Scrap, Parts',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Чермет, Детали, Цветмет',
+    meta_en: 'Threat: ★★★☆ | Loot: Scrap, Parts, Non-ferrous',
+    pzLoot: [['nonferrous', 0.2]],
     color: '#ef4444', bottleMult: 2.0, scrapMult: 1.4
   },
   pz_workshops: {
     id: 'pz_workshops', tier: 3,
     name_ru: '🔴 МЕХАНИЧЕСКИЕ ЦЕХА', name_en: '🔴 MACHINE SHOPS',
-    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали',
-    meta_en: 'Threat: ★★★☆ | Loot: Parts',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Цветмет',
+    meta_en: 'Threat: ★★★☆ | Loot: Parts, Non-ferrous',
+    pzLoot: [['nonferrous', 0.2]],
     color: '#ef4444', bottleMult: 2.0, scrapMult: 1.3
   },
   pz_warehouses: {
     id: 'pz_warehouses', tier: 3,
     name_ru: '🔴 СКЛАДЫ ПРОДУКЦИИ', name_en: '🔴 WAREHOUSES',
-    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Патроны',
-    meta_en: 'Threat: ★★★☆ | Loot: Parts, Ammo',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Патроны, Цветмет',
+    meta_en: 'Threat: ★★★☆ | Loot: Parts, Ammo, Non-ferrous',
+    pzLoot: [['nonferrous', 0.1], ['tech_spirit', 0.06]],
     color: '#ef4444', bottleMult: 2.0, scrapMult: 1.2
   },
   pz_tankfarm: {
     id: 'pz_tankfarm', tier: 3,
     name_ru: '🔴 РЕЗЕРВУАРНЫЙ ПАРК', name_en: '🔴 TANK FARM',
-    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Водка',
-    meta_en: 'Threat: ★★★☆ | Loot: Parts, Vodka',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Водка, Техспирт',
+    meta_en: 'Threat: ★★★☆ | Loot: Parts, Vodka, Tech alcohol',
+    pzLoot: [['tech_spirit', 0.12]],
     color: '#ef4444', bottleMult: 2.1, scrapMult: 1.2
   },
   pz_cooling: {
@@ -2069,8 +2079,8 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') performRoll();
     if (e.code === 'KeyR') startReload();
     if (e.code === 'KeyQ') cycleWeapon();
-    // Цифры 1–8 — видимые слоты хотбара по порядку (порядок игрок меняет перетаскиванием)
-    const digit = /^Digit[1-8]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
+    // Цифры 1–9 — видимые слоты хотбара по порядку (порядок игрок меняет перетаскиванием)
+    const digit = /^Digit[1-9]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
     if (digit) {
       const slotId = visibleHotbarSlots()[digit - 1];
       if (slotId) activateHotbarSlot(slotId);
@@ -2083,7 +2093,15 @@ window.addEventListener('mousemove', (e) => {
   mouseScreen.x = e.clientX;
   mouseScreen.y = e.clientY;
 });
-window.addEventListener('mousedown', (e) => { if (e.button === 0) mouseDown = true; });
+window.addEventListener('mousedown', (e) => {
+  if (e.button === 0) mouseDown = true;
+  // ПКМ — способность карты Долбильщика (рывок или гиперрегенерация)
+  else if (e.button === 2 && gameState === 'PLAYING') useCardAbility();
+});
+// Системное меню браузера по ПКМ в игре не нужно нигде (ПКМ — способность), кроме полей ввода (код сохранения)
+window.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('input, textarea')) e.preventDefault();
+});
 // Колесо — следующее/предыдущее взятое оружие (не чаще раза в 120 мс: колёса шлют пачку событий)
 let lastWheelAt = 0;
 window.addEventListener('wheel', (e) => {
@@ -2095,17 +2113,19 @@ window.addEventListener('wheel', (e) => {
 }, { passive: true });
 
 // --- ХОТБАР: слоты перетаскиваются мышью, клавиши 1–8 идут по видимому порядку, порядок сохраняется ---
-const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma'];
-const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma']);
+const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser'];
+const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser']);
 const HOTBAR_STORAGE_KEY = 'vasiliy.hotbarOrder';
 let hotbarOrder = loadHotbarOrder();
 
 function loadHotbarOrder() {
   try {
     const saved = JSON.parse(localStorage.getItem(HOTBAR_STORAGE_KEY));
-    if (Array.isArray(saved) && saved.length === HOTBAR_DEFAULT_ORDER.length &&
-        HOTBAR_DEFAULT_ORDER.every(id => saved.includes(id))) {
-      return saved;
+    if (Array.isArray(saved)) {
+      // Порядок игрока, а слоты, которых тогда ещё не было (лазер), — в конец
+      const known = saved.filter(id => HOTBAR_DEFAULT_ORDER.includes(id));
+      const order = [...new Set(known), ...HOTBAR_DEFAULT_ORDER.filter(id => !known.includes(id))];
+      if (order.length === HOTBAR_DEFAULT_ORDER.length) return order;
     }
   } catch (e) { /* хранилище недоступно — порядок по умолчанию */ }
   return HOTBAR_DEFAULT_ORDER.slice();
@@ -2206,17 +2226,21 @@ function startGame(save = null) {
   player.stunTimer = 0;
   player.knockFrames = 0;
   player.dazeTimer = 0;
-  player.cards = { speed: 0, agility: 0, vitality: 0 };
+  player.cards = { speed: 0, agility: 0, vitality: 0, laser: 0, dash: 0, regen: 0 };
   player.pendingCards = false;
   cardOfferTimer = 0;
   player.items = { vodka: 0, stew: 1, bandage: 2 };
-  player.resources = { bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0, toad_eye: 0, toad_leg: 0, toad_liver: 0 };
+  player.resources = {
+    bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0, toad_eye: 0, toad_leg: 0, toad_liver: 0,
+    nonferrous: 0, blueprint: 0, tech_spirit: 0, plasma_cell: 0, kvako_charge: 0
+  };
   player.unlockedWeapons = {
     bat: true,
     makarov: false,
     drill: false,
     shotgun: false,
-    plasma: false
+    plasma: false,
+    laser: false
   };
   player.ammo = {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
@@ -2228,6 +2252,11 @@ function startGame(save = null) {
   player.plasmaHeat = 0;
   player.plasmaOverheated = false;
   player.plasmaOverheatTimer = 0;
+  player.laserCharge = CARD_EFFECTS.laserCharge;
+  player.laserRecharge = 0;
+  player.abilityCd = 0;
+  player.regenLeft = 0;
+  player.isDashing = false;
   player.currentWeapon = 'bat';
   player.equipped = { bat: true };
   player.lastMelee = 'bat';
@@ -2288,7 +2317,12 @@ function spawn3DLootItem(x, y, type, val = 1) {
     bandage: '🩹',
     toad_eye: '👁️',
     toad_leg: '🦶',
-    toad_liver: '🫀'
+    toad_liver: '🫀',
+    nonferrous: '🪙',
+    blueprint: '📜',
+    tech_spirit: '🧪',
+    plasma_cell: '🔋',
+    kvako_charge: '🚀'
   };
   lootItems.push({
     x: Math.round(x),
@@ -2317,14 +2351,15 @@ function canReachContainer(c) {
   return Math.hypot(player.x - c.x, player.y - c.y) < c.radius + player.radius + 20;
 }
 
-// Добыча из тайников Промзоны: [стеклотара от, до], [чермет от, до], бонусы с шансами
+// Добыча из тайников Промзоны: [стеклотара от, до], [чермет от, до], бонусы с шансами.
+// Цветмет — из полувагонов с ломом, крытых вагонов и грузовиков (проводка, обмотки), техспирт — из цистерн и бочек
 const PZ_STASH_LOOT = {
-  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25]] },
-  gondola: { bottles: [0, 1], scrap: [5, 8], bonus: [['mil_parts', 0.2]] },
-  tankcar: { bottles: [2, 3], scrap: [2, 3], bonus: [['vodka', 0.55]] },
-  kamaz: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.45], ['ammo_12g', 0.4], ['mil_parts', 0.2]] },
-  zil: { bottles: [1, 2], scrap: [2, 4], bonus: [['bandage', 0.5], ['stew', 0.35]] },
-  barrel: { bottles: [0, 1], scrap: [1, 2], bonus: [['vodka', 0.15]] }
+  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25], ['nonferrous', 0.3]] },
+  gondola: { bottles: [0, 1], scrap: [5, 8], bonus: [['mil_parts', 0.2], ['nonferrous', 0.55]] },
+  tankcar: { bottles: [2, 3], scrap: [2, 3], bonus: [['vodka', 0.55], ['tech_spirit', 0.6]] },
+  kamaz: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.45], ['ammo_12g', 0.4], ['mil_parts', 0.2], ['nonferrous', 0.3]] },
+  zil: { bottles: [1, 2], scrap: [2, 4], bonus: [['bandage', 0.5], ['stew', 0.35], ['nonferrous', 0.2], ['tech_spirit', 0.15]] },
+  barrel: { bottles: [0, 1], scrap: [1, 2], bonus: [['vodka', 0.15], ['tech_spirit', 0.25]] }
 };
 const rollRange = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 
@@ -2516,6 +2551,22 @@ const SHOP_ARSENAL_ITEMS = [
     zone_ru: '🟣 Нужны Квако-ядра из угловых Квако-Гнёзд и жабьи глаза с печенью!',
     zone_en: '🟣 Requires Alien Cores from corner Toad Nests plus toad eyes and liver!',
     cost: { bottles: 30, scrap: 35, mil_parts: 6, alien_core: 5, toad_eye: 3, toad_liver: 2 }
+  },
+  {
+    // Не продаётся: только картой Межпространственного Долбильщика (cardOnly)
+    id: 'laser',
+    type: 'weapon',
+    weaponKey: 'laser',
+    cardOnly: true,
+    slotKey: '[9]',
+    img: 'assets/sprites/weapons/weapon_laser.png?v=1',
+    name_ru: 'Лазерный бластер',
+    name_en: 'Laser Blaster',
+    desc_ru: 'Луч: высокая скорострельность, средний урон. 30 с огня, потом 5 с перезарядки накопителя (или R).',
+    desc_en: 'Beam: high fire rate, medium damage. 30 s of fire, then 5 s to recharge the cell (or R).',
+    zone_ru: '🃏 Трофей Межпространственного Долбильщика',
+    zone_en: '🃏 Interdimensional Pounder\'s trophy',
+    cost: {}
   }
 ];
 
@@ -2565,7 +2616,12 @@ const RES_DISPLAY = {
   alien_core: { img: 'assets/sprites/loot/loot_alien_core.png?v=1026', color: '#d8b4fe' },
   toad_eye: { img: 'assets/sprites/loot/loot_toad_eye.png?v=1', color: '#fde047' },
   toad_leg: { img: 'assets/sprites/loot/loot_toad_leg.png?v=1', color: '#86efac' },
-  toad_liver: { img: 'assets/sprites/loot/loot_toad_liver.png?v=1', color: '#fda4af' }
+  toad_liver: { img: 'assets/sprites/loot/loot_toad_liver.png?v=1', color: '#fda4af' },
+  nonferrous: { img: 'assets/sprites/loot/loot_nonferrous.png?v=1', color: '#fb923c' },
+  blueprint: { img: 'assets/sprites/loot/loot_blueprint.png?v=1', color: '#60a5fa' },
+  tech_spirit: { img: 'assets/sprites/loot/loot_tech_spirit.png?v=1', color: '#cbd5e1' },
+  plasma_cell: { img: 'assets/sprites/loot/loot_plasma_cell.png?v=1', color: '#67e8f9' },
+  kvako_charge: { img: 'assets/sprites/loot/loot_kvako_charge.png?v=1', color: '#a3e635' }
 };
 
 function formatCostHTML(cost) {
@@ -2585,10 +2641,14 @@ function updateShopWallet() {
     bottles: 'shop-res-bottles', scrap: 'shop-res-scrap', mil_parts: 'shop-res-mil', alien_core: 'shop-res-core',
     toad_eye: 'shop-res-eye', toad_leg: 'shop-res-leg', toad_liver: 'shop-res-liver'
   };
+  for (const k in PZ_LOOT_NAMES) ids[k] = 'shop-res-' + k;
   for (const k in ids) {
     const el = document.getElementById(ids[k]);
     if (el) el.innerText = player.resources[k];
   }
+  // Лут Промзоны в кошельке — когда Василий там побывал (или лут уже есть)
+  const showPz = locationsVisited.has('promzona') || Object.keys(PZ_LOOT_NAMES).some(k => player.resources[k] > 0);
+  document.querySelectorAll('.res-pz').forEach(el => { el.style.display = showPz ? '' : 'none'; });
 }
 
 function openShop() {
@@ -2639,6 +2699,7 @@ function renderArsenalAndSupplies() {
       if (item.type === 'ammo' && !player.unlockedWeapons[item.ammoKey]) return;
       if (item.weaponKey === 'shotgun' && !canSeeShotgun) return;
       if (item.weaponKey === 'plasma' && !canSeePlasma) return;
+      if (item.cardOnly && !player.unlockedWeapons[item.weaponKey]) return;
 
       const isOwnedWeapon = item.type === 'weapon' && player.unlockedWeapons[item.weaponKey];
       const carried = isOwnedWeapon && isEquipped(item.weaponKey);
@@ -2969,7 +3030,7 @@ window.setEquipped = function(w, on) {
 };
 
 window.switchWeapon = function(weaponKey) {
-  const allWeapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+  const allWeapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser'];
   if (!allWeapons.includes(weaponKey)) return;
 
   if (!player.unlockedWeapons[weaponKey]) {
@@ -2996,7 +3057,8 @@ window.switchWeapon = function(weaponKey) {
     makarov: currentLang === 'ru' ? 'ПИСТОЛЕТ МАКАРОВА (ПМ)' : 'MAKAROV PM 9x18',
     drill: currentLang === 'ru' ? 'УДАРНАЯ ДРЕЛЬ ИЭ-1035' : 'IMPACT DRILL',
     shotgun: currentLang === 'ru' ? 'ДЕДОВСКИЙ ОБРЕЗ 12К' : 'SAWED-OFF SHOTGUN',
-    plasma: currentLang === 'ru' ? 'ТРОФЕЙНЫЙ ПЛАЗМАГАН' : 'TROPHY PLASMA GUN'
+    plasma: currentLang === 'ru' ? 'ТРОФЕЙНЫЙ ПЛАЗМАГАН' : 'TROPHY PLASMA GUN',
+    laser: currentLang === 'ru' ? 'ЛАЗЕРНЫЙ БЛАСТЕР' : 'LASER BLASTER'
   };
   addFloatingText(player.x, player.y - 35, `${names[weaponKey]}`, '#38bdf8');
   createParticles(player.x, player.y, '#38bdf8', 8);
@@ -3029,6 +3091,10 @@ function stepWeapon(dir) {
 
 function startReload() {
   const wKey = player.currentWeapon;
+  if (wKey === 'laser') {
+    rechargeLaser();
+    return;
+  }
   if (wKey !== 'makarov' && wKey !== 'shotgun') return;
   if (player.reloadingWeapon) return;
 
@@ -3064,6 +3130,8 @@ const WEAPONS = {
     falloff: { near: 60, full: 100, far: 250, closeMult: 1.35, farMult: 0.25 }
   },
   plasma: { dmg: b => b + 24, cooldown: 10, pen: 0.8 },
+  // Лазерный бластер (карта Долбильщика): луч бьёт сразу, тиков много, урон за тик средний; range — длина луча
+  laser: { dmg: b => b * 0.22 + 3, cooldown: 5, pen: 0.6, range: 560 },
   chain: { pen: 1.0 },  // цепная молния перка «Аккумулятор от КАМАЗа»
   shock: { pen: 0.5 },  // ударная волна переката перка «Рука-перфоратор»
   thrown: { pen: 1.0 }  // предмет, брошенный громилой (бьёт и по своим)
@@ -3318,6 +3386,24 @@ const SoundFX = {
     osc.start(now);
     osc.stop(now + 0.18);
   },
+  // Лазер: тихое жужжание, играет раз в несколько тиков луча
+  laser() {
+    const ac = this.ensure();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1500, now);
+    osc.frequency.exponentialRampToValueAtTime(1150, now + 0.08);
+    const gain = ac.createGain();
+    gain.gain.setValueAtTime(0.035, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+    osc.connect(gain);
+    gain.connect(this.out);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  },
+
   plasma() {
     const ac = this.ensure();
     if (!ac) return;
@@ -3853,6 +3939,23 @@ function shootPlayerWeapon() {
       }
     });
     updateHUD();
+    return;
+  }
+
+  // =========================================================================
+  // [9] ЛАЗЕРНЫЙ БЛАСТЕР (карта Долбильщика: луч, 30 с огня, 5 с перезарядки накопителя)
+  // =========================================================================
+  if (wKey === 'laser') {
+    if (player.laserRecharge > 0) {
+      shootCooldown = 16;
+      SoundFX.emptyClick();
+      return;
+    }
+    shootCooldown = WEAPONS.laser.cooldown;
+    player.laserCharge -= WEAPONS.laser.cooldown;
+    if (player.laserCharge <= 0) rechargeLaser();
+    fireLaserBeam(muzzle);
+    updateHUD(true);
     return;
   }
 
@@ -5037,8 +5140,119 @@ const CARD_EFFECTS = {
   agilityRoll: 0.3,     // перекат дешевле и чаще на 30%
   agilityDodge: 0.1,    // 10% шанс увернуться от удара, пули, языка, броска
   vitalityHp: 40,       // +40 к максимуму здоровья
-  vitalityBandage: 0.5  // бинт лечит на 50% больше
+  vitalityBandage: 0.5, // бинт лечит на 50% больше
+  // Карты Долбильщика (кадры при 60 Гц)
+  laserCharge: 1800,    // накопитель бластера: 30 с огня без остановки
+  laserRecharge: 300,   // перезарядка накопителя — 5 с (сама, когда сел, или по R)
+  dashDist: 600,        // рывок на 15 м (~40 px на метр, как машины города)
+  dashFrames: 12,
+  dashCooldown: 600,    // 10 с
+  regenPerSec: 3,       // гиперрегенерация: по 3 здоровья в секунду
+  regenFrames: 600,     // 10 с
+  regenCooldown: 5400   // 90 с
 };
+
+// Способность на ПКМ — от карты Долбильщика: рывок или гиперрегенерация (тянут одну карту из трёх)
+function cardAbility() {
+  if (player.cards.dash > 0) return 'dash';
+  if (player.cards.regen > 0) return 'regen';
+  return null;
+}
+
+function useCardAbility() {
+  const ab = cardAbility();
+  if (!ab || player.stunTimer > 0) return;
+  if (player.abilityCd > 0) {
+    addFloatingText(player.x, player.y - 30, currentLang === 'ru' ? `⏳ ${Math.ceil(player.abilityCd / 60)} С` : `⏳ ${Math.ceil(player.abilityCd / 60)}s`, '#94a3b8');
+    return;
+  }
+  if (ab === 'dash') performDash();
+  else {
+    player.regenLeft = CARD_EFFECTS.regenFrames;
+    player.abilityCd = CARD_EFFECTS.regenCooldown;
+    addFloatingText(player.x, player.y - 34, currentLang === 'ru' ? '💚 ГИПЕРРЕГЕНЕРАЦИЯ' : '💚 HYPER-REGENERATION', '#4ade80');
+    createParticles(player.x, player.y - 20, '#4ade80', 18);
+  }
+  updateHUD(true);
+}
+
+// Рывок: тот же перекат (неуязвимость, движение в update), только быстрый, далёкий и без кувырка
+function performDash() {
+  if (player.isRolling) return;
+  let dx = 0, dy = 0;
+  if (keys['KeyW']) dy -= 1;
+  if (keys['KeyS']) dy += 1;
+  if (keys['KeyA']) dx -= 1;
+  if (keys['KeyD']) dx += 1;
+  if (dx === 0 && dy === 0) {
+    dx = Math.cos(player.angle);
+    dy = Math.sin(player.angle);
+  } else {
+    const len = Math.hypot(dx, dy);
+    dx /= len;
+    dy /= len;
+  }
+  player.isRolling = true;
+  player.isDashing = true;
+  player.rollDuration = CARD_EFFECTS.dashFrames;
+  player.rollDx = dx;
+  player.rollDy = dy;
+  player.abilityCd = CARD_EFFECTS.dashCooldown;
+  SoundFX.batSwing(false);
+  createParticles(player.x, player.y, '#a5f3fc', 14);
+}
+
+// Лазер: накопитель сел (или R) — 5 с перезарядки, потом снова полный
+function rechargeLaser() {
+  if (player.laserRecharge > 0 || player.laserCharge >= CARD_EFFECTS.laserCharge) return;
+  player.laserRecharge = CARD_EFFECTS.laserRecharge;
+  SoundFX.reload();
+  addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? '🔋 НАКОПИТЕЛЬ ЗАРЯЖАЕТСЯ (5 С)' : '🔋 RECHARGING CELL (5s)', '#facc15');
+}
+
+// Луч бьёт сразу: первая жаба на линии прицела в пределах range, стены зданий его останавливают
+function fireLaserBeam(muzzle) {
+  const W = WEAPONS.laser;
+  const ang = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.08 : 0.01);
+  const cx = Math.cos(ang), cy = Math.sin(ang);
+  let len = W.range;
+  for (let d = 16; d < W.range; d += 12) {
+    if (checkBuildingCollision(muzzle.x + cx * d, muzzle.y + cy * d + 20, 2)) {
+      len = d;
+      break;
+    }
+  }
+  let target = null, best = len;
+  enemies.forEach(e => {
+    // ближайшая к лучу точка тела жабы (центр чуть выше ног)
+    const ex = e.x - muzzle.x, ey = e.y - 20 - muzzle.y;
+    const along = ex * cx + ey * cy;
+    if (along < 0 || along > best) return;
+    if (Math.abs(ex * cy - ey * cx) < e.radius + 8) {
+      best = along;
+      target = e;
+    }
+  });
+  const x2 = muzzle.x + cx * best, y2 = muzzle.y + cy * best;
+  muzzleFlashes.push({ x: muzzle.x, y: muzzle.y, x2, y2, angle: ang, type: 'laser_beam', life: 3, maxLife: 3, scale: 1 });
+  player.laserTick = (player.laserTick || 0) + 1;
+  if (player.laserTick % 3 === 0) SoundFX.laser();
+  if (window.threeCharacter && player.laserTick % 2 === 0) window.threeCharacter.triggerRecoil(0.25);
+  if (!target) {
+    if (best < W.range) spawnDirectionalSparks(x2, y2, ang + Math.PI, 0.9, 3, '#fca5a5', 3, 8, 7);
+    return;
+  }
+  let dmg = W.dmg(player.baseDamage) * (player.isDrunk ? 1.5 : 1.0);
+  const isCrit = Math.random() < player.critChance;
+  if (isCrit) dmg *= player.critMult;
+  const hit = damageEnemy(target, dmg, 'laser', player.x, player.y);
+  target.hitFlash = 3;
+  spawnDirectionalSparks(x2, y2, ang + Math.PI, 0.9, 4, '#f87171', 3, 9, 8);
+  // Цифра урона — раз в несколько тиков, иначе луч засыпает экран цифрами
+  if (isCrit || player.laserTick % 4 === 0) {
+    addFloatingText(target.x, target.y - 20, damageLabel(hit, `${isCrit ? 'КРИТ! ' : ''}-${Math.round(hit.dealt)}`), isCrit ? '#ef4444' : '#fca5a5');
+  }
+}
 let cardOfferTimer = 0;
 
 // Уворот (карта «Ловкость»): удар, пуля, язык или брошенный предмет проходят мимо
@@ -5062,6 +5276,17 @@ function applyBossCard(id) {
   if (id === 'vitality') {
     player.maxHp += CARD_EFFECTS.vitalityHp;
     player.hp += CARD_EFFECTS.vitalityHp;
+  } else if (id === 'laser') {
+    // Бластер сразу в руках и в хотбаре
+    player.unlockedWeapons.laser = true;
+    player.equipped.laser = true;
+    player.laserCharge = CARD_EFFECTS.laserCharge;
+    player.laserRecharge = 0;
+    applyHotbarOrder();
+    window.switchWeapon('laser');
+  } else if (id === 'dash' || id === 'regen') {
+    player.abilityCd = 0;
+    addFloatingText(player.x, player.y - 44, currentLang === 'ru' ? 'ПКМ — СПОСОБНОСТЬ' : 'RMB — ABILITY', '#facc15');
   }
   player.pendingCards = false;
   gameState = 'PLAYING';
@@ -5116,21 +5341,18 @@ function breakFence() {
 }
 
 // Пролом открыт и Василий шагнул в него — переход в другую локацию. В Промзону в первый раз — через
-// окно с её описанием (потом его заменит комикс перехода), дальше — сразу
+// комикс перехода (src/comic.js, 8 кадров; пропуск по ESC — тоже переход), дальше — сразу
 function checkBreachTransit() {
   if (fenceBreach.state !== 'open' || Math.abs(player.x - fenceBreach.x) > fenceBreach.halfW) return;
   const beyond = fenceBreach.side === 'top' ? player.y < 48 : player.y > WORLD_HEIGHT - 48;
   if (!beyond) return;
   const target = currentLocation === 'city' ? 'promzona' : 'city';
-  if (locationsVisited.has(target)) {
+  if (locationsVisited.has(target) || target !== 'promzona' || !window.Comic) {
     travelTo(target);
     return;
   }
   gameState = 'TRANSIT';
-  ['kicker', 'title', 'text', 'wip', 'back', 'go'].forEach(k => {
-    document.getElementById('transit-' + k).textContent = t('transit_' + k);
-  });
-  document.getElementById('transit-modal').style.display = 'flex';
+  window.Comic.play(() => travelTo(target), 'promzona');
 }
 
 // Василий стоит у пролома с внутренней стороны забора
@@ -5156,17 +5378,6 @@ function travelTo(target) {
   showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
   if (window.Menu) window.Menu.requestSave();
 }
-
-window.enterTransit = function() {
-  document.getElementById('transit-modal').style.display = 'none';
-  travelTo(currentLocation === 'city' ? 'promzona' : 'city');
-};
-
-window.leaveTransit = function() {
-  document.getElementById('transit-modal').style.display = 'none';
-  placePlayerAtBreach();
-  gameState = 'PLAYING';
-};
 
 // Надпись на асфальте у пролома и полоска света из него (в сторону карты от забора)
 function drawBreachGround(ctx) {
@@ -6101,7 +6312,7 @@ function updateHUD(forceWeaponRefresh = false) {
   }
 
   // Отображаем в хотбаре ТОЛЬКО купленное/открытое оружие (без спойлера всего арсенала на старте!)
-  const allW = ['bat', 'makarov', 'drill', 'shotgun', 'plasma'];
+  const allW = ['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser'];
   allW.forEach(w => {
     const slotEl = document.getElementById(`slot-w-${w}`);
     if (!slotEl) return;
@@ -6152,8 +6363,33 @@ function updateHUD(forceWeaponRefresh = false) {
           setHudStyle(wrapEl, 'display', 'none');
         }
       }
+    } else if (w === 'laser') {
+      // Заряд накопителя, а пока он заряжается — сколько секунд осталось
+      const ammoEl = document.getElementById('ammo-w-laser');
+      const barEl = document.getElementById('bar-w-laser');
+      const charging = player.laserRecharge > 0;
+      const pct = charging
+        ? Math.round((1 - player.laserRecharge / CARD_EFFECTS.laserRecharge) * 100)
+        : Math.round(player.laserCharge / CARD_EFFECTS.laserCharge * 100);
+      setHudText(ammoEl, charging ? `🔋${Math.ceil(player.laserRecharge / 60)}с` : `${pct}%`);
+      setHudStyle(ammoEl, 'color', charging ? '#facc15' : '#fca5a5');
+      if (barEl) setHudStyle(barEl, 'width', `${pct}%`);
     }
   });
+
+  // Способность на ПКМ (карта Долбильщика): значок и перезарядка
+  const ab = cardAbility();
+  const abEl = document.getElementById('rmb-ability');
+  if (abEl) {
+    setHudStyle(abEl, 'display', ab ? 'flex' : 'none');
+    if (ab) {
+      const cd = player.abilityCd > 0 ? Math.ceil(player.abilityCd / 60) : 0;
+      setHudText(document.getElementById('rmb-ability-icon'), ab === 'dash' ? '💨' : '💚');
+      setHudText(document.getElementById('rmb-ability-cd'), cd ? `${cd}` : (currentLang === 'ru' ? 'ПКМ' : 'RMB'));
+      abEl.classList.toggle('cooling', cd > 0);
+      abEl.classList.toggle('active', player.regenLeft > 0 || player.isDashing);
+    }
+  }
 }
 
 function createParticles(x, y, color, count = 6) {
@@ -6187,8 +6423,10 @@ const TROPHY_DROPS = {
   grunt: [['toad_leg', 0.5], ['toad_eye', 0.15], ['toad_liver', 0.08]],
   sniper: [['toad_eye', 0.65], ['toad_leg', 0.15], ['toad_liver', 0.05]],
   brute: [['toad_liver', 0.65], ['toad_eye', 0.2], ['toad_leg', 0.2]],
-  stormtrooper: [['toad_leg', 0.45], ['toad_eye', 0.3], ['toad_liver', 0.1]],
-  rocketeer: [['toad_liver', 0.45], ['toad_eye', 0.35], ['toad_leg', 0.25]]
+  // Новые жабы Промзоны: главный трофей — плазменная ячейка из автомата штурмовика и квако-заряд ракетчика
+  // (лут Промзоны, PZ_LOOT_NAMES), плюс жабьи трофеи
+  stormtrooper: [['plasma_cell', 0.5], ['toad_leg', 0.45], ['toad_eye', 0.3], ['toad_liver', 0.1]],
+  rocketeer: [['kvako_charge', 0.5], ['toad_liver', 0.45], ['toad_eye', 0.35], ['toad_leg', 0.25]]
 };
 const TROPHY_NEST_BONUS = 0.15;
 // С жаб чермета больше, чем раньше: тайники урезаны (STASH_YIELD), доход сдвинут в сторону боя
@@ -6198,6 +6436,28 @@ const TROPHY_NAMES = {
   toad_leg: ['ЖАБЬЯ ЛАПКА', 'TOAD LEG', '#86efac'],
   toad_liver: ['ЖАБЬЯ ПЕЧЕНЬ', 'TOAD LIVER', '#fda4af']
 };
+
+// --- ЛУТ ПРОМЗОНЫ (docs/LEVEL2_PROMZONA.md, раздел 8) ---
+// Тратится в новых местах города — мастерской, столовой, подвале (этапы 6–7). Цветмет — из вагонов и грузовиков
+// и с жаб в цехах и на сортировке, техспирт — из цистерн, бочек и с жаб у заводоуправления и резервуаров
+// (pzLoot района), плазменные ячейки и квако-заряды — трофеи штурмовиков и ракетчиков, чертежи — только
+// из сейфов (SAFE_LOOT в src/safes.js). В городе не падает. Виден в инвентаре (I, src/inventory.js)
+// и в кошельке лавки — когда Василий побывал в Промзоне
+const PZ_LOOT_NAMES = {
+  nonferrous: ['ЦВЕТМЕТ', 'NON-FERROUS METAL', '#fb923c'],
+  blueprint: ['ЧЕРТЁЖ', 'BLUEPRINT', '#60a5fa'],
+  tech_spirit: ['ТЕХСПИРТ', 'TECH ALCOHOL', '#cbd5e1'],
+  plasma_cell: ['ПЛАЗМЕННАЯ ЯЧЕЙКА', 'PLASMA CELL', '#67e8f9'],
+  kvako_charge: ['КВАКО-ЗАРЯД', 'KVAKO CHARGE', '#a3e635']
+};
+
+// Лут района Промзоны с убитой жабы (pzLoot района): громилы роняют вдвое чаще
+function dropPromzonaLoot(x, y, eType, dist) {
+  if (!dist.pzLoot) return;
+  dist.pzLoot.forEach(([kind, chance], i) => {
+    if (Math.random() < chance * (eType === 'brute' ? 2 : 1)) spawn3DLootItem(x - 14 + i * 28, y + 22, kind, 1);
+  });
+}
 
 function dropTrophies(x, y, eType, districtId) {
   const list = TROPHY_DROPS[eType];
@@ -6267,7 +6527,10 @@ function spawnLootDrop(enemyOrX, yOpt) {
       spawn3DLootItem(x + 14, y - 8, 'alien_core', 1);
     }
   }
-  if (isEnemyObj) dropTrophies(x, y, eType, prof);
+  if (isEnemyObj) {
+    dropTrophies(x, y, eType, prof);
+    dropPromzonaLoot(x, y, eType, dist);
+  }
 }
 
 function handleEnemyKilled(index) {
@@ -7909,6 +8172,18 @@ function update() {
     player.plasmaHeat = Math.max(0, player.plasmaHeat - 0.36); // ~22% в секунду
   }
 
+  // Накопитель лазерного бластера и способности карт Долбильщика
+  if (player.laserRecharge > 0 && --player.laserRecharge === 0) {
+    player.laserCharge = CARD_EFFECTS.laserCharge;
+    addFloatingText(player.x, player.y - 34, currentLang === 'ru' ? '🔋 НАКОПИТЕЛЬ ЗАРЯЖЕН' : '🔋 CELL CHARGED', '#4ade80');
+  }
+  if (player.abilityCd > 0) player.abilityCd--;
+  if (player.regenLeft > 0) {
+    player.regenLeft--;
+    player.hp = Math.min(player.maxHp, player.hp + CARD_EFFECTS.regenPerSec / 60);
+    if (player.regenLeft % 12 === 0) createParticles(player.x + (Math.random() - 0.5) * 30, player.y - 30, '#4ade80', 2);
+  }
+
   if (player.isDrunk) {
     player.drunkTimer--;
     if (player.drunkTimer <= 0) player.isDrunk = false;
@@ -7937,7 +8212,12 @@ function update() {
       player.knockVy *= 0.86;
     }
   } else if (player.isRolling) {
-    if (playerStuck) {
+    if (player.isDashing) {
+      // Рывок: 50 px за кадр, шагами по 10 px — сквозь тонкие стены не проскакивает
+      const step = CARD_EFFECTS.dashDist / CARD_EFFECTS.dashFrames / 5;
+      for (let k = 0; k < 5; k++) slideMove(player, player.rollDx * step, player.rollDy * step, player.radius);
+      createParticles(player.x, player.y - 30, '#a5f3fc', 2);
+    } else if (playerStuck) {
       player.x += player.rollDx * 9;
       player.y += player.rollDy * 9;
     } else {
@@ -7946,7 +8226,10 @@ function update() {
 
     player.rollDuration--;
     createParticles(player.x, player.y, '#64748b', 1);
-    if (player.rollDuration <= 0) player.isRolling = false;
+    if (player.rollDuration <= 0) {
+      player.isRolling = false;
+      player.isDashing = false;
+    }
   } else {
     let dx = 0, dy = 0;
     if (keys['KeyW']) dy -= 1;
@@ -8387,8 +8670,8 @@ function update() {
         } else if (item.type === 'bandage') {
           player.items.bandage += item.val;
           addFloatingText(item.x, item.y - 20, `+${item.val} БИНТЫ`, '#4ade80');
-        } else if (TROPHY_NAMES[item.type]) {
-          const [ru, en, color] = TROPHY_NAMES[item.type];
+        } else if (TROPHY_NAMES[item.type] || PZ_LOOT_NAMES[item.type]) {
+          const [ru, en, color] = TROPHY_NAMES[item.type] || PZ_LOOT_NAMES[item.type];
           player.resources[item.type] += item.val;
           addFloatingText(item.x, item.y - 22, `+${item.val} ${currentLang === 'ru' ? ru : en}`, color);
         }
@@ -8539,6 +8822,26 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(4 * s, 0, 4.2 * s, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (mf.type === 'laser_beam') {
+      // Луч рисуется от дула до цели в мировых координатах, а не повёрнутым от дула
+      ctx.restore();
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(248, 113, 113, ${0.35 * t})`;
+      ctx.lineWidth = 9;
+      ctx.beginPath();
+      ctx.moveTo(mf.x, mf.y);
+      ctx.lineTo(mf.x2, mf.y2);
+      ctx.stroke();
+      ctx.strokeStyle = `rgba(254, 226, 226, ${0.95 * t})`;
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
+      ctx.fillStyle = `rgba(254, 202, 202, ${0.8 * t})`;
+      ctx.beginPath();
+      ctx.arc(mf.x, mf.y, 5, 0, Math.PI * 2);
+      ctx.arc(mf.x2, mf.y2, 4, 0, Math.PI * 2);
       ctx.fill();
 
     } else if (mf.type === 'plasma') {

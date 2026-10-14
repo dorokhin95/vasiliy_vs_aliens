@@ -9,6 +9,7 @@ window.economySim = function (N = 300) {
   player.unlockedWeapons.makarov = true; // поздняя игра: в баках попадаются патроны к ПМ
   lootItems.length = 0;
   const keys = ['bottles', 'scrap', 'mil_parts', 'alien_core', 'toad_eye', 'toad_leg', 'toad_liver',
+    'nonferrous', 'blueprint', 'tech_spirit', 'plasma_cell', 'kvako_charge',
     'bandage', 'stew', 'vodka', 'ammo_9x18', 'ammo_12g'];
   const zero = () => Object.fromEntries(keys.map(k => [k, 0]));
   const tot = zero(), by = {};

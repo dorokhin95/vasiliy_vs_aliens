@@ -79,8 +79,10 @@ window.CharacterPanel = (function () {
     const r = player.resources;
     const res = RESOURCES.filter(([k]) => r[k] > 0)
       .map(([k, nr, ne]) => cell(RES_DISPLAY[k].img, L(nr, ne), r[k], RES_DISPLAY[k].color));
-    const trophies = Object.keys(TROPHY_NAMES).filter(k => r[k] > 0)
-      .map(k => cell(RES_DISPLAY[k].img, capitalize(L(TROPHY_NAMES[k][0], TROPHY_NAMES[k][1])), r[k], TROPHY_NAMES[k][2]));
+    const named = table => Object.keys(table).filter(k => r[k] > 0)
+      .map(k => cell(RES_DISPLAY[k].img, capitalize(L(table[k][0], table[k][1])), r[k], table[k][2]));
+    const trophies = named(TROPHY_NAMES);
+    const pzLoot = named(PZ_LOOT_NAMES);
     const supplies = SUPPLIES.filter(([k]) => player.items[k] > 0)
       .map(([k, img]) => cell(img, t(k), player.items[k]));
     const ammo = [];
@@ -102,7 +104,8 @@ window.CharacterPanel = (function () {
       section(L('Патроны (в обойме + запас)', 'Ammo (clip + reserve)'), ammo),
       section(L('Припасы', 'Supplies'), supplies),
       section(L('Ресурсы', 'Resources'), res),
-      section(L('Жабьи трофеи', 'Toad trophies'), trophies)
+      section(L('Жабьи трофеи', 'Toad trophies'), trophies),
+      section(L('Лут Промзоны', 'Industrial Zone loot'), pzLoot)
     ].filter(Boolean);
     if (parts.length === 0) {
       const p = document.createElement('p');
@@ -136,7 +139,8 @@ window.CharacterPanel = (function () {
     body.append(section(L('Характеристики', 'Stats'), rows, true));
 
     // Карты после боссов
-    const cardNames = { speed: L('Скорость', 'Speed'), agility: L('Ловкость', 'Agility'), vitality: L('Живучесть', 'Vitality') };
+    const cardNames = {};
+    (window.BossCards ? window.BossCards.ALL : []).forEach(cd => { cardNames[cd.id] = capitalize(L(cd.title.ru, cd.title.en)); });
     const cards = Object.keys(cardNames).filter(k => c[k] > 0).map(k => statRow(cardNames[k], `×${c[k]}`));
     const cs = section(L('Карты боссов', 'Boss cards'), cards, true);
     if (cs) body.append(cs);

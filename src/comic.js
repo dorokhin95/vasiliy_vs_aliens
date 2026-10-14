@@ -1,12 +1,11 @@
-// Василий против пришельцев — вступительный комикс-предыстория.
-// 12 кадров во весь экран с подписью (RU/EN), плавная смена и лёгкий наезд камеры.
-// Показывается перед самым первым забегом (флаг vasiliy.introSeen) и по кнопке «Предыстория» в меню.
+// Василий против пришельцев — комиксы во весь экран с подписью (RU/EN), плавная смена и лёгкий наезд камеры.
+// intro — предыстория, 12 кадров: перед самым первым забегом (флаг vasiliy.introSeen) и по кнопке
+// «Предыстория» в меню. promzona — переход во вторую локацию, 8 кадров: при первом шаге в пролом (src/game.js).
 // Управление: клик / пробел / Enter / → — дальше, ← — назад, ESC или кнопка — пропустить.
-// Раскадровка и промты для генерации кадров — docs/INTRO_COMIC.md.
+// Раскадровка и промты: предыстория — docs/INTRO_COMIC.md, переход — docs/LEVEL2_PROMZONA.md, раздел 6.
 
 window.Comic = (() => {
-  const SEEN_KEY = 'vasiliy.introSeen';
-  const FRAMES = [
+  const INTRO = [
     {
       img: 'assets/comic/intro_01.webp',
       ru: 'Новохмуринск. Город, о котором забыли все.',
@@ -68,6 +67,54 @@ window.Comic = (() => {
       en: 'Novokhmurinsk hasn\'t given up yet. Not while the master of the heating main still lives.'
     }
   ];
+  const PROMZONA = [
+    {
+      img: 'assets/comic/promzona_01.webp',
+      ru: 'Забор, который держал жаб в городе, треснул. Василий доломал его сам.',
+      en: 'The fence that kept the toads in town had cracked. Vasiliy finished the job himself.'
+    },
+    {
+      img: 'assets/comic/promzona_02.webp',
+      ru: 'За забором — завод, на котором когда-то держался весь Новохмуринск.',
+      en: 'Beyond the fence stood the factory that once kept all of Novokhmurinsk alive.'
+    },
+    {
+      img: 'assets/comic/promzona_03.webp',
+      ru: 'Жаб здесь хватало. После Мясника — мелочь, но патроны Василий берёг.',
+      en: 'There were plenty of toads here. Small fry after the Butcher, but Vasiliy was saving his ammo.'
+    },
+    {
+      img: 'assets/comic/promzona_04.webp',
+      ru: 'У проходной кто-то стрелял. Люди. Живые.',
+      en: 'Someone was shooting by the factory gates. People. Alive.'
+    },
+    {
+      img: 'assets/comic/promzona_05.webp',
+      ru: '— Не стреляй, свои! — Свои давно в икре, дед.',
+      en: '"Don\'t shoot, I\'m human!" "All the humans turned into spawn long ago, grandpa."'
+    },
+    {
+      img: 'assets/comic/promzona_06.webp',
+      ru: 'Серёгу зацепило кислотой. Яд Василия не брал — и руки у него не дрожали.',
+      en: 'Seryoga had caught some acid. The venom never worked on Vasiliy, and his hands didn\'t shake.'
+    },
+    {
+      img: 'assets/comic/promzona_07.webp',
+      ru: '— За забором чисто, я город зачистил. Уходите к пролому. Я прикрою.',
+      en: '"It\'s clear beyond the fence, I cleaned up the town. Head for the hole in the wall. I\'ll cover you."'
+    },
+    {
+      img: 'assets/comic/promzona_08.webp',
+      ru: 'Жабы шли со всего завода. Хозяин теплотрассы встал за баррикаду.',
+      en: 'Toads were coming from all over the factory. The master of the heating main took his place at the barricade.'
+    }
+  ];
+  // seenKey — флаг «уже смотрел» в localStorage. У перехода его нет: он показывается при первом входе
+  // в Промзону, а это помнит сохранение (locationsVisited)
+  const SETS = {
+    intro: { frames: INTRO, seenKey: 'vasiliy.introSeen' },
+    promzona: { frames: PROMZONA, seenKey: null }
+  };
 
   const $ = id => document.getElementById(id);
   const root = $('comic');
@@ -80,20 +127,22 @@ window.Comic = (() => {
   let front = 0;      // какой из двух слоёв сейчас виден
   let showToken = 0;  // при быстром листании старый кадр не должен проявиться поверх нового
   let onDone = null;
-  const preloaded = [];
+  let set = SETS.intro;
+  let preloaded = [];
 
-  function seen() {
-    try { return localStorage.getItem(SEEN_KEY) === '1'; } catch (e) { return false; }
+  function seen(name = 'intro') {
+    try { return localStorage.getItem(SETS[name].seenKey) === '1'; } catch (e) { return false; }
   }
 
   function markSeen() {
-    try { localStorage.setItem(SEEN_KEY, '1'); } catch (e) { /* не критично: покажем ещё раз */ }
+    if (!set.seenKey) return;
+    try { localStorage.setItem(set.seenKey, '1'); } catch (e) { /* не критично: покажем ещё раз */ }
   }
 
   function preload(i) {
-    if (i >= FRAMES.length || preloaded[i]) return;
+    if (i >= set.frames.length || preloaded[i]) return;
     const im = new Image();
-    im.src = FRAMES[i].img;
+    im.src = set.frames[i].img;
     preloaded[i] = im;
   }
 
@@ -103,7 +152,7 @@ window.Comic = (() => {
     const next = layers[1 - front];
     const prev = layers[front];
     next.classList.remove('shown');
-    next.src = FRAMES[i].img;
+    next.src = set.frames[i].img;
     const reveal = () => {
       if (token !== showToken) return;
       prev.classList.remove('shown');
@@ -114,7 +163,7 @@ window.Comic = (() => {
     (next.decode ? next.decode() : Promise.resolve()).then(reveal, reveal);
 
     caption.classList.remove('shown');
-    caption.textContent = FRAMES[i][currentLang === 'en' ? 'en' : 'ru'];
+    caption.textContent = set.frames[i][currentLang === 'en' ? 'en' : 'ru'];
     void caption.offsetWidth;
     caption.classList.add('shown');
     Array.from(dots.children).forEach((d, k) => d.classList.toggle('on', k === i));
@@ -122,7 +171,7 @@ window.Comic = (() => {
   }
 
   function next() {
-    if (index < FRAMES.length - 1) show(index + 1);
+    if (index < set.frames.length - 1) show(index + 1);
     else finish();
   }
 
@@ -142,14 +191,16 @@ window.Comic = (() => {
     if (done) done();
   }
 
-  // done — что сделать после последнего кадра или пропуска (например, начать забег)
-  function play(done = null) {
+  // done — что сделать после последнего кадра или пропуска (например, начать забег); name — какой комикс
+  function play(done = null, name = 'intro') {
     onDone = done;
+    if (set !== SETS[name]) preloaded = [];
+    set = SETS[name];
     active = true;
     index = 0;
     root.style.display = 'block';
     dots.innerHTML = '';
-    FRAMES.forEach(() => dots.appendChild(document.createElement('span')));
+    set.frames.forEach(() => dots.appendChild(document.createElement('span')));
     preload(0);
     show(0);
   }

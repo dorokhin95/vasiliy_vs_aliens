@@ -94,6 +94,7 @@ class ThreeCharacterManager {
     this.shotgunObj = null;
     this.drillObj = null;
     this.plasmaObj = null;
+    this.laserObj = null; // лазерный бластер (карта Долбильщика) — перекрашенная копия плазмагана
     this.armLDown = null;
     this.armRPistol = null;
     this.armRBat = null;
@@ -123,6 +124,23 @@ class ThreeCharacterManager {
         this.shotgunObj = this.model.getObjectByName('Vasiliy_Shotgun');
         this.drillObj = this.model.getObjectByName('Vasiliy_Drill');
         this.plasmaObj = this.model.getObjectByName('Vasiliy_Plasma');
+        // Лазерный бластер: своей модели нет — копия плазмагана в меди с красным свечением, в тех же руках
+        if (this.plasmaObj && this.plasmaObj.parent) {
+          this.laserObj = this.plasmaObj.clone(true);
+          this.laserObj.name = 'Vasiliy_Laser';
+          this.laserObj.traverse((o) => {
+            if (!o.isMesh || !o.material) return;
+            const tint = (m) => {
+              const c = m.clone();
+              if (c.color) c.color.multiply(new THREE.Color(1.5, 0.62, 0.42));
+              if (c.emissive && c.emissive.getHex() !== 0) c.emissive.setRGB(1.0, 0.16, 0.1);
+              return c;
+            };
+            o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material);
+          });
+          this.laserObj.visible = false;
+          this.plasmaObj.parent.add(this.laserObj);
+        }
         this.armLDown = this.model.getObjectByName('Vasiliy_Arm_L_Down');
         this.armRPistol = this.model.getObjectByName('Vasiliy_Arm_R_Pistol');
         this.armRBat = this.model.getObjectByName('Vasiliy_Arm_R_Bat');
@@ -323,7 +341,7 @@ class ThreeCharacterManager {
   // Torso twist, arm swing while walking and the bat strike. Runs after the clip has posed the skeleton
   animateUpperBody(player, currentWeapon, dt) {
     if (!this.upperBody) return;
-    const swinging = this.swingP < 1 && currentWeapon === 'bat' && !player.isRolling;
+    const swinging = this.swingP < 1 && currentWeapon === 'bat' && !this.somersault(player);
     if (this.swingP < 1) this.swingP = Math.min(1, this.swingP + dt / this.swingDuration);
     const pose = swinging ? this.swingPose(this.swingP) : null;
 
@@ -348,7 +366,7 @@ class ThreeCharacterManager {
     this.upperBody.matrixWorldNeedsUpdate = true;
 
     // 3. Arms: counter-swing to the legs while walking; the bat arm follows the strike keyframes
-    const swing = player.isRolling ? 0 : this.legSwing();
+    const swing = this.somersault(player) ? 0 : this.legSwing();
     if (this.armLDown) {
       // +X rotation swings an arm backwards: the left arm goes back when the left leg is in front
       const counter = pose ? (pose.twist < 0 ? -0.35 : 0.45) * Math.abs(pose.twist) : 0;
@@ -388,18 +406,24 @@ class ThreeCharacterManager {
     }
   }
 
+  // Кувырок переката. Рывок (карта Долбильщика) — тоже isRolling, но Василий бежит, а не кувыркается
+  somersault(player) {
+    return player.isRolling && !player.isDashing;
+  }
+
   setWeapon(weaponId) {
     // 'none' — всё оружие оставлено у Михалыча: руки как с битой, но пустые
     const unarmed = (weaponId === 'none');
     const isBat = (weaponId === 'bat');
     const isMakarov = (weaponId === 'makarov');
-    const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma');
+    const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma' || weaponId === 'laser');
 
     if (this.batObj) this.batObj.visible = isBat;
     if (this.makarovObj) this.makarovObj.visible = isMakarov;
     if (this.shotgunObj) this.shotgunObj.visible = (weaponId === 'shotgun');
     if (this.drillObj) this.drillObj.visible = (weaponId === 'drill');
     if (this.plasmaObj) this.plasmaObj.visible = (weaponId === 'plasma');
+    if (this.laserObj) this.laserObj.visible = (weaponId === 'laser');
 
     // Switch arm postures: one-handed (bat / pistol) vs two-handed (shotgun / drill / plasma)
     if (this.armLDown) this.armLDown.visible = (isBat || isMakarov || unarmed);
@@ -422,12 +446,13 @@ class ThreeCharacterManager {
 
     // 1. Weapon Selection (hide weapon briefly during tight somersault roll so barrel doesn't poke ground)
     const currentWeapon = player.currentWeapon || 'none';
-    if (player.isRolling) {
+    if (this.somersault(player)) {
       if (this.batObj) this.batObj.visible = false;
       if (this.makarovObj) this.makarovObj.visible = false;
       if (this.shotgunObj) this.shotgunObj.visible = false;
       if (this.drillObj) this.drillObj.visible = false;
       if (this.plasmaObj) this.plasmaObj.visible = false;
+      if (this.laserObj) this.laserObj.visible = false;
       this.currentWeaponId = null;
     } else if (this.currentWeaponId !== currentWeapon) {
       this.currentWeaponId = currentWeapon;
@@ -435,7 +460,7 @@ class ThreeCharacterManager {
     }
 
     // 2. Combat Roll vs Normal Aiming & Walking
-    if (player.isRolling) {
+    if (this.somersault(player)) {
       // Face the roll movement direction so somersault pitches forward along roll trajectory
       const rollDirAngle = (player.rollDx || player.rollDy)
         ? Math.atan2(player.rollDy, player.rollDx)
@@ -499,7 +524,7 @@ class ThreeCharacterManager {
     if (this.recoil > 0) {
       this.recoil = Math.max(0, this.recoil - 0.12);
       this.rollPivot.position.z = -this.recoil * 0.085;
-      if (!player.isRolling) {
+      if (!this.somersault(player)) {
         this.rollPivot.rotation.x = -this.recoil * 0.13;
       }
     } else {
@@ -507,7 +532,7 @@ class ThreeCharacterManager {
     }
 
     // 4. Drill vibration
-    if (currentWeapon === 'drill' && this.drillObj && !player.isRolling) {
+    if (currentWeapon === 'drill' && this.drillObj && !this.somersault(player)) {
       this.drillObj.rotation.z = Math.sin(Date.now() * 0.08) * 0.04;
     }
 
@@ -566,7 +591,7 @@ class ThreeCharacterManager {
       tipX = -0.090;
       tipY = 1.215;
       tipZ = 1.137;
-    } else if (weaponId === 'plasma') {
+    } else if (weaponId === 'plasma' || weaponId === 'laser') {
       tipX = -0.065;
       tipY = 1.215;
       tipZ = 1.140;

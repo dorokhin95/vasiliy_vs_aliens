@@ -126,7 +126,9 @@
 
 ## 6. Комикс перехода
 
-Тот же формат, что у вступительного (`docs/INTRO_COMIC.md`): кадры 16:9 без текста, подпись кладёт игра, в конце каждого промта — `[STYLE]` оттуда же. Метки `[VASILIY]`, `[TOAD GRUNT]`, `[TOAD BRUTE]` — оттуда же, новые — ниже.
+**Готовые кадры** — `assets/comic/promzona_01.webp` … `promzona_08.webp` (1920×1072, WebP); оригиналы 2752×1536 — локально в `blender_assets/comic_concepts/` (в git не идут). Лист выживших, по которому рисовались кадры, — `docs/comic_refs/survivors_comic_sheet.webp`. Gemini (Pro, «Создание изображений», 16:9): к каждому кадру прикладывались готовые кадры главы, листы Василия и выживших, концепты жаб и зданий Промзоны. Промты ниже — те, что сработали. Gemini не рисует «ружьё в лицо» и раненых под огнём — такие сцены описаны мягче. Направления в кадре он путает (Василий показывал на жаб, а не на пролом), поэтому в кадре 07 выжившие идут на зрителя, а жабы — только на заднем плане.
+
+Тот же формат, что у вступительного (`docs/INTRO_COMIC.md`): кадры 16:9 без текста, подпись кладёт игра, в конце каждого промта — `[STYLE]` оттуда же. Василий в этой главе — победитель Мясника: спокоен и уверен, жаб не боится, но и в лишний бой не лезет — пробирается осторожно. Выжившие в бою — всегда вместе по одну сторону баррикады, жабы — только по другую. Метки `[VASILIY]`, `[TOAD GRUNT]`, `[TOAD BRUTE]` — оттуда же, новые — ниже.
 
 **Новые персонажи для промтов** (черновик — уточним по концептам):
 
@@ -165,11 +167,11 @@ Wide establishing shot of an enormous abandoned Soviet factory complex in grey m
 
 ### 03. Закоулками
 
-> **RU:** Жаб здесь хватало. Василий решил с ними пока не знакомиться.
-> **EN:** There were plenty of toads here. Vasiliy decided not to get acquainted just yet.
+> **RU:** Жаб здесь хватало. После Мясника — мелочь, но патроны Василий берёг.
+> **EN:** There were plenty of toads here. Small fry after the Butcher, but Vasiliy was saving his ammo.
 
 ```
-[VASILIY] pressed flat against the side of a rusty freight wagon in a narrow gap between two trains, holding his breath, while beyond the wagons a patrol passes: a [TOAD STORMTROOPER] with a steaming plasma rifle and a [TOAD GRUNT], seen only through the gap between wagons; tense, quiet, dim light, puddles with oil sheen. [STYLE]
+[VASILIY] sneaking carefully but without any fear: crouching low in the deep shadow between two rusty freight wagons in the foreground, one hand on the wagon's buffer, a baseball bat held low, calm focused face, eyes narrowed, no smile; he has noticed the toads and decides not to waste time and ammo on a fight. Far away in the background, across several rail tracks in the fog, a patrol walks along the tracks without noticing him: a [TOAD STORMTROOPER] with a steaming plasma rifle and a [TOAD GRUNT]; quiet, dim light, puddles with oil sheen. [STYLE]
 ```
 
 ### 04. Выстрелы
@@ -178,7 +180,7 @@ Wide establishing shot of an enormous abandoned Soviet factory complex in grey m
 > **EN:** Someone was shooting by the factory gates. People. Alive.
 
 ```
-View from behind a corner of a brick wall: [VASILIY] peeking out at a factory checkpoint with turnstiles and a guard booth, barricaded with pallets, oil barrels, sandbags and an overturned ZIL truck; behind the barricade [SURVIVORS] shooting at unseen enemies, muzzle flashes, glowing green acid splashes hitting the barricade. [STYLE]
+View over the shoulder of [VASILIY] (calm, confident, sizing up the situation) from behind the corner of a brick wall: the factory checkpoint with turnstiles and a guard booth turned into a fort — a ring barricade of pallets, oil barrels, sandbags and an overturned ZIL truck. All five [SURVIVORS] are inside the ring, together on the near side, with their backs to us: Stepanych, Zina and Tolik fire over the far side of the barricade, muzzle flashes pointing away from the viewer; Lena crouches low behind the sandbags next to them, bandaging the wounded Seryoga lying on the ground. Beyond the barricade, in the fog, only glowing toad eyes and green acid bolts flying toward the barricade and splashing on it. [STYLE]
 ```
 
 ### 05. Свой
@@ -187,7 +189,7 @@ View from behind a corner of a brick wall: [VASILIY] peeking out at a factory ch
 > **EN:** "Don't shoot, I'm human!" "All the humans turned into spawn long ago, grandpa."
 
 ```
-Behind the barricade: [VASILIY] has just vaulted over the sandbags, hands raised; Stepanych, the grey-moustached foreman from [SURVIVORS], aims his double-barreled shotgun right at his face, the others turn in alarm; green light of acid fire flickering on their faces, tense but darkly comic moment. [STYLE]
+Behind the barricade: [VASILIY] has just climbed over the sandbags and stands with both hands up in a calm, slightly annoyed 'easy, I'm a friend' gesture, a wry look on his face; Stepanych, the grey-moustached foreman from [SURVIVORS], squints at him with deep suspicion, holding his double-barreled shotgun at the ready; Zina and Tolik look over in surprise; Lena and the wounded Seryoga sit by the sandbags; green light of acid fire from beyond the barricade on their faces, tense but darkly comic moment. [STYLE]
 ```
 
 ### 06. Перевязка
@@ -205,7 +207,7 @@ Close shot behind the barricade: [VASILIY] kneeling over the wounded young mecha
 > **EN:** "It's clear beyond the fence, I cleaned up the town. Head for the hole in the wall. I'll cover you."
 
 ```
-[VASILIY] standing up behind the barricade, pointing back toward the broken fence in the distance, his weapon in the other hand; [SURVIVORS] lifting the wounded Seryoga between two of them, Stepanych nodding grimly; determined heroic composition. [STYLE]
+Camera on the escape route looking back at the checkpoint: the barricade and the guard booth in the background, the green glow of the toads far behind them in the fog. [SURVIVORS] walk toward the viewer, away from the toads: Tolik and Zina carry the wounded Seryoga between them, Lena with her first-aid bag beside them, Stepanych with his shotgun behind them, looking back. In the right foreground [VASILIY] stands half-turned toward the toads, waving the survivors on with one hand, a baseball bat in the other, calm and determined. [STYLE]
 ```
 
 ### 08. Волна
@@ -214,7 +216,7 @@ Close shot behind the barricade: [VASILIY] kneeling over the wounded young mecha
 > **EN:** Toads were coming from all over the factory. The master of the heating main took his place at the barricade.
 
 ```
-Heroic low-angle shot over [VASILIY]'s shoulder at the barricade: a wave of alien toads charging across the factory square through fog and steam — [TOAD GRUNT] soldiers, two [TOAD STORMTROOPER] with orange-hot plasma rifles, a [TOAD BRUTE] in the back; the giant smokestack behind them; dozens of glowing eyes. [STYLE]
+Heroic low-angle shot over [VASILIY]'s shoulder: he stands alone behind the sandbag barricade (the survivors have left), calm and confident, gripping a baseball bat, a hunting shotgun slung over his back; a wave of alien toads charges toward him across the factory square through fog and steam — [TOAD GRUNT] soldiers, two [TOAD STORMTROOPER] with orange-hot plasma rifles, a [TOAD BRUTE] in the back; the giant red-and-white smokestack behind them; dozens of glowing eyes. [STYLE]
 ```
 
 После кадра 08 комикс закрывается, начинается оборона (раздел 1).
@@ -324,7 +326,7 @@ Heroic low-angle shot over [VASILIY]'s shoulder at the barricade: a wave of alie
 
 - ✅ **Две локации в сохранении:** `SAVE_FORMAT` 5 → 6 (этап обороны — ещё нет, этап 5). Хранить текущую локацию и состояние **обеих** локаций (жабы, тайники, лут), прогресс Василия — один на обе. Старые сохранения — локация 1. Сохранять и этап обороны: идёт волна / выжившие ушли.
 - ✅ **Генератор Промзоны** отдельно от города, свои районы и `getDistrictAt`.
-- ✅ **Переход в обе стороны** через пролом (комикса пока нет — окно с описанием). Первый раз в Промзону — комикс перехода (`src/comic.js` с набором кадров), затем загрузка на площадке у проходной. Дальше — просто переход.
+- ✅ **Переход в обе стороны** через пролом. Первый раз в Промзону — комикс перехода (`src/comic.js`, набор `promzona`), затем загрузка на площадке у проходной (пока — у пролома, оборона — этап 5). Дальше — просто переход.
 - **Оборона:** подходы волны, выжившие (новый тип NPC — стрельба, здоровье, отход к пролому по маршруту), конец обороны.
 - ✅ **Новые жабы:** ракеты со взрывами по площади и подсветкой мест попадания, перегрев штурмовиков; добавить их в `ENEMY_TYPES` сохранений.
 - **Город после спасения:** пост у пролома с периодическими жабами, мастерская и столовая (окна по E), NPC с диалогами.
@@ -370,7 +372,7 @@ Heroic low-angle shot over [VASILIY]'s shoulder at the barricade: a wave of alie
 - Локация — `currentLocation` в `src/game.js`; сетка дорог у обеих общая (`MAP.ROADS`), районы Промзоны — `PROMZONA_DISTRICTS`, застройка, жабы и Мясник — только в городе; в Промзоне купола Михалыча нет.
 - Декор по локации — `EnvironmentRenderer.setLocation()`: в Промзоне ж/д колеи, свои указатели и тонировка районов, редкие берёзы; за забором виден только город на юге.
 - Сохранение формата 6 (`src/menu.js`): `location`, `worlds` (мир каждой локации), `visited`. Формат 5 читается как город.
-- Пролом в обе стороны: в городе — верхний забор над логовом, в Промзоне — нижний, открыт всегда. Первый раз в Промзону — через окно с описанием (потом его заменит комикс), дальше — сразу. Уходя, локация запоминается снимком мира (`Menu.snapshotWorld`) и восстанавливается при возвращении.
+- Пролом в обе стороны: в городе — верхний забор над логовом, в Промзоне — нижний, открыт всегда. Первый раз в Промзону — через комикс перехода, дальше — сразу. Уходя, локация запоминается снимком мира (`Menu.snapshotWorld`) и восстанавливается при возвращении.
 - Проверено: зачистка → пролом → Промзона → обратно, сохранение и загрузка из Промзоны, старое сохранение формата 5.
 
 **Этап 2. Карта Промзоны** — ✅ сделано, сразу на настоящих моделях
@@ -391,14 +393,14 @@ Heroic low-angle shot over [VASILIY]'s shoulder at the barricade: a wave of alie
 - Проверка: бой с каждым, перекат уводит от ракет, окна для атаки читаются.
 
 **Этап 4. Новый лут, сейфы, способности**
-- Новые ресурсы: цветмет, чертежи, спирт, плазменные ячейки, квако-заряды — инвентарь, HUD, сохранение, лут.
-- Трофеи с новых жаб.
-- ✅ Сейфы трёх уровней: окно мини-игры, генерация кода, лампочки, заклинивание на 30 с, закрытие окна при ударе, содержимое по уровню. Внутри пока старые ресурсы — чертежи и новый лут добавит этап нового лута (`SAFE_LOOT` в `src/safes.js`).
+- ✅ Новые ресурсы: цветмет, чертежи, спирт, плазменные ячейки, квако-заряды — инвентарь, кошелёк лавки, сохранение, лут (как устроено — `LEVEL2_IMPLEMENTATION.md`, раздел «Лут Промзоны»). Чертежи — только из сейфов.
+- ✅ Трофеи с новых жаб: плазменные ячейки со штурмовиков, квако-заряды с ракетчиков.
+- ✅ Сейфы трёх уровней: окно мини-игры, генерация кода, лампочки, заклинивание на 30 с, закрытие окна при ударе, содержимое по уровню (`SAFE_LOOT` в `src/safes.js`: чертежи, цветмет, спирт, плазменные ячейки — по таблице раздела 9).
 - Окно способностей: новый ряд в ветках, открывается вместе с Промзоной; ✅ «Стетоскоп» (ветка Кибернизации), остальные способности ряда — придумать.
 - Проверка: вскрыть по сейфу каждого уровня, с «Стетоскопом» и без.
 
 **Этап 5. Прибытие: комикс и оборона**
-- Комикс перехода: 8 кадров (на время — заглушки), показывается при первом переходе.
+- ✅ Комикс перехода: 8 кадров (раздел 6), показывается при первом переходе.
 - Старт у проходной: баррикада, три подхода волны, передышки.
 - Выжившие — новый тип персонажей: стоят за баррикадой, стреляют, получают урон, после волны уносят раненого к пролому.
 - Этап обороны — в сохранении.
@@ -422,7 +424,10 @@ Heroic low-angle shot over [VASILIY]'s shoulder at the barricade: a wave of alie
 **Этап 9. Босс Промзоны — Межпространственный Долбильщик** — ✅ сделан бой (кадра представления и пролома дальше пока нет). Логово — в северо-западном квартале градирен, он освобождён под арену. 6500 здоровья, наплечники спереди гасят 35% урона. Фазы:
 - с 50% — **электробуря**: удар в землю, расходятся три электрических кольца (25 урона и оглушение 1 с, перекатом можно перепрыгнуть), сразу за ней — **юла**: ~4 с крутится с молотом и несётся на Василия, доворачивает медленно, потом шатается ~2 с. Повтор раз в 20 с;
 - с 20% — **мерцание** (15 с неуязвим, перескакивает, повтор раз в 40 с) и **две копии**: по 25% его здоровья, 75% урона, те же приёмы. Погиб он — копии рассыпаются;
-- награда — лут и выбор из трёх карт, как за Мясника.
+- награда — лут и выбор из трёх **своих** карт (рубашка та же, что у Мясника):
+  - **Лазерный бластер** — новое оружие (в лавке не продаётся): луч бьёт сразу, высокая скорострельность, средний урон; 30 с огня без остановки, потом 5 с перезарядки накопителя (сама, когда сел, или по R);
+  - **Рывок** — ПКМ: рывок на 15 м туда, куда Василий бежит (стоя — куда целится), неуязвим, как в перекате; перезарядка 10 с;
+  - **Гиперрегенерация** — ПКМ: 10 с восстанавливает по 3 здоровья в секунду; перезарядка 90 с.
 
 Приёмы (числа — в `POUNDER_ATTACKS`, `src/game.js`):
 
@@ -445,7 +450,7 @@ Heroic low-angle shot over [VASILIY]'s shoulder at the barricade: a wave of alie
 |---|---|---|---|
 | А1 | Жаба-штурмовик, жаба-ракетчик (концепты, модели, анимации) | 3 | ✅ в игре (`tools/build_promzona_toads_blender.py`) |
 | А2 | 10 зданий Промзоны и 4 текстуры (рельсы, плиты ПАГ, щебень, шлам) | 2 | здания ✅ (в игре); текстуры — нет, рельсы пока рисуются кодом |
-| А3 | 6 тайников, 3 сейфа (закрытые и открытые), декорации, иконки ресурсов, окно сейфа | 2, 4 | тайники ✅ (в игре); сейфы ✅ (модели, в игру — на этапе 4); декорации 5 из 9 ✅ (тепловоз, кран, эстакада, штабель, катушка); иконки и окно — нет |
+| А3 | 6 тайников, 3 сейфа (закрытые и открытые), декорации, иконки ресурсов, окно сейфа | 2, 4 | тайники ✅ (в игре); сейфы ✅ (модели, в игру — на этапе 4); декорации 5 из 9 ✅ (тепловоз, кран, эстакада, штабель, катушка); иконки ресурсов ✅; окно сейфа — нет |
 | А4 | Листы пятерых выживших, их модели на общем скелете, 8 кадров комикса | 5 | — |
 | А5 | Новые жители города (бойцы поста, повар), портреты для диалогов, мастерская и столовая на карте, иконки улучшений и блюд | 6 | — |
 | А6 | Интерьер подвала и обстановка в нескольких состояниях | 7 | — |

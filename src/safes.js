@@ -16,14 +16,16 @@ window.Safes = (function () {
   };
   const JAM_FRAMES = 60 * 30;
 
-  // Что внутри: [тип лута, от, до, шанс]. Пока — из ресурсов, которые уже есть в игре;
-  // чертежи, цветмет, спирт и плазменные ячейки добавит этап нового лута Промзоны
+  // Что внутри: [тип лута, от, до, шанс] — по таблице docs/LEVEL2_PROMZONA.md, раздел 9. Лут Промзоны
+  // (PZ_LOOT_NAMES в game.js): цветмет и спирт — в шкафах, плазменные ячейки и чертёж (шанс) — в несгораемых,
+  // в кассовом — чертёж всегда. Чертежи падают только из сейфов
   const SAFE_LOOT = {
-    safe_cabinet: [['bottle', 3, 5], ['scrap', 4, 7], ['ammo_9x18', 8, 8, 0.5], ['ammo_12g', 4, 4, 0.4], ['bandage', 1, 1, 0.4]],
-    safe_fireproof: [['bottle', 4, 6], ['scrap', 6, 10], ['mil_parts', 1, 2], ['bandage', 1, 1, 0.6], ['stew', 1, 1, 0.5],
-      ['ammo_12g', 6, 6, 0.5]],
-    safe_vault: [['bottle', 8, 10], ['scrap', 10, 14], ['mil_parts', 2, 3], ['alien_core', 2, 3], ['vodka', 1, 1, 0.6],
-      ['bandage', 1, 1]]
+    safe_cabinet: [['bottle', 3, 5], ['scrap', 4, 7], ['nonferrous', 1, 2], ['tech_spirit', 1, 1, 0.5],
+      ['ammo_9x18', 8, 8, 0.5], ['ammo_12g', 4, 4, 0.4], ['bandage', 1, 1, 0.4]],
+    safe_fireproof: [['bottle', 4, 6], ['scrap', 6, 10], ['mil_parts', 1, 2], ['blueprint', 1, 1, 0.35], ['nonferrous', 2, 3],
+      ['plasma_cell', 1, 2, 0.6], ['bandage', 1, 1, 0.6], ['stew', 1, 1, 0.5], ['ammo_12g', 6, 6, 0.5]],
+    safe_vault: [['bottle', 8, 10], ['scrap', 10, 14], ['mil_parts', 2, 3], ['alien_core', 2, 3], ['blueprint', 1, 1],
+      ['plasma_cell', 1, 2, 0.5], ['kvako_charge', 1, 1, 0.5], ['vodka', 1, 1, 0.6], ['bandage', 1, 1]]
   };
 
   let cur = null;          // сейф, который сейчас вскрывают

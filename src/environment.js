@@ -308,6 +308,11 @@ class EnvironmentRenderer {
       { key: 'loot_toad_eye', path: 'assets/sprites/loot/loot_toad_eye.png?v=1', type: 'loot' },
       { key: 'loot_toad_leg', path: 'assets/sprites/loot/loot_toad_leg.png?v=1', type: 'loot' },
       { key: 'loot_toad_liver', path: 'assets/sprites/loot/loot_toad_liver.png?v=1', type: 'loot' },
+      { key: 'loot_nonferrous', path: 'assets/sprites/loot/loot_nonferrous.png?v=1', type: 'loot' },
+      { key: 'loot_blueprint', path: 'assets/sprites/loot/loot_blueprint.png?v=1', type: 'loot' },
+      { key: 'loot_tech_spirit', path: 'assets/sprites/loot/loot_tech_spirit.png?v=1', type: 'loot' },
+      { key: 'loot_plasma_cell', path: 'assets/sprites/loot/loot_plasma_cell.png?v=1', type: 'loot' },
+      { key: 'loot_kvako_charge', path: 'assets/sprites/loot/loot_kvako_charge.png?v=1', type: 'loot' },
       { key: 'loot_ammo_9x18', path: 'assets/sprites/loot/ammo_9x18.png?v=1026', type: 'loot' },
       { key: 'loot_ammo_12g', path: 'assets/sprites/loot/ammo_12g.png?v=1026', type: 'loot' }
     ];
@@ -2068,7 +2073,13 @@ class EnvironmentRenderer {
       glowColor = l.type === 'toad_eye' ? `rgba(250, 204, 21, ${pulse})`
         : l.type === 'toad_leg' ? `rgba(74, 222, 128, ${pulse})` : `rgba(244, 63, 94, ${pulse})`;
     }
-    const big = isTrophy || l.type === 'alien_core' || l.type === 'mil_parts';
+    // Лут Промзоны — ровное свечение своего цвета
+    const PZ_GLOW = {
+      nonferrous: 'rgba(251, 146, 60, 0.34)', blueprint: 'rgba(96, 165, 250, 0.36)', tech_spirit: 'rgba(203, 213, 225, 0.32)',
+      plasma_cell: 'rgba(103, 232, 249, 0.42)', kvako_charge: 'rgba(163, 230, 53, 0.42)'
+    };
+    if (PZ_GLOW[l.type]) glowColor = PZ_GLOW[l.type];
+    const big = isTrophy || !!PZ_GLOW[l.type] || l.type === 'alien_core' || l.type === 'mil_parts';
 
     ctx.fillStyle = glowColor;
     ctx.beginPath();
