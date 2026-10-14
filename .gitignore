@@ -27,5 +27,6 @@ tools/spritesage/
 # Intermediate 3D generation raw files & Blender backup files
 *.blend1
 blender_assets/*_concepts/
+blender_assets/*_models/
 blender_assets/*.obj
 assets/models/preview/
