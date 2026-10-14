@@ -91,8 +91,85 @@ class EnvironmentRenderer {
     // Насколько прозрачен дом, за которым скрыт Василий: 0..1, плавно (drawOccludingProps)
     this.buildingFade = new Map();
 
+    // Локация (window.getLocation в game.js): город или Промзона — у каждой свой декор
+    this.location = 'city';
+    this.rails = [];
+
     this.initAssets();
     this.generateDecorations();
+  }
+
+  // Смена локации (game.js generateWorld): декор, дворы, районы на земле и вид за забором строятся заново
+  setLocation(id) {
+    this.location = id;
+    this.staticPuddles = [];
+    this.staticManholes = [];
+    this.staticStreetLamps = [];
+    this.staticSidewalkBins = [];
+    this.courtyardBuilt = false;
+    this.courtyardWalkways = [];
+    this.courtyardLawns = [];
+    this.courtyardBenches = [];
+    this.courtyardBins = [];
+    this.courtyardBushes = [];
+    this.courtyardTrees = [];
+    this.deferredContainers.clear();
+    this.buildingFade.clear();
+    this.districtZones = null;
+    this.outskirts = null;
+    this.bioPuddles = [];
+    this.rails = id === 'promzona' ? this.promzonaRails() : [];
+    this.generateDecorations();
+  }
+
+  // Ж/д колеи Промзоны: две вдоль юга через всю карту (сортировка) и ветка на север к цехам
+  promzonaRails() {
+    return [
+      { horizontal: true, pos: 4950, from: 0, to: MAP.SIZE },
+      { horizontal: true, pos: 5070, from: 0, to: MAP.SIZE },
+      { horizontal: false, pos: 2350, from: 1460, to: 4950 }
+    ];
+  }
+
+  // Точка на рельсах или рядом (деревьям и кустам туда нельзя)
+  onRails(x, y, pad = 80) { // 80: и между двумя колеями сортировки (120 px) деревьям не место
+    return this.rails.some(r => r.horizontal
+      ? Math.abs(y - r.pos) < pad && x > r.from - pad && x < r.to + pad
+      : Math.abs(x - r.pos) < pad && y > r.from - pad && y < r.to + pad);
+  }
+
+  // Колея: насыпь из щебня, шпалы, два рельса. Рисуется поверх дорог (переезды)
+  drawRails(ctx, camera, screenW, screenH) {
+    const GAUGE = 30, BED = 70, STEP = 24;
+    const x0 = camera.x - 60, x1 = camera.x + screenW + 60, y0 = camera.y - 60, y1 = camera.y + screenH + 60;
+    ctx.save();
+    this.rails.forEach(r => {
+      const a = Math.max(r.from, r.horizontal ? x0 : y0), b = Math.min(r.to, r.horizontal ? x1 : y1);
+      if (b <= a) return;
+      if (r.horizontal ? (r.pos + BED < y0 || r.pos - BED > y1) : (r.pos + BED < x0 || r.pos - BED > x1)) return;
+      const rect = (along, across, len, wid) => (r.horizontal
+        ? ctx.fillRect(along, r.pos + across, len, wid)
+        : ctx.fillRect(r.pos + across, along, wid, len));
+      // Насыпь
+      ctx.fillStyle = 'rgba(64, 60, 54, 0.92)';
+      rect(a, -BED / 2, b - a, BED);
+      ctx.fillStyle = 'rgba(38, 35, 31, 0.6)';
+      rect(a, -BED / 2, b - a, 4);
+      rect(a, BED / 2 - 4, b - a, 4);
+      // Шпалы — от сетки мира, чтобы не «ехали» за камерой
+      ctx.fillStyle = '#3b2c22';
+      for (let p = Math.ceil(a / STEP) * STEP; p < b; p += STEP) rect(p, -GAUGE / 2 - 12, 10, GAUGE + 24);
+      // Рельсы: тень, тело, блик
+      [[-GAUGE / 2, 1], [GAUGE / 2 - 4, 1]].forEach(([off]) => {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        rect(a, off + 2, b - a, 4);
+        ctx.fillStyle = '#5b5148';
+        rect(a, off, b - a, 4);
+        ctx.fillStyle = 'rgba(203, 196, 186, 0.55)';
+        rect(a, off, b - a, 1);
+      });
+    });
+    ctx.restore();
   }
 
   initAssets() {
@@ -187,7 +264,7 @@ class EnvironmentRenderer {
 
   // Площадь у Ларька Михалыча: свои фонари, дорожные сюда не ставим (иначе двоятся и закрывают вывеску)
   isInShopPlaza(x, y) {
-    return Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 300;
+    return this.location === 'city' && Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 300;
   }
 
   generateDecorations() {
@@ -268,15 +345,17 @@ class EnvironmentRenderer {
     });
 
     // Пара фонарей и урн у передних углов площадки Ларька Михалыча — по бокам от киоска, ниже вывески
-    const C = MAP.CENTER;
-    this.staticStreetLamps.push(
-      { x: C - 160, y: C + 30, lightX: C - 132, lightY: C + 50, flipX: 1 },
-      { x: C + 160, y: C + 30, lightX: C + 132, lightY: C + 50, flipX: -1 }
-    );
-    this.staticSidewalkBins.push(
-      { x: C - 188, y: C + 44 },
-      { x: C + 188, y: C + 44 }
-    );
+    if (this.location === 'city') {
+      const C = MAP.CENTER;
+      this.staticStreetLamps.push(
+        { x: C - 160, y: C + 30, lightX: C - 132, lightY: C + 50, flipX: 1 },
+        { x: C + 160, y: C + 30, lightX: C + 132, lightY: C + 50, flipX: -1 }
+      );
+      this.staticSidewalkBins.push(
+        { x: C - 188, y: C + 44 },
+        { x: C + 188, y: C + 44 }
+      );
+    }
 
     // У каждого фонаря свой ритм «дыхания», примерно каждый седьмой — неисправный и моргает.
     // Зерно зависит только от координат, поэтому рисунок одинаков при каждой загрузке
@@ -318,15 +397,21 @@ class EnvironmentRenderer {
         pos += span + 90 + Math.floor(rnd(n++) * 120);
       }
     };
-    // Два ряда кварталов с каждой стороны: ближний (за забором) и дальний
-    row(true, (t) => -170 - t.h, -1300, worldW + 1300);
-    row(true, (t) => -620 - t.h, -1300, worldW + 1300);
+    // Два ряда кварталов с каждой стороны: ближний (за забором) и дальний. Из Промзоны город виден только
+    // на юге, за проломом; с остальных сторон завода — пустырь в тумане
+    const city = this.location !== 'promzona';
+    if (city) {
+      row(true, (t) => -170 - t.h, -1300, worldW + 1300);
+      row(true, (t) => -620 - t.h, -1300, worldW + 1300);
+    }
     row(true, () => worldH + 170, -1300, worldW + 1300);
     row(true, () => worldH + 620, -1300, worldW + 1300);
-    row(false, (t) => -170 - t.w, -150, worldH + 150);
-    row(false, (t) => -620 - t.w, -150, worldH + 150);
-    row(false, () => worldW + 170, -150, worldH + 150);
-    row(false, () => worldW + 620, -150, worldH + 150);
+    if (city) {
+      row(false, (t) => -170 - t.w, -150, worldH + 150);
+      row(false, (t) => -620 - t.w, -150, worldH + 150);
+      row(false, () => worldW + 170, -150, worldH + 150);
+      row(false, () => worldW + 620, -150, worldH + 150);
+    }
     this.outskirts = { lots, worldW, worldH };
   }
 
@@ -416,7 +501,7 @@ class EnvironmentRenderer {
   drawBorderSegment(ctx, s) {
     // Пролёт за логовом Мясника (window.fenceBreach из game.js): трещит, потом проломлен
     const fb = window.fenceBreach;
-    const breach = fb && s.side === 'top' && Math.abs(s.x - fb.x) < fb.halfW ? fb.state : null;
+    const breach = fb && s.side === (fb.side || 'top') && Math.abs(s.x - fb.x) < fb.halfW ? fb.state : null;
     if (breach === 'open') {
       this.drawFenceRubble(ctx, s);
       return;
@@ -461,7 +546,7 @@ class EnvironmentRenderer {
 
   // Проломленный пролёт: обломанные края плиты, торчащая арматура, куски бетона на земле
   drawFenceRubble(ctx, s) {
-    const x = s.x, base = 44;
+    const x = s.x, base = s.baseY + 4; // низ плиты: у верхнего забора 44, у нижнего — край карты
     ctx.save();
     // Сам проём: за забором темно — пустырь в тумане
     const hole = ctx.createLinearGradient(0, base - 66, 0, base + 6);
@@ -639,12 +724,18 @@ class EnvironmentRenderer {
   // Берёзы, сирень и шиповник по кварталам — кварталы стали просторнее, голыми их не оставляем.
   // Сколько на квартал по району: [деревьев, кустов]. Места одинаковы при каждой загрузке
   scatterGreenery(buildings) {
-    const WANT = { courtyards: [7, 7], heating: [4, 5], garages: [2, 4], cordon: [1, 3], nest: [0, 2] };
+    // Деревья и кусты по районам: [деревьев, кустов] на квартал. В Промзоне — редкие берёзы сквозь плиты
+    const WANT = {
+      courtyards: [7, 7], heating: [4, 5], garages: [2, 4], cordon: [1, 3], nest: [0, 2],
+      pz_breach: [2, 4], pz_admin: [4, 5], pz_railyard: [1, 3], pz_depot: [1, 2], pz_foundry: [0, 2],
+      pz_workshops: [1, 2], pz_warehouses: [1, 2], pz_tankfarm: [1, 2], pz_cooling: [0, 2], pz_sludge: [0, 1]
+    };
     const conts = typeof containers !== 'undefined' ? containers : [];
     const onRoad = (x, y) => MAP.ROADS.some(r =>
       (x > r.pos - 70 && x < r.pos + r.size + 70) || (y > r.pos - 70 && y < r.pos + r.size + 70));
     const blocked = (x, y, pad) =>
-      Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430 || onRoad(x, y) ||
+      this.isInShopPlaza(x, y) || (this.location === 'city' && Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430) ||
+      onRoad(x, y) || this.onRails(x, y) ||
       buildings.some(b => x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad + 30) ||
       conts.some(c => Math.hypot(c.x - x, c.y - y) < pad + 60) ||
       this.courtyardTrees.some(t => Math.hypot(t.x - x, t.y - y) < 120) ||
@@ -826,6 +917,9 @@ class EnvironmentRenderer {
     // 2. ДОРОЖНАЯ СЕТЬ (Тротуары из плит, объемные бордюры со швами, треснувший асфальт, потертая разметка)
     this.drawRoadNetwork(ctx, camera, screenW, screenH, roads);
 
+    // 2.2. Ж/Д КОЛЕИ ПРОМЗОНЫ (переезды поверх дорог)
+    if (this.rails.length) this.drawRails(ctx, camera, screenW, screenH);
+
     // 2.5. ВНУТРИДВОРОВЫЕ ДОРОЖКИ К ПОДЪЕЗДАМ И ПАЛИСАДНИКИ
     this.drawCourtyardGround(ctx, camera, screenW, screenH);
 
@@ -860,6 +954,21 @@ class EnvironmentRenderer {
   drawDistrictAtmosphere(ctx, camera, screenW, screenH) {
 
     // A. Текстурное и цветовое тонирование кварталов по специализации
+    if (!this.districtZones && this.location === 'promzona') {
+      // Промзона: мазут у сортировки и автобазы, ржавая окалина у цехов и складов, гнилая зелень гнезда
+      const tint = {
+        pz_railyard: ['rgba(20, 18, 14, 0.32)', 'garages'], pz_depot: ['rgba(20, 18, 14, 0.32)', 'garages'],
+        pz_foundry: ['rgba(40, 24, 16, 0.28)', 'cordon'], pz_workshops: ['rgba(28, 24, 20, 0.26)', 'garages'],
+        pz_warehouses: ['rgba(28, 24, 20, 0.24)', ''], pz_tankfarm: ['rgba(16, 20, 28, 0.28)', 'garages'],
+        pz_cooling: ['rgba(16, 48, 28, 0.34)', 'nest'], pz_sludge: ['rgba(22, 52, 24, 0.38)', 'nest']
+      };
+      this.districtZones = [];
+      MAP.BANDS.forEach(bx => MAP.BANDS.forEach(by => {
+        const d = window.getDistrictAt ? window.getDistrictAt((bx[0] + bx[1]) / 2, (by[0] + by[1]) / 2) : null;
+        const t = d && tint[d.id];
+        if (t) this.districtZones.push({ x: bx[0], y: by[0], w: bx[1] - bx[0], h: by[1] - by[0], color: t[0], type: t[1] });
+      }));
+    }
     if (!this.districtZones) {
       const [b0, b1, b2, b3] = MAP.BANDS;
       const rect = (bx, by, color, type) => ({ x: bx[0], y: by[0], w: bx[1] - bx[0], h: by[1] - by[0], color, type });
@@ -1156,7 +1265,7 @@ class EnvironmentRenderer {
           const s = segs[i];
           const x = s.x - s.w / 2, y = s.y - s.h / 2;
           if (!seen(x, y, s.w, s.h)) continue;
-          if (fb && fb.state === 'open' && s.side === 'top' && Math.abs(s.x - fb.x) < fb.halfW) continue;
+          if (fb && fb.state === 'open' && s.side === (fb.side || 'top') && Math.abs(s.x - fb.x) < fb.halfW) continue;
           const v = tp.fenceVariant(s.x, s.y);
           const frame = tp.getFrameCanvas(v.key, s.dir) || tp.getFrameCanvas('fence_po2', s.dir);
           sc.cast(frame, x, y, s.w, s.h, { flip: v.flip });
@@ -1487,7 +1596,16 @@ class EnvironmentRenderer {
     const C = MAP.CENTER, [rA, , rB] = MAP.ROADS;
     const nearA = rA.pos + rA.size + 160, nearB = rB.pos - 160;
     const cornerA = rA.pos - 160, cornerB = rB.pos + rB.size + 160;
-    const stencils = [
+    const stencils = this.location === 'promzona' ? [
+      { x: nearA, y: C, text: '◄ ШЛАМ-ПРУДЫ [КВАКО-ГНЕЗДО]', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: nearB, y: C, text: 'АВТОБАЗА [ЧЕРМЕТ] ►', color: 'rgba(251, 146, 60, 0.72)' },
+      { x: C, y: nearA, text: '▲ ЛИТЕЙНЫЙ ЦЕХ', color: 'rgba(248, 113, 113, 0.75)' },
+      { x: C, y: nearB, text: '▼ ЗАВОДОУПРАВЛЕНИЕ', color: 'rgba(250, 204, 21, 0.72)' },
+      { x: cornerA, y: MAP.RING_A, text: '☠ ГРАДИРНИ: КВАКО-ГНЕЗДО', color: 'rgba(192, 132, 252, 0.80)' },
+      { x: cornerB, y: MAP.RING_A, text: '⚠ РЕЗЕРВУАРНЫЙ ПАРК', color: 'rgba(248, 113, 113, 0.75)' },
+      { x: cornerA, y: MAP.RING_B, text: 'Ж/Д СОРТИРОВКА [ЧЕРМЕТ]', color: 'rgba(251, 146, 60, 0.72)' },
+      { x: cornerB, y: MAP.RING_B, text: '▼ ПРОЛОМ В НОВОХМУРИНСК', color: 'rgba(52, 211, 153, 0.80)' }
+    ] : [
       { x: nearA, y: C, text: '◄ ГСК «ВОСТОК» [ЧЕРМЕТ]', color: 'rgba(251, 146, 60, 0.72)' },
       { x: nearB, y: C, text: 'ТЕПЛОСЕТЬ [ВОДКА / ТУШЁНКА] ►', color: 'rgba(56, 189, 248, 0.72)' },
       { x: C, y: nearA, text: '▲ ВОЕННЫЙ КОРДОН [ВОЕНТОРГ]', color: 'rgba(248, 113, 113, 0.75)' },

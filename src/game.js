@@ -873,8 +873,12 @@ const LANGS = {
     transit_kicker: "ЛОКАЦИЯ 2",
     transit_title: "ПРОМЗОНА",
     transit_text: "За карантинным забором — градообразующий завод, на котором когда-то держался весь Новохмуринск: остывшие трубы, цеха, склады, железнодорожные ветки. Что жабы устроили там, Василию ещё предстоит узнать.",
-    transit_wip: "🚧 Локация в разработке. Возвращайся к пролому, когда Промзона откроется.",
-    transit_back: "ВЕРНУТЬСЯ В НОВОХМУРИНСК",
+    transit_wip: "🚧 Промзона строится: пока на ней только дороги и рельсы. Цеха, тайники и жабы появятся с новыми моделями.",
+    transit_back: "ОСТАТЬСЯ В НОВОХМУРИНСКЕ",
+    transit_go: "ВОЙТИ В ПРОМЗОНУ",
+    location_city: "НОВОХМУРИНСК",
+    location_promzona: "ПРОМЗОНА",
+    location_sub: "Пролом в заборе — дорога обратно",
     boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!",
     boss_adds: "🥚 Капсулы лопаются — подмога!",
     toads_left: "Жаб осталось",
@@ -946,8 +950,12 @@ const LANGS = {
     transit_kicker: "LOCATION 2",
     transit_title: "INDUSTRIAL ZONE",
     transit_text: "Beyond the quarantine fence lies the plant that once kept all of Novokhmurinsk alive: cold pipes, workshops, warehouses, railway sidings. What the toads have built there, Vasiliy is yet to find out.",
-    transit_wip: "🚧 This location is under construction. Come back to the breach when the Industrial Zone opens.",
-    transit_back: "BACK TO NOVOKHMURINSK",
+    transit_wip: "🚧 The Industrial Zone is being built: so far it has only roads and rails. Workshops, stashes and toads will arrive with the new models.",
+    transit_back: "STAY IN NOVOKHMURINSK",
+    transit_go: "ENTER THE INDUSTRIAL ZONE",
+    location_city: "NOVOKHMURINSK",
+    location_promzona: "INDUSTRIAL ZONE",
+    location_sub: "The fence breach is the way back",
     boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!",
     boss_adds: "🥚 The pods burst — reinforcements!",
     toads_left: "Toads left",
@@ -1205,7 +1213,110 @@ const DISTRICTS = {
   }
 };
 
+// --- ЛОКАЦИИ ---
+// Город (Новохмуринск) и Промзона за его северным забором: одна сетка дорог (MAP.ROADS), свои районы,
+// застройка и враги. Между ними — пролом в заборе (fenceBreach). Уходя из локации, её мир сохраняется в
+// locationWorlds (тем же снимком, что пишет сохранение: Menu.snapshotWorld) и восстанавливается при возвращении.
+// План Промзоны — docs/LEVEL2_PROMZONA.md
+let currentLocation = 'city';
+let locationWorlds = {};          // { city: снимок мира, promzona: снимок мира } — для тех, где Василия сейчас нет
+let locationsVisited = new Set(['city']);
+window.getLocation = () => currentLocation;
+
+// Районы Промзоны (раздел 2 плана): сложность растёт от пролома (юго-восток) к градирням (северо-запад)
+const PROMZONA_DISTRICTS = {
+  pz_breach: {
+    id: 'pz_breach', tier: 1,
+    name_ru: '🟢 У ПРОЛОМА', name_en: '🟢 BY THE BREACH',
+    meta_ru: 'Угроза: ★☆☆☆ | Пролом — обратно в Новохмуринск, к Михалычу',
+    meta_en: 'Threat: ★☆☆☆ | The breach leads back to Novokhmurinsk and Mikhalych',
+    color: '#10b981', bottleMult: 1.0, scrapMult: 1.0
+  },
+  pz_admin: {
+    id: 'pz_admin', tier: 1,
+    name_ru: '🟡 ЗАВОДОУПРАВЛЕНИЕ', name_en: '🟡 PLANT ADMINISTRATION',
+    meta_ru: 'Угроза: ★☆☆☆ | Ресурс: Стеклотара, Бинты',
+    meta_en: 'Threat: ★☆☆☆ | Loot: Bottles, Bandages',
+    color: '#eab308', bottleMult: 1.2, scrapMult: 1.0
+  },
+  pz_railyard: {
+    id: 'pz_railyard', tier: 2,
+    name_ru: '🟠 Ж/Д СОРТИРОВКА', name_en: '🟠 RAIL YARD',
+    meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет, Тушёнка',
+    meta_en: 'Threat: ★★☆☆ | Loot: Scrap, Stew',
+    color: '#f97316', bottleMult: 1.4, scrapMult: 1.5
+  },
+  pz_depot: {
+    id: 'pz_depot', tier: 2,
+    name_ru: '🟠 АВТОБАЗА', name_en: '🟠 TRUCK DEPOT',
+    meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет ×1.5',
+    meta_en: 'Threat: ★★☆☆ | Loot: Scrap ×1.5',
+    color: '#f97316', bottleMult: 1.4, scrapMult: 1.6
+  },
+  pz_foundry: {
+    id: 'pz_foundry', tier: 3,
+    name_ru: '🔴 ЛИТЕЙНЫЙ ЦЕХ', name_en: '🔴 FOUNDRY',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Чермет, Детали',
+    meta_en: 'Threat: ★★★☆ | Loot: Scrap, Parts',
+    color: '#ef4444', bottleMult: 2.0, scrapMult: 1.4
+  },
+  pz_workshops: {
+    id: 'pz_workshops', tier: 3,
+    name_ru: '🔴 МЕХАНИЧЕСКИЕ ЦЕХА', name_en: '🔴 MACHINE SHOPS',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали',
+    meta_en: 'Threat: ★★★☆ | Loot: Parts',
+    color: '#ef4444', bottleMult: 2.0, scrapMult: 1.3
+  },
+  pz_warehouses: {
+    id: 'pz_warehouses', tier: 3,
+    name_ru: '🔴 СКЛАДЫ ПРОДУКЦИИ', name_en: '🔴 WAREHOUSES',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Патроны',
+    meta_en: 'Threat: ★★★☆ | Loot: Parts, Ammo',
+    color: '#ef4444', bottleMult: 2.0, scrapMult: 1.2
+  },
+  pz_tankfarm: {
+    id: 'pz_tankfarm', tier: 3,
+    name_ru: '🔴 РЕЗЕРВУАРНЫЙ ПАРК', name_en: '🔴 TANK FARM',
+    meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Водка',
+    meta_en: 'Threat: ★★★☆ | Loot: Parts, Vodka',
+    color: '#ef4444', bottleMult: 2.1, scrapMult: 1.2
+  },
+  pz_cooling: {
+    id: 'pz_cooling', tier: 4,
+    name_ru: '🟣 ГРАДИРНИ (КВАКО-ГНЕЗДО)', name_en: '🟣 COOLING TOWERS (TOAD NEST)',
+    meta_ru: 'Угроза: ★★★★ | Особый ресурс: Квако-ядра',
+    meta_en: 'Threat: ★★★★ | Special Loot: Alien Cores',
+    color: '#a855f7', bottleMult: 2.6, scrapMult: 1.2
+  },
+  pz_sludge: {
+    id: 'pz_sludge', tier: 4,
+    name_ru: '🟣 ШЛАМ-ПРУДЫ', name_en: '🟣 SLUDGE PONDS',
+    meta_ru: 'Угроза: ★★★★ | Особый ресурс: Квако-ядра',
+    meta_en: 'Threat: ★★★★ | Special Loot: Alien Cores',
+    color: '#a855f7', bottleMult: 2.6, scrapMult: 1.2
+  }
+};
+
+// Районы Промзоны по сетке кварталов: запад — гнездо, центр — цеха и склады, восток — резервуары и
+// автобаза, юг — сортировка, заводоуправление и пролом
+function getPromzonaDistrictAt(x, y) {
+  const D = PROMZONA_DISTRICTS;
+  if (x < MAP.RING_A) {
+    if (y < MAP.CENTER) return D.pz_cooling;
+    return y < MAP.RING_B ? D.pz_sludge : D.pz_railyard;
+  }
+  if (x > MAP.RING_B) {
+    if (y < MAP.CENTER) return D.pz_tankfarm;
+    return y < MAP.RING_B ? D.pz_depot : D.pz_breach;
+  }
+  if (y < MAP.RING_A) return D.pz_warehouses;
+  if (y < MAP.CENTER) return D.pz_foundry;
+  if (y < MAP.RING_B) return D.pz_workshops;
+  return x < MAP.CENTER ? D.pz_railyard : D.pz_admin;
+}
+
 function getDistrictAt(x, y) {
+  if (currentLocation === 'promzona') return getPromzonaDistrictAt(x, y);
   if (Math.hypot(x - safeZone.x, y - safeZone.y) < 420) {
     return DISTRICTS.hub;
   }
@@ -1235,7 +1346,19 @@ window.getDistrictAt = getDistrictAt;
 
 let lastPlayerDistrictId = 'hub';
 
+// Купол Михалыча есть только в городе. В Промзоне безопасной зоны нет: купол уносится далеко за карту,
+// и все проверки «рядом с базой» (спавн, магазин, отталкивание жаб) просто не срабатывают
+const SAFE_ZONE_HOME = { x: safeZone.x, y: safeZone.y, radius: safeZone.radius, shopX: safeZone.shopX, shopY: safeZone.shopY };
+function applyLocationSafeZone() {
+  if (currentLocation === 'city') Object.assign(safeZone, SAFE_ZONE_HOME);
+  else Object.assign(safeZone, { x: -100000, y: -100000, radius: 0, shopX: -100000, shopY: -100000 });
+}
+
 function generateWorld() {
+  applyLocationSafeZone();
+  // Декор (фонари, дворы, рельсы, дымка за забором) у каждой локации свой — до buildObstacles, который его раскладывает
+  if (window.environmentRenderer) window.environmentRenderer.setLocation(currentLocation);
+  bossRef = null;
   buildings = [];
   roads = [];
   containers = [];
@@ -1352,167 +1475,171 @@ function generateWorld() {
     return false;
   };
 
-  // 0. Стартовые мусорные баки у площади Михалыча, по краям главного проспекта (Tier 0 -> Tier 1 переход)
-  const C = MAP.CENTER, main = MAP.MAIN;
-  tryAddContainer(C - 340, main.pos - 55, 'trash', null, 0);
-  tryAddContainer(C + 340, main.pos - 55, 'trash', null, 0);
-  tryAddContainer(C - 340, main.pos + main.size + 55, 'trash', null, 0);
+  // Застройка, тайники и жабы города. Промзона пока пустая: её цеха, тайники и жабы появятся вместе с
+  // моделями (docs/LEVEL2_PROMZONA.md, этапы 2-3)
+  if (currentLocation === 'city') {
+    // 0. Стартовые мусорные баки у площади Михалыча, по краям главного проспекта (Tier 0 -> Tier 1 переход)
+    const C = MAP.CENTER, main = MAP.MAIN;
+    tryAddContainer(C - 340, main.pos - 55, 'trash', null, 0);
+    tryAddContainer(C + 340, main.pos - 55, 'trash', null, 0);
+    tryAddContainer(C - 340, main.pos + main.size + 55, 'trash', null, 0);
 
-  // 1. Генерация архитектуры, контейнеров и патрулей по каждому из 16 кварталов согласно правилам района
-  colRanges.forEach(([x1, x2], cIdx) => {
-    rowRanges.forEach(([y1, y2], rIdx) => {
-      const bcx = (x1 + x2) * 0.5;
-      const bcy = (y1 + y2) * 0.5;
-      const dist = getDistrictAt(bcx, bcy);
-      const blockBuildings = [];
+    // 1. Генерация архитектуры, контейнеров и патрулей по каждому из 16 кварталов согласно правилам района
+    colRanges.forEach(([x1, x2], cIdx) => {
+      rowRanges.forEach(([y1, y2], rIdx) => {
+        const bcx = (x1 + x2) * 0.5;
+        const bcy = (y1 + y2) * 0.5;
+        const dist = getDistrictAt(bcx, bcy);
+        const blockBuildings = [];
 
-      if (dist.id === 'courtyards') {
-        // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из 5-этажных Хрущёвок и 9-этажных Брежневок
-        const b1 = tryAddBuilding(x1 + S(60), y1 + S(33), H(320), H(160), 'panel', { subType: 'khrushchevka' });
-        const b2 = tryAddBuilding(x2 - S(70) - H(220), y2 - S(25) - H(260), H(220), H(260), 'panel', { subType: 'brezhnevka' });
-        const b3 = tryAddBuilding(x1 + S(90), y2 - S(80) - H(160), H(320), H(160), 'panel', { subType: 'khrushchevka' });
-        [b1, b2, b3].forEach(b => { if (b) blockBuildings.push(b); });
+        if (dist.id === 'courtyards') {
+          // 🟡 TIER 1: СПАЛЬНЫЕ ХРУЩЁВКИ — просторные дворы из 5-этажных Хрущёвок и 9-этажных Брежневок
+          const b1 = tryAddBuilding(x1 + S(60), y1 + S(33), H(320), H(160), 'panel', { subType: 'khrushchevka' });
+          const b2 = tryAddBuilding(x2 - S(70) - H(220), y2 - S(25) - H(260), H(220), H(260), 'panel', { subType: 'brezhnevka' });
+          const b3 = tryAddBuilding(x1 + S(90), y2 - S(80) - H(160), H(320), H(160), 'panel', { subType: 'khrushchevka' });
+          [b1, b2, b3].forEach(b => { if (b) blockBuildings.push(b); });
 
-        // Примыкающий забор ПО-2 или короткий ввод теплотрассы к одному из домов
-        if (b1) {
-          tryAddBuilding(b1.x + b1.w + 4, Math.round(b1.y + b1.h - 32), 220, 30, 'fence_wall', { segments: 2 });
+          // Примыкающий забор ПО-2 или короткий ввод теплотрассы к одному из домов
+          if (b1) {
+            tryAddBuilding(b1.x + b1.w + 4, Math.round(b1.y + b1.h - 32), 220, 30, 'fence_wall', { segments: 2 });
+          }
+          if (b3) {
+            tryAddBuilding(b3.x + b3.w + 4, Math.round(b3.y + b3.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
+          }
+
+          // Контейнеры: мусорные баки ЖЭК-4 рядом со стенами панелек + редкие Жигули у дороги
+          blockBuildings.forEach(b => {
+            placeContainer(b.x - 48, b.y + b.h - 24, 'trash', null, 0);
+            placeContainer(b.x + H(80), b.y + b.h + 48, 'trash', null, 1);
+          });
+          placeContainer(bcx, y1 + 25, 'car', 'zhiguli', 0);
+          // Домов во дворе теперь два (крупные) — ещё пара баков посреди двора
+          placeContainer(bcx - S(60), bcy + S(40), 'trash', null, 0);
+          placeContainer(x1 + S(200), y2 - S(120), 'trash', null, 1);
+
+          // Враги: ТОЛЬКО слабые Жабы-Пехотинцы (65 HP), никаких Громил и Снайперов у базы!
+          for (let i = 0; i < 3; i++) {
+            pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
+          }
+
+        } else if (dist.id === 'garages') {
+          // 🟠 TIER 2A: ГАРАЖНЫЙ КООПЕРАТИВ «ВОСТОК» — ряды 3D гаражных боксов №74, заборы ПО-2, много машин и чермета
+          const g1 = tryAddBuilding(x1 + S(40), y1 + S(80), 140, 100, 'garage');
+          const g2 = tryAddBuilding(x1 + S(220), y1 + S(80), 140, 100, 'garage');
+          const g3 = tryAddBuilding(x1 + S(40), y1 + S(360), 140, 100, 'garage');
+          const g4 = tryAddBuilding(x1 + S(220), y1 + S(360), 140, 100, 'garage');
+          const g5 = tryAddBuilding(x1 + S(80), y2 - S(190), 140, 100, 'garage');
+          const g6 = tryAddBuilding(x1 + S(260), y2 - S(190), 140, 100, 'garage');
+          [g1, g2, g3, g4, g5, g6].forEach(g => { if (g) blockBuildings.push(g); });
+
+          // Бетонные заборы ПО-2 продолжают линии гаражного кооператива
+          if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+          if (g4) tryAddBuilding(g4.x + g4.w + 4, g4.y + g4.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+          if (g6) tryAddBuilding(g6.x + g6.w + 4, g6.y + g6.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+
+          // Контейнеры: Жигули и УАЗы перед гаражами + мусорные баки + армейский ящик с инструментами в глубине
+          if (g1) placeContainer(g1.x + 70, g1.y + g1.h + 72, 'car', 'zhiguli', 0);
+          if (g3) placeContainer(g3.x + 70, g3.y + g3.h + 72, 'car', 'uaz', 8);
+          placeContainer(x2 - S(90), bcy - S(120), 'car', 'zhiguli', 1);
+          placeContainer(x1 + S(420), y1 + S(230), 'box', null, 0);
+          placeContainer(x1 + S(60), y2 - S(50), 'trash', null, 0);
+          placeContainer(x2 - S(110), y2 - S(110), 'box', null, 1);
+
+          // Враги: Пехотинцы + Снайперы в засадах между гаражами
+          for (let i = 0; i < 4; i++) {
+            pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
+          }
+
+        } else if (dist.id === 'heating') {
+          // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — Кирпичные Котельные ТЭЦ, Брежневки и длинные линии труб теплотрассы
+          const p1 = tryAddBuilding(x1 + S(45), y1 + S(36), H(220), H(260), 'panel', { subType: 'brezhnevka' });
+          const p2 = tryAddBuilding(x1 + S(45), y2 - S(16) - H(160), H(320), H(160), 'boiler_house');
+          // Гараж — справа от брежневки (под ней теперь котельная)
+          const g1 = p1 ? tryAddBuilding(p1.x + p1.w + 60, p1.y + S(40), 140, 100, 'garage') : null;
+
+          // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен Котельной и домов
+          if (p1) {
+            tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.55 - 20), 252, 40, 'heating_line', { segments: 2 });
+          }
+          if (g1) {
+            tryAddBuilding(g1.x + g1.w + 4, Math.round(g1.y + g1.h * 0.55 - 20), 356, 40, 'heating_line', { segments: 3 });
+          }
+          if (p2) {
+            tryAddBuilding(p2.x + p2.w + 4, Math.round(p2.y + p2.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
+          }
+
+          // Контейнеры: тайники с водкой и тушенкой у тепловых камер + машины
+          placeContainer(x1 + S(330), y1 + S(290), 'trash', null, 0);
+          placeContainer(x1 + S(420), y1 + S(380), 'box', null, 0);
+          placeContainer(x1 + S(260), y1 + S(575), 'trash', null, 1);
+          placeContainer(x1 + S(480), y2 - S(280), 'box', null, 0);
+          placeContainer(x1 + S(160), y1 + 38, 'car', 'uaz', 0);
+          placeContainer(x2 - S(110), bcy + S(40), 'car', 'zhiguli', 8);
+
+          // Враги: Снайперы и Штурмовики вдоль труб
+          for (let i = 0; i < 4; i++) {
+            pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
+          }
+
+        } else if (dist.id === 'cordon') {
+          // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — Командный Бункер/Казарма с РЛС, блокпосты из плит ПО-2, санитарные УАЗы, склады
+          const b1 = tryAddBuilding(x1 + S(70), y1 + S(90), H(320), H(160), 'military_hq');
+          const g1 = tryAddBuilding(x1 + S(120), y2 - S(165), 140, 100, 'garage');
+          const g2 = tryAddBuilding(x2 - S(360), y1 + S(120), 140, 100, 'garage');
+
+          // Длинные защитные рубежи из бетонных заборов ПО-2
+          if (b1) tryAddBuilding(b1.x + b1.w + 4, b1.y + b1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+          if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 330, 30, 'fence_wall', { segments: 3 });
+          if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+
+          // Контейнеры: преобладают Армейские ящики (55%) и УАЗ-Буханки (35%)
+          placeContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
+          placeContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
+          placeContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
+          // УАЗ — на площадке правее гаража: у стены штаба он вставал в проход между штабом и гаражом
+          placeContainer(x1 + S(380), y2 - S(150), 'car', 'uaz', 0);
+          placeContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
+          placeContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
+
+          // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
+          for (let i = 0; i < 5; i++) {
+            pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
+          }
+
+        } else if (dist.id === 'nest') {
+          // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — захваченные командные бункеры и котельные, элитные склады спецхрана (лут ×2.5)
+          const g1 = tryAddBuilding(x1 + S(50), y1 + S(70), 140, 100, 'garage');
+          const pType = ((cIdx + rIdx) % 2 === 0) ? 'military_hq' : 'boiler_house';
+          const p1 = tryAddBuilding(x1 + S(50), y2 - S(70) - H(160), H(320), H(160), pType);
+
+          if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
+          if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
+
+          // СВ угол — логово босса: вместо центрального склада открытая арена, ящики-трофеи по краям
+          const isBossLair = (cIdx === 3 && rIdx === 0);
+          if (isBossLair) {
+            placeContainer(x2 - S(40), y1 + S(40), 'box', null, 1);
+            placeContainer(x2 - S(40), y2 - S(260), 'box', null, 2);
+          } else {
+            // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
+            placeContainer(bcx - S(65), bcy - S(45), 'box', null, 0);
+            placeContainer(bcx + S(55), bcy - S(40), 'box', null, 1);
+            placeContainer(bcx - S(50), bcy + S(55), 'box', null, 2);
+            placeContainer(bcx + S(65), bcy + S(60), 'box', null, 0);
+            placeContainer(x2 - S(140), y1 + S(140), 'car', 'uaz', 8);
+          }
+          placeContainer(x1 + S(150), bcy + S(10), 'car', 'uaz', 0);
+
+          // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы);
+          // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
+          const packSize = isBossLair ? 3 : 6;
+          for (let i = 0; i < packSize; i++) {
+            pendingSpawns.push([x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist]);
+          }
         }
-        if (b3) {
-          tryAddBuilding(b3.x + b3.w + 4, Math.round(b3.y + b3.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
-        }
-
-        // Контейнеры: мусорные баки ЖЭК-4 рядом со стенами панелек + редкие Жигули у дороги
-        blockBuildings.forEach(b => {
-          placeContainer(b.x - 48, b.y + b.h - 24, 'trash', null, 0);
-          placeContainer(b.x + H(80), b.y + b.h + 48, 'trash', null, 1);
-        });
-        placeContainer(bcx, y1 + 25, 'car', 'zhiguli', 0);
-        // Домов во дворе теперь два (крупные) — ещё пара баков посреди двора
-        placeContainer(bcx - S(60), bcy + S(40), 'trash', null, 0);
-        placeContainer(x1 + S(200), y2 - S(120), 'trash', null, 1);
-
-        // Враги: ТОЛЬКО слабые Жабы-Пехотинцы (65 HP), никаких Громил и Снайперов у базы!
-        for (let i = 0; i < 3; i++) {
-          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
-        }
-
-      } else if (dist.id === 'garages') {
-        // 🟠 TIER 2A: ГАРАЖНЫЙ КООПЕРАТИВ «ВОСТОК» — ряды 3D гаражных боксов №74, заборы ПО-2, много машин и чермета
-        const g1 = tryAddBuilding(x1 + S(40), y1 + S(80), 140, 100, 'garage');
-        const g2 = tryAddBuilding(x1 + S(220), y1 + S(80), 140, 100, 'garage');
-        const g3 = tryAddBuilding(x1 + S(40), y1 + S(360), 140, 100, 'garage');
-        const g4 = tryAddBuilding(x1 + S(220), y1 + S(360), 140, 100, 'garage');
-        const g5 = tryAddBuilding(x1 + S(80), y2 - S(190), 140, 100, 'garage');
-        const g6 = tryAddBuilding(x1 + S(260), y2 - S(190), 140, 100, 'garage');
-        [g1, g2, g3, g4, g5, g6].forEach(g => { if (g) blockBuildings.push(g); });
-
-        // Бетонные заборы ПО-2 продолжают линии гаражного кооператива
-        if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-        if (g4) tryAddBuilding(g4.x + g4.w + 4, g4.y + g4.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-        if (g6) tryAddBuilding(g6.x + g6.w + 4, g6.y + g6.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-
-        // Контейнеры: Жигули и УАЗы перед гаражами + мусорные баки + армейский ящик с инструментами в глубине
-        if (g1) placeContainer(g1.x + 70, g1.y + g1.h + 72, 'car', 'zhiguli', 0);
-        if (g3) placeContainer(g3.x + 70, g3.y + g3.h + 72, 'car', 'uaz', 8);
-        placeContainer(x2 - S(90), bcy - S(120), 'car', 'zhiguli', 1);
-        placeContainer(x1 + S(420), y1 + S(230), 'box', null, 0);
-        placeContainer(x1 + S(60), y2 - S(50), 'trash', null, 0);
-        placeContainer(x2 - S(110), y2 - S(110), 'box', null, 1);
-
-        // Враги: Пехотинцы + Снайперы в засадах между гаражами
-        for (let i = 0; i < 4; i++) {
-          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
-        }
-
-      } else if (dist.id === 'heating') {
-        // 🔵 TIER 2B: МАГИСТРАЛЬ ТЕПЛОТРАССЫ — Кирпичные Котельные ТЭЦ, Брежневки и длинные линии труб теплотрассы
-        const p1 = tryAddBuilding(x1 + S(45), y1 + S(36), H(220), H(260), 'panel', { subType: 'brezhnevka' });
-        const p2 = tryAddBuilding(x1 + S(45), y2 - S(16) - H(160), H(320), H(160), 'boiler_house');
-        // Гараж — справа от брежневки (под ней теперь котельная)
-        const g1 = p1 ? tryAddBuilding(p1.x + p1.w + 60, p1.y + S(40), 140, 100, 'garage') : null;
-
-        // Разветвленные магистрали теплотрассы (по 2-3 секции) от стен Котельной и домов
-        if (p1) {
-          tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.55 - 20), 252, 40, 'heating_line', { segments: 2 });
-        }
-        if (g1) {
-          tryAddBuilding(g1.x + g1.w + 4, Math.round(g1.y + g1.h * 0.55 - 20), 356, 40, 'heating_line', { segments: 3 });
-        }
-        if (p2) {
-          tryAddBuilding(p2.x + p2.w + 4, Math.round(p2.y + p2.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
-        }
-
-        // Контейнеры: тайники с водкой и тушенкой у тепловых камер + машины
-        placeContainer(x1 + S(330), y1 + S(290), 'trash', null, 0);
-        placeContainer(x1 + S(420), y1 + S(380), 'box', null, 0);
-        placeContainer(x1 + S(260), y1 + S(575), 'trash', null, 1);
-        placeContainer(x1 + S(480), y2 - S(280), 'box', null, 0);
-        placeContainer(x1 + S(160), y1 + 38, 'car', 'uaz', 0);
-        placeContainer(x2 - S(110), bcy + S(40), 'car', 'zhiguli', 8);
-
-        // Враги: Снайперы и Штурмовики вдоль труб
-        for (let i = 0; i < 4; i++) {
-          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
-        }
-
-      } else if (dist.id === 'cordon') {
-        // 🔴 TIER 3: ВОЕННЫЙ КОРДОН — Командный Бункер/Казарма с РЛС, блокпосты из плит ПО-2, санитарные УАЗы, склады
-        const b1 = tryAddBuilding(x1 + S(70), y1 + S(90), H(320), H(160), 'military_hq');
-        const g1 = tryAddBuilding(x1 + S(120), y2 - S(165), 140, 100, 'garage');
-        const g2 = tryAddBuilding(x2 - S(360), y1 + S(120), 140, 100, 'garage');
-
-        // Длинные защитные рубежи из бетонных заборов ПО-2
-        if (b1) tryAddBuilding(b1.x + b1.w + 4, b1.y + b1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-        if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 330, 30, 'fence_wall', { segments: 3 });
-        if (g2) tryAddBuilding(g2.x + g2.w + 4, g2.y + g2.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-
-        // Контейнеры: преобладают Армейские ящики (55%) и УАЗ-Буханки (35%)
-        placeContainer(bcx - S(90), bcy - S(20), 'box', null, 0);
-        placeContainer(bcx + S(40), bcy + S(30), 'box', null, 1);
-        placeContainer(x2 - S(180), y2 - S(140), 'box', null, 0);
-        // УАЗ — на площадке правее гаража: у стены штаба он вставал в проход между штабом и гаражом
-        placeContainer(x1 + S(380), y2 - S(150), 'car', 'uaz', 0);
-        placeContainer(x2 - S(210), y1 + S(60), 'car', 'uaz', 8);
-        placeContainer(x1 + S(60), y2 - S(70), 'trash', null, 0);
-
-        // Враги: Громилы (35%) + Снайперы (35%) + Ветераны-пехотинцы (30%)
-        for (let i = 0; i < 5; i++) {
-          pendingSpawns.push([x1 + 40, y1 + 40, x2 - 40, y2 - 40, dist]);
-        }
-
-      } else if (dist.id === 'nest') {
-        // 🟣 TIER 4: КВАКО-ГНЕЗДО (4 УГЛА КАРТЫ) — захваченные командные бункеры и котельные, элитные склады спецхрана (лут ×2.5)
-        const g1 = tryAddBuilding(x1 + S(50), y1 + S(70), 140, 100, 'garage');
-        const pType = ((cIdx + rIdx) % 2 === 0) ? 'military_hq' : 'boiler_house';
-        const p1 = tryAddBuilding(x1 + S(50), y2 - S(70) - H(160), H(320), H(160), pType);
-
-        if (g1) tryAddBuilding(g1.x + g1.w + 4, g1.y + g1.h - 32, 220, 30, 'fence_wall', { segments: 2 });
-        if (p1) tryAddBuilding(p1.x + p1.w + 4, Math.round(p1.y + p1.h * 0.62 - 20), 252, 40, 'heating_line', { segments: 2 });
-
-        // СВ угол — логово босса: вместо центрального склада открытая арена, ящики-трофеи по краям
-        const isBossLair = (cIdx === 3 && rIdx === 0);
-        if (isBossLair) {
-          placeContainer(x2 - S(40), y1 + S(40), 'box', null, 1);
-          placeContainer(x2 - S(40), y2 - S(260), 'box', null, 2);
-        } else {
-          // Богатое хранилище армейских спец-ящиков и санитарных УАЗов в центре гнезда
-          placeContainer(bcx - S(65), bcy - S(45), 'box', null, 0);
-          placeContainer(bcx + S(55), bcy - S(40), 'box', null, 1);
-          placeContainer(bcx - S(50), bcy + S(55), 'box', null, 2);
-          placeContainer(bcx + S(65), bcy + S(60), 'box', null, 0);
-          placeContainer(x2 - S(140), y1 + S(140), 'car', 'uaz', 8);
-        }
-        placeContainer(x1 + S(150), bcy + S(10), 'car', 'uaz', 0);
-
-        // Враги: Элитные стаи (50% Элитные Громилы 320 HP + 35% Снайперы + 15% Мутанты-пехотинцы);
-        // в логове — только небольшая охрана, чтобы бой с боссом не превращался в свалку
-        const packSize = isBossLair ? 3 : 6;
-        for (let i = 0; i < packSize; i++) {
-          pendingSpawns.push([x1 + 35, y1 + 35, x2 - 35, y2 - 35, dist]);
-        }
-      }
+      });
     });
-  });
+  }
 
   // Бетонный забор ПО-2 по периметру карты: не выпускает ни Василия, ни жаб, пули в него упираются.
   // Рисует его EnvironmentRenderer.drawBorderFence; здесь — только коллизия (с запасом наружу)
@@ -1523,15 +1650,21 @@ function generateWorld() {
     { x: -out, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 },
     { x: WORLD_WIDTH - 32, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 }
   ].forEach((r, i) => buildings.push(Object.assign({ type: 'border_fence', side: ['top', 'bottom', 'left', 'right'][i] }, r)));
-  fenceBreach.state = 'intact';
+  // Пролом: в городе — пролёт верхнего забора над логовом Мясника, цел, пока Василий его не проломит;
+  // в Промзоне — тот же пролёт с её стороны, в нижнем заборе, открыт сразу (через него Василий и пришёл)
+  fenceBreach.side = currentLocation === 'city' ? 'top' : 'bottom';
+  fenceBreach.state = currentLocation === 'city' ? 'intact' : 'open';
   fenceBreach.cracks = 0;
+  if (fenceBreach.state === 'open') openBreachCollision();
   lairCracks = [];
   shockwaves = [];
 
   buildObstacles();
-  generateBioPuddles();
+  if (currentLocation === 'city') generateBioPuddles();
+  else bioPuddles = [];
+  if (window.environmentRenderer) window.environmentRenderer.bioPuddles = bioPuddles;
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
-  spawnBoss();
+  if (currentLocation === 'city') spawnBoss();
   levelEnemyTotal = enemies.filter(e => e.type !== 'boss').length;
   levelCleared = false;
 }
@@ -1830,8 +1963,14 @@ function startGame(save = null) {
   player.blockedPerks.clear();
   lastPlayerDistrictId = 'hub';
 
+  // Локация, где Василий был при сохранении (новый забег — город)
+  currentLocation = save && window.Menu ? window.Menu.locationOf(save) : 'city';
+  locationWorlds = {};
+  locationsVisited = new Set(['city', currentLocation]);
   generateWorld();
   if (save && window.Menu) window.Menu.applyRun(save);
+  // В Промзоне купола Михалыча нет — после загрузки Василий у пролома
+  if (currentLocation !== 'city') placePlayerAtBreach();
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
   if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon || 'none');
   applyHotbarOrder();
@@ -4083,13 +4222,17 @@ function applyBossCard(id) {
   if (window.Menu) window.Menu.requestSave();
 }
 
-// --- ПРОЛОМ В ЗАБОРЕ (переход в Промзону) ---
+// --- ПРОЛОМ В ЗАБОРЕ (переход между городом и Промзоной) ---
 // Удары берсерка-Мясника по земле трескают пролёт бетонного забора прямо за его логовом. Когда
-// локация зачищена, Василий проламывает треснувший пролёт — за ним путь в Промзону (локация 2,
-// пока заглушка). Состояние: intact → cracked → open. Рисует пролом EnvironmentRenderer
-// x — плита верхнего забора (сегменты через 110 px от 55) прямо над логовом BOSS_HOME
-const fenceBreach = { x: 5555, halfW: 55, state: 'intact', cracks: 0 };
+// город зачищен, Василий проламывает треснувший пролёт — за ним Промзона. Состояние: intact → cracked → open.
+// В Промзоне тот же пролёт — в нижнем заборе (side: 'bottom'), он открыт всегда. Рисует пролом EnvironmentRenderer.
+// x — плита забора (сегменты через 110 px от 55) прямо над логовом BOSS_HOME
+const fenceBreach = { x: 5555, halfW: 55, side: 'top', state: 'intact', cracks: 0 };
 window.fenceBreach = fenceBreach;
+// Линия забора с пролётом: у верхнего забора — y = 40, у нижнего — край карты
+const breachFenceY = () => (fenceBreach.side === 'top' ? 40 : WORLD_HEIGHT - 40);
+// В какую сторону от забора — внутрь карты (+1 вниз от верхнего, -1 вверх от нижнего)
+const breachInward = () => (fenceBreach.side === 'top' ? 1 : -1);
 
 function crackFence() {
   if (fenceBreach.state === 'open') return;
@@ -4097,21 +4240,22 @@ function crackFence() {
   fenceBreach.cracks = Math.min(3, fenceBreach.cracks + 1);
 }
 
-// Коллизия верхнего забора разрезается: в пролёте можно пройти
+// Коллизия забора с пролётом разрезается: в пролёте можно пройти
 function openBreachCollision() {
-  const i = buildings.findIndex(b => b.type === 'border_fence' && b.side === 'top');
+  const side = fenceBreach.side;
+  const i = buildings.findIndex(b => b.type === 'border_fence' && b.side === side);
   if (i < 0) return;
   const r = buildings[i];
   const gapL = fenceBreach.x - fenceBreach.halfW, gapR = fenceBreach.x + fenceBreach.halfW;
   buildings.splice(i, 1,
-    { type: 'border_fence', side: 'top_l', x: r.x, y: r.y, w: gapL - r.x, h: r.h },
-    { type: 'border_fence', side: 'top_r', x: gapR, y: r.y, w: r.x + r.w - gapR, h: r.h });
+    { type: 'border_fence', side: side + '_l', x: r.x, y: r.y, w: gapL - r.x, h: r.h },
+    { type: 'border_fence', side: side + '_r', x: gapR, y: r.y, w: r.x + r.w - gapR, h: r.h });
 }
 
 function breakFence() {
   fenceBreach.state = 'open';
   openBreachCollision();
-  const x = fenceBreach.x, y = 40;
+  const x = fenceBreach.x, y = breachFenceY();
   if (window.threeCharacter && window.threeCharacter.triggerSwing) window.threeCharacter.triggerSwing();
   for (let k = 0; k < 4; k++) spawnGunpowderSmoke(x - 40 + k * 26, y + 10, Math.PI / 2 + (Math.random() - 0.5), 6);
   spawnDirectionalSparks(x, y, Math.PI / 2, 2.6, 24, '#9ca3af', 4, 12, 18);
@@ -4123,44 +4267,84 @@ function breakFence() {
   if (window.Menu) window.Menu.requestSave();
 }
 
-// Пролом открыт и Василий шагнул в него — переход в Промзону
+// Пролом открыт и Василий шагнул в него — переход в другую локацию. В Промзону в первый раз — через
+// окно с её описанием (потом его заменит комикс перехода), дальше — сразу
 function checkBreachTransit() {
-  if (fenceBreach.state !== 'open' || player.y > 48 || Math.abs(player.x - fenceBreach.x) > fenceBreach.halfW) return;
+  if (fenceBreach.state !== 'open' || Math.abs(player.x - fenceBreach.x) > fenceBreach.halfW) return;
+  const beyond = fenceBreach.side === 'top' ? player.y < 48 : player.y > WORLD_HEIGHT - 48;
+  if (!beyond) return;
+  const target = currentLocation === 'city' ? 'promzona' : 'city';
+  if (locationsVisited.has(target)) {
+    travelTo(target);
+    return;
+  }
   gameState = 'TRANSIT';
-  ['kicker', 'title', 'text', 'wip', 'back'].forEach(k => {
+  ['kicker', 'title', 'text', 'wip', 'back', 'go'].forEach(k => {
     document.getElementById('transit-' + k).textContent = t('transit_' + k);
   });
   document.getElementById('transit-modal').style.display = 'flex';
 }
 
+// Василий стоит у пролома с внутренней стороны забора
+function placePlayerAtBreach() {
+  player.x = fenceBreach.x;
+  player.y = breachFenceY() + breachInward() * 110;
+  player.isRolling = false;
+}
+
+// Переход в другую локацию: мир текущей запоминается тем же снимком, что пишет сохранение,
+// другая строится заново и, если Василий там уже был, восстанавливается
+function travelTo(target) {
+  if (window.Menu) locationWorlds[currentLocation] = window.Menu.snapshotWorld();
+  currentLocation = target;
+  locationsVisited.add(target);
+  generateWorld();
+  const saved = locationWorlds[target];
+  delete locationWorlds[target];
+  if (saved && window.Menu) window.Menu.applyWorld(saved);
+  placePlayerAtBreach();
+  lastPlayerDistrictId = '';
+  gameState = 'PLAYING';
+  showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
+  if (window.Menu) window.Menu.requestSave();
+}
+
+window.enterTransit = function() {
+  document.getElementById('transit-modal').style.display = 'none';
+  travelTo(currentLocation === 'city' ? 'promzona' : 'city');
+};
+
 window.leaveTransit = function() {
   document.getElementById('transit-modal').style.display = 'none';
-  player.x = fenceBreach.x;
-  player.y = 120;
+  placePlayerAtBreach();
   gameState = 'PLAYING';
 };
 
-// Надпись на асфальте у пролома и полоска света из него
+// Надпись на асфальте у пролома и полоска света из него (в сторону карты от забора)
 function drawBreachGround(ctx) {
   if (fenceBreach.state !== 'open') return;
   const x = fenceBreach.x;
+  const y0 = breachFenceY(), dir = breachInward();
   const t = performance.now() / 1000;
   ctx.save();
-  const g = ctx.createLinearGradient(x, 30, x, 190);
+  const g = ctx.createLinearGradient(x, y0 - dir * 10, x, y0 + dir * 150);
   g.addColorStop(0, `rgba(250, 204, 21, ${0.22 + Math.sin(t * 2) * 0.05})`);
   g.addColorStop(1, 'rgba(250, 204, 21, 0)');
   ctx.fillStyle = g;
   ctx.beginPath();
-  ctx.moveTo(x - fenceBreach.halfW + 8, 40);
-  ctx.lineTo(x + fenceBreach.halfW - 8, 40);
-  ctx.lineTo(x + 80, 190);
-  ctx.lineTo(x - 80, 190);
+  ctx.moveTo(x - fenceBreach.halfW + 8, y0);
+  ctx.lineTo(x + fenceBreach.halfW - 8, y0);
+  ctx.lineTo(x + 80, y0 + dir * 150);
+  ctx.lineTo(x - 80, y0 + dir * 150);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = 'rgba(250, 204, 21, 0.55)';
   ctx.font = '900 16px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(currentLang === 'ru' ? '▲ ПРОМЗОНА ▲' : '▲ INDUSTRIAL ZONE ▲', x, 150);
+  const label = currentLocation === 'city'
+    ? (currentLang === 'ru' ? '▲ ПРОМЗОНА ▲' : '▲ INDUSTRIAL ZONE ▲')
+    : (currentLang === 'ru' ? '▼ НОВОХМУРИНСК ▼' : '▼ NOVOKHMURINSK ▼');
+  ctx.fillText(label, x, y0 + dir * 110);
   ctx.restore();
 }
 
@@ -4205,8 +4389,11 @@ function drawBreachHint(ctx) {
 
 // Когда локация зачищена, золотая стрелка у края экрана показывает, где пролом, и сколько до него
 function drawBreachMarker() {
-  if (gameState !== 'PLAYING' || !levelCleared || fenceBreach.state === 'intact') return;
-  const sx = fenceBreach.x - camera.x, sy = 60 - camera.y;
+  if (gameState !== 'PLAYING' || fenceBreach.state === 'intact') return;
+  // В городе — когда он зачищен; в Промзоне пролом — единственная дорога к Михалычу, стрелка видна всегда
+  if (currentLocation === 'city' && !levelCleared) return;
+  const markY = breachFenceY() + breachInward() * 20;
+  const sx = fenceBreach.x - camera.x, sy = markY - camera.y;
   const w = canvas.width, h = canvas.height;
   if (sx > 0 && sx < w && sy > 0 && sy < h) return;
   const left = 40, right = w - 40, top = 80, bottom = h - 110;
@@ -4233,7 +4420,7 @@ function drawBreachMarker() {
   ctx.stroke();
   ctx.restore();
   // Подпись — ближе к центру экрана, без поворота
-  const meters = Math.round(Math.hypot(fenceBreach.x - player.x, 60 - player.y) / 45);
+  const meters = Math.round(Math.hypot(fenceBreach.x - player.x, markY - player.y) / 45);
   const label = `${t('breach_marker')} · ${meters} ${currentLang === 'ru' ? 'м' : 'm'}`;
   ctx.save();
   ctx.globalAlpha = pulse;
@@ -5701,6 +5888,7 @@ function onBossDefeated(e) {
 }
 
 function drawBossLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
+  if (currentLocation !== 'city') return;
   if (BOSS_HOME.x + 220 < viewMinX || BOSS_HOME.x - 220 > viewMaxX || BOSS_HOME.y + 170 < viewMinY || BOSS_HOME.y - 170 > viewMaxY) return;
   ctx.save();
   ctx.fillStyle = 'rgba(14, 9, 6, 0.38)';

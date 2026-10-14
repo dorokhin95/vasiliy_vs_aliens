@@ -310,7 +310,7 @@
       transition: width 0.12s linear;
     }
 
-    /* Переход в Промзону (пока заглушка) */
+    /* Первый переход в Промзону через пролом */
     .transit-modal {
       position: absolute;
       inset: 0;
@@ -345,6 +345,8 @@
       cursor: pointer;
     }
     .transit-btn:hover, .cards-continue:hover { background: #fde047; }
+    .transit-btn-secondary { margin-left: 10px; background: transparent; color: #facc15; border: 1px solid #a16207; }
+    .transit-btn-secondary:hover { background: rgba(250, 204, 21, 0.12); }
 
     /* Три карты после босса */
     .cards-modal {
@@ -1238,14 +1240,15 @@
     </div>
 
     <!-- Центральное сообщение (src/game.js showToast) -->
-    <!-- Переход в Промзону через пролом в заборе (локация 2 пока заглушка) -->
+    <!-- Первый переход в Промзону через пролом в заборе (src/game.js checkBreachTransit) -->
     <div id="transit-modal" class="transit-modal">
       <div class="transit-box">
         <div class="transit-kicker" id="transit-kicker"></div>
         <div class="transit-title" id="transit-title"></div>
         <div class="transit-text" id="transit-text"></div>
         <div class="transit-wip" id="transit-wip"></div>
-        <button class="transit-btn" id="transit-back" onclick="leaveTransit()"></button>
+        <button class="transit-btn" id="transit-go" onclick="enterTransit()"></button>
+        <button class="transit-btn transit-btn-secondary" id="transit-back" onclick="leaveTransit()"></button>
       </div>
     </div>
 
@@ -1560,13 +1563,13 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
   <script src="src/shadows.js?v=1094"></script>
-  <script src="src/environment.js?v=1097"></script>
+  <script src="src/environment.js?v=1099"></script>
   <script src="src/three_character.js?v=1094"></script>
   <script src="src/three_enemies.js?v=1094"></script>
   <script src="src/three_props.js?v=1100"></script>
   <script src="src/three_boss.js?v=1094"></script>
-  <script src="src/game.js?v=1097"></script>
-  <script src="src/menu.js?v=1094"></script>
+  <script src="src/game.js?v=1098"></script>
+  <script src="src/menu.js?v=1095"></script>
   <script src="src/comic.js?v=1094"></script>
   <script src="src/cards.js?v=1094"></script>
 </body>

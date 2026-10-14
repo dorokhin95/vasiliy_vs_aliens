@@ -23,8 +23,11 @@ window.Menu = (() => {
   // 4 — карта 6000×6000 с крупными домами: мир из форматов 1–3 к ней не подходит, из них берётся
   //     только прогресс Василия, а город расставляется заново,
   // 5 — дома ×2.55: тайники встали иначе, мир из формата 4 тоже не подходит (старые места тайников
-  //     оказывались на стенах домов)
-  const SAVE_FORMAT = 5;
+  //     оказывались на стенах домов),
+  // 6 — две локации (город и Промзона): location — где Василий, worlds — миры обеих локаций
+  //     (в каждом то же, что раньше лежало в world); посещённые локации — visited.
+  //     Сохранение формата 5 читается как город
+  const SAVE_FORMAT = 6;
   const WORLD_FORMAT = 5;
   const ENEMY_TYPES = new Set(['grunt', 'sniper', 'brute']);
   const CODE_PREFIX = 'VVA1';
@@ -235,9 +238,14 @@ window.Menu = (() => {
 
   function snapshot() {
     const ammo = k => ({ clip: player.ammo[k].clip, reserve: player.ammo[k].reserve });
+    // Мир той локации, где Василий, снимается сейчас; другой — каким он был, когда Василий оттуда ушёл
+    const worlds = Object.assign({}, locationWorlds, { [currentLocation]: snapshotWorld() });
     return {
       format: SAVE_FORMAT,
       savedAt: Date.now(),
+      location: currentLocation,
+      visited: Array.from(locationsVisited),
+      worlds,
       player: {
         hp: round2(player.hp),
         maxHp: player.maxHp,
@@ -256,32 +264,42 @@ window.Menu = (() => {
         blockedPerks: Array.from(player.blockedPerks),
         cards: Object.assign({}, player.cards),
         pendingCards: !!player.pendingCards
-      },
-      world: {
-        // [номер, обыскан, x, y, поворот] — только обысканные и переброшенные
-        containers: containers.map((c, i) => (c.searched || c.moved)
-          ? [i, c.searched ? 1 : 0, Math.round(c.x), Math.round(c.y), typeof c.dirIdx === 'number' ? c.dirIdx : -1]
-          : null).filter(Boolean),
-        bins: movedBins(),
-        bossDefeated: !bossRef,
-        boss: bossRef ? {
-          hp: Math.ceil(bossRef.hp), enraged: !!bossRef.enraged,
-          shield: Math.ceil(bossRef.shield), berserk: !!bossRef.berserk
-        } : null,
-        fence: { state: fenceBreach.state, cracks: fenceBreach.cracks },
-        loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
-        enemyTotal: levelEnemyTotal,
-        enemies: enemies.filter(e => e.type !== 'boss').map(e => ({
-          type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
-          armor: e.armor || 0,
-          radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
-          tier: e.tier, districtId: e.districtId, bounds: e.bounds
-        }))
       }
     };
   }
 
-  const isSave = s => !!(s && s.format >= 1 && s.format <= SAVE_FORMAT && s.player && s.world);
+  // Мир текущей локации: что обыскано и переставлено, живые враги, босс, забор, лут на земле.
+  // Им же game.js запоминает локацию, из которой Василий ушёл через пролом (travelTo)
+  function snapshotWorld() {
+    return {
+      // [номер, обыскан, x, y, поворот] — только обысканные и переброшенные
+      containers: containers.map((c, i) => (c.searched || c.moved)
+        ? [i, c.searched ? 1 : 0, Math.round(c.x), Math.round(c.y), typeof c.dirIdx === 'number' ? c.dirIdx : -1]
+        : null).filter(Boolean),
+      bins: movedBins(),
+      // Мясник есть только в городе: в Промзоне bossRef нет, но это не значит, что он побеждён
+      bossDefeated: currentLocation === 'city' && !bossRef,
+      boss: bossRef ? {
+        hp: Math.ceil(bossRef.hp), enraged: !!bossRef.enraged,
+        shield: Math.ceil(bossRef.shield), berserk: !!bossRef.berserk
+      } : null,
+      fence: { state: fenceBreach.state, cracks: fenceBreach.cracks },
+      loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
+      enemyTotal: levelEnemyTotal,
+      enemies: enemies.filter(e => e.type !== 'boss').map(e => ({
+        type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
+        armor: e.armor || 0,
+        radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
+        tier: e.tier, districtId: e.districtId, bounds: e.bounds
+      }))
+    };
+  }
+
+  const isSave = s => !!(s && s.format >= 1 && s.format <= SAVE_FORMAT && s.player &&
+    (s.format >= 6 ? s.worlds && typeof s.worlds === 'object' : s.world));
+
+  // Где Василий в сохранении: до формата 6 Промзоны не было — значит, в городе
+  const locationOf = s => (s && s.format >= 6 && s.location === 'promzona' ? 'promzona' : 'city');
 
   // Урны, которые громилы переставили: [список (0 — во дворах, 1 — на тротуарах), номер, x, y]
   function binLists() {
@@ -368,8 +386,32 @@ window.Menu = (() => {
     }
     player.pendingCards = !!p.pendingCards;
 
-    // Сохранение со старой карты: прогресс Василия перенесён, мир остаётся свежим
-    const w = s.format >= WORLD_FORMAT ? (s.world || {}) : {};
+    // Миры локаций. Формат 6 — по локациям: мир той, где Василий, восстанавливается сразу (generateWorld
+    // уже построил её в startGame), другой ждёт перехода через пролом. Раньше был один мир — городской.
+    // Сохранение со старой карты (до WORLD_FORMAT): прогресс Василия перенесён, мир остаётся свежим
+    let w = {};
+    if (s.format >= 6) {
+      const worlds = s.worlds || {};
+      w = worlds[currentLocation] || {};
+      locationWorlds = {};
+      ['city', 'promzona'].forEach(id => {
+        if (id !== currentLocation && worlds[id] && typeof worlds[id] === 'object') locationWorlds[id] = worlds[id];
+      });
+      (Array.isArray(s.visited) ? s.visited : []).forEach(id => {
+        if (id === 'city' || id === 'promzona') locationsVisited.add(id);
+      });
+    } else if (s.format >= WORLD_FORMAT) {
+      w = s.world || {};
+    }
+    applyWorld(w);
+    lastSaveAt = Date.now();
+    saveRequested = false;
+  }
+
+  // Мир локации из снимка (snapshotWorld) — на только что построенную generateWorld() карту.
+  // Каждое поле проверяется: сохранение могло прийти из кода, набранного руками
+  function applyWorld(w) {
+    w = w || {};
     if (Array.isArray(w.containers)) {
       // Формат 3: по номеру тайника
       w.containers.forEach(d => {
@@ -456,8 +498,6 @@ window.Menu = (() => {
       levelEnemyTotal = Math.round(num(w.enemyTotal, enemies.length, 0, 1000));
     }
     levelCleared = enemies.length === 0 && levelEnemyTotal > 0;
-    lastSaveAt = Date.now();
-    saveRequested = false;
   }
 
   function onGameOver() {
@@ -604,13 +644,15 @@ window.Menu = (() => {
     btnStart.classList.toggle('btn-action', !save);
     if (save) {
       const p = save.player;
+      // Жабы — той локации, где Василий остановился
+      const w = save.format >= 6 ? (save.worlds && save.worlds[locationOf(save)]) || {} : save.world;
       note.textContent = tr('run_summary', {
         d: formatDate(save.savedAt),
         hp: Math.ceil(num(p.hp, 0)),
         maxHp: Math.round(num(p.maxHp, 0)),
         w: Array.isArray(p.weapons) ? p.weapons.length : 1,
         p: Array.isArray(p.perks) ? p.perks.length : 0,
-        toads: Array.isArray(save.world.enemies) ? tr('toads_left', { n: save.world.enemies.length }) : ''
+        toads: Array.isArray(w.enemies) ? tr('toads_left', { n: w.enemies.length }) : ''
       });
       if (!btnStart.dataset.armed) btnStart.textContent = tr('new_run');
     }
@@ -791,5 +833,8 @@ window.Menu = (() => {
   applySettings();
   refreshTexts();
 
-  return { applyRun, onGameOver, requestSave, refreshTexts, onEscape, pause, resume, saveRun, inCombat };
+  return {
+    applyRun, onGameOver, requestSave, refreshTexts, onEscape, pause, resume, saveRun, inCombat,
+    snapshotWorld, applyWorld, locationOf
+  };
 })();
