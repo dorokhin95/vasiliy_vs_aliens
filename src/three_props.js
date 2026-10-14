@@ -159,7 +159,6 @@ class ThreePropsManager {
       return;
     }
 
-    const loader = new THREE.GLTFLoader();
     const configs = [
       // Дома рисуются крупно (до ~1000 px) — их кадр рендерится в высоком разрешении (frameSize)
       { key: 'building_khrushchevka', file: 'assets/models/building_khrushchevka.glb', targetSpan: 2.15, colorScale: 0.88, frameSize: 1024 },
@@ -190,9 +189,49 @@ class ThreePropsManager {
       { key: 'loot_bandage',   file: 'assets/models/loot_bandage.glb',   targetSpan: 1.55, colorScale: 0.92 }
     ];
 
+    this.loadConfigs(configs, () => this.schedulePrewarm());
+  }
+
+  /**
+   * Модели Промзоны (PZ_MODELS в environment.js): цеха, декор, вагоны, машины, бочки и их открытые варианты.
+   * Грузятся при первом заходе в Промзону (EnvironmentRenderer.setLocation), кадры прогреваются в простое
+   */
+  loadPromzona() {
+    if (this.promzonaRequested) return;
+    if (typeof THREE.GLTFLoader === 'undefined') {
+      setTimeout(() => this.loadPromzona(), 200);
+      return;
+    }
+    this.promzonaRequested = true;
+    const configs = [];
+    const add = (key, frameSize) => {
+      this.models[key] = null;
+      this.isLoaded[key] = false;
+      this.roots[key] = new THREE.Group();
+      this.roots[key].visible = false;
+      this.scene.add(this.roots[key]);
+      configs.push({ key, file: `assets/models/${key}.glb`, targetSpan: PZ_TARGET_SPAN, colorScale: 0.86, frameSize });
+    };
+    Object.keys(PZ_MODELS).forEach(key => {
+      // Цеха рисуются до ~1500 px, вагоны и декор — до ~500
+      add(key, key.startsWith('building_') ? 1024 : 512);
+      if (key.startsWith('container_')) add(key + '_open', 512);
+    });
+    this.loadConfigs(configs, () => {
+      const frames = [];
+      Object.keys(PZ_MODELS).forEach(key => {
+        frames.push([key, 0]);
+        if (key.startsWith('container_')) frames.push([key, 8], [key + '_open', 0], [key + '_open', 8]);
+      });
+      runIdleTasks(frames.filter(([key]) => this.isLoaded[key]).map(([key, dir]) => () => this.getFrameCanvas(key, dir)));
+    });
+  }
+
+  loadConfigs(configs, onDone) {
+    const loader = new THREE.GLTFLoader();
     let pending = configs.length;
     const onSettled = () => {
-      if (--pending === 0) this.schedulePrewarm();
+      if (--pending === 0 && onDone) onDone();
     };
 
     configs.forEach(cfg => {
@@ -405,6 +444,10 @@ class ThreePropsManager {
    */
   // Где на карте лежит кадр дома (по типу и масштабу): { propKey, x, y, w, h } или null
   majorBuildingFrame(b) {
+    if (b.type === 'factory') {
+      const f = pzFrame(b.model, b.x + b.w / 2, b.y + b.h / 2, b.w);
+      return { propKey: b.model, x: f.x, y: f.y, w: f.w, h: f.h };
+    }
     let propKey = null;
     let renderW = 376;
     let renderH = 315;
@@ -570,59 +613,32 @@ class ThreePropsManager {
   }
 
   drawMajorBuilding(ctx, b) {
-    let propKey = null;
-    let renderW = 376;
-    let renderH = 315;
-    let offsetY = -12;
-
-    const kind = houseKind(b);
-    if (kind === 'boiler_house') {
-      propKey = 'building_boiler_house';
-    } else if (kind === 'military_hq') {
-      propKey = 'building_military_hq';
-    } else if (kind === 'khrushchevka') {
-      propKey = 'building_khrushchevka';
-    } else if (kind === 'brezhnevka') {
-      propKey = 'building_brezhnevka';
-      renderW = 300;
-      renderH = 325;
-      offsetY = -10;
-    }
-    // Размеры спрайта замерены на исходном доме; крупный дом — пропорционально крупнее
-    const k = houseScale(b);
-    renderW *= k;
-    renderH *= k;
-    offsetY *= k;
-
-    if (!propKey || !this.isLoaded[propKey]) {
-      return false;
-    }
-
-    const frameCanvas = this.getFrameCanvas(propKey, 0);
+    const f = this.majorBuildingFrame(b);
+    if (!f || !this.isLoaded[f.propKey]) return false;
+    const frameCanvas = this.getFrameCanvas(f.propKey, 0);
     if (!frameCanvas) return false;
 
-    const cx = b.x + b.w / 2;
-    const cy = b.y + b.h / 2;
-
     ctx.save();
-
-    // Concrete foundation apron (отмостка) & ground contact shadow around the building base
-    // (отбрасываемую тень кладёт слой теней, shadows.js)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    // Контактная тень у основания (отбрасываемую тень кладёт слой теней, shadows.js). У цехов пятно включает
+    // крыльца и пристройки — полная тень легла бы чёрной лентой между ними и стеной, поэтому — мягкая, под задней частью
+    ctx.fillStyle = b.type === 'factory' ? 'rgba(0, 0, 0, 0.16)' : 'rgba(0, 0, 0, 0.3)';
     ctx.beginPath();
-    ctx.roundRect(b.x - 10, b.y + 4, b.w + 20, b.h + 14, 10);
+    if (b.type === 'factory') ctx.roundRect(b.x + 4, b.y, b.w - 8, b.h * 0.7, 8);
+    else ctx.roundRect(b.x - 10, b.y + 4, b.w + 20, b.h + 14, 10);
     ctx.fill();
 
-    ctx.fillStyle = '#222832';
-    ctx.strokeStyle = '#141820';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(b.x - 6, b.y - 2, b.w + 12, b.h + 8, 6);
-    ctx.fill();
-    ctx.stroke();
+    // Бетонная отмостка — у жилых домов, котельной и штаба; у цехов Промзоны своя площадка в модели
+    if (b.type !== 'factory') {
+      ctx.fillStyle = '#222832';
+      ctx.strokeStyle = '#141820';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(b.x - 6, b.y - 2, b.w + 12, b.h + 8, 6);
+      ctx.fill();
+      ctx.stroke();
+    }
 
-    ctx.translate(cx, cy + offsetY);
-    ctx.drawImage(frameCanvas, -renderW / 2, -renderH / 2, renderW, renderH);
+    ctx.drawImage(frameCanvas, f.x, f.y, f.w, f.h);
     ctx.restore();
     return true;
   }
@@ -758,6 +774,8 @@ class ThreePropsManager {
    * или null, пока модель грузится. Общий для отрисовки и отбрасываемой тени.
    */
   containerSprite(c) {
+    const pz = PZ_CONTAINERS[c.type];
+    if (pz) return this.pzContainerSprite(c, pz);
     let propKey = 'military_crate';
     let renderW = 76;
     let renderH = 76;
@@ -804,6 +822,20 @@ class ThreePropsManager {
     return { frame, opened, rotAngle, shadowRx, shadowRy, x: c.x - renderW / 2, y: c.y - renderH / 2, w: renderW, h: renderH };
   }
 
+  // Вагон, машина или бочка Промзоны: (c.x, c.y) — середина пятна на земле; стоят вдоль оси X (dirIdx 0 или 8)
+  pzContainerSprite(c, pz) {
+    let propKey = pz.model;
+    if (!this.isLoaded[propKey]) return null;
+    const opened = c.searched && this.isLoaded[propKey + '_open'];
+    if (opened) propKey += '_open';
+    const dirIdx = c.dirIdx === 8 ? 8 : 0;
+    const frame = this.getFrameCanvas(propKey, dirIdx);
+    if (!frame) return null;
+    const f = pzFrame(pz.model, c.x, c.y, pz.len);
+    return { frame, opened, rotAngle: 0, shadowRx: pz.len * 0.5, shadowRy: Math.max(6, f.depth * 0.6),
+      shadowDY: 0, indicatorY: -f.rise - f.depth / 2 - 10, x: f.x, y: f.y, w: f.w, h: f.h };
+  }
+
   /**
    * Renders a 3D container/vehicle onto the main 2D game canvas.
    * Returns true if 3D model is loaded and rendered, false to fallback while loading.
@@ -821,7 +853,7 @@ class ThreePropsManager {
     if (!c.airborne) {
       ctx.fillStyle = 'rgba(0, 0, 0, 0.24)';
       ctx.beginPath();
-      ctx.ellipse(0, 8, sp.shadowRx * 0.9, sp.shadowRy * 0.85, -sp.rotAngle, 0, Math.PI * 2);
+      ctx.ellipse(0, sp.shadowDY === undefined ? 8 : sp.shadowDY, sp.shadowRx * 0.9, sp.shadowRy * 0.85, -sp.rotAngle, 0, Math.PI * 2);
       ctx.fill();
     }
 
@@ -829,11 +861,11 @@ class ThreePropsManager {
     if (c.searched && !opened) {
       ctx.globalAlpha = 0.55;
     }
-    ctx.drawImage(sp.frame, -sp.w / 2, -sp.h / 2, sp.w, sp.h);
+    ctx.drawImage(sp.frame, sp.x - c.x, sp.y - c.y, sp.w, sp.h);
     ctx.globalAlpha = 1.0;
 
     // 3. Interaction status indicator: необысканный — жёлтая стрелка; обысканный и так видно, что открыт
-    const indicatorY = c.type === 'car' ? -64 : -34;
+    const indicatorY = sp.indicatorY !== undefined ? sp.indicatorY : (c.type === 'car' ? -64 : -34);
     if (c.searched) {
       if (!opened) {
         ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';

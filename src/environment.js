@@ -43,7 +43,67 @@ const MAP = (() => {
 // размера модели (на котором замерены подъезды, палисадники и выступ крыши)
 const HOUSE_BASE = { khrushchevka: [320, 160], brezhnevka: [220, 260], boiler_house: [320, 160], military_hq: [320, 160] };
 function houseKind(b) {
+  if (b.type === 'factory') return b.model;
   return b.type === 'panel' ? (b.subType || (b.w > b.h ? 'khrushchevka' : 'brezhnevka')) : b.type;
+}
+// Здания с 3D-моделью: дома города и цеха Промзоны (factory) — у них силуэтная коллизия, тень, полупрозрачность
+function isModelBuilding(b) {
+  return b.type === 'panel' || b.type === 'boiler_house' || b.type === 'military_hq' || b.type === 'factory';
+}
+
+// --- Модели Промзоны: габарит в метрах [длина, глубина, высота], как их выдаёт tools/finalize_promzona_blender.py.
+// Здания и декор — постройки типа factory, вагоны, машины и бочки — тайники. Модель в кадре нормализуется
+// по наибольшему габариту (PZ_TARGET_SPAN), поэтому из габарита и ширины пятна на карте считается всё:
+// кадр, глубина пятна и насколько модель поднимается над ним (pzFrame)
+const PZ_TARGET_SPAN = 2.15;
+const PZ_MODELS = {
+  building_admin: [60, 22.8, 23.2],
+  building_checkpoint: [12, 4.2, 6.0],
+  building_cooling_tower: [39.2, 40, 50.7],
+  building_foundry: [70, 35.2, 28.3],
+  building_gasholder: [34.9, 35, 24.9],
+  building_mech_workshop: [55, 25, 15.4],
+  building_oil_tank: [25, 25, 11.8],
+  building_pump_station: [18, 14.9, 7.5],
+  building_smokestack: [9.8, 10, 21.6],
+  building_warehouse: [50, 23.9, 14.5],
+  prop_locomotive: [17, 5.1, 6.9],
+  prop_gantry_crane: [25, 11.9, 14.3],
+  prop_pipe_rack: [12, 3.4, 5.9],
+  prop_pipe_stack: [8, 6.9, 4.0],
+  prop_cable_reel: [2.2, 1.4, 2.2],
+  container_boxcar: [14, 3.2, 4.9],
+  container_gondola: [14, 3.2, 3.4],
+  container_tankcar: [12, 2.9, 4.0],
+  container_kamaz: [7.5, 2.6, 3.3],
+  container_zil: [6.7, 2.6, 2.8],
+  container_barrel: [0.9, 0.9, 1.3]
+};
+// Тайники Промзоны: тип → модель и длина на карте, px (машины города ~40 px/м, вагоны чуть ужаты)
+const PZ_CONTAINERS = {
+  boxcar: { model: 'container_boxcar', len: 470 },
+  gondola: { model: 'container_gondola', len: 470 },
+  tankcar: { model: 'container_tankcar', len: 400 },
+  kamaz: { model: 'container_kamaz', len: 270 },
+  zil: { model: 'container_zil', len: 245 },
+  barrel: { model: 'container_barrel', len: 36 }
+};
+
+// Кадр модели Промзоны, у которой пятно на карте шириной w с центром (cx, cy).
+// Камера ThreePropsManager: орто 2,4 единицы, стоит в 6 единицах под 28° и смотрит в 0,48 высоты модели —
+// поэтому центр пятна ниже центра кадра, а реальный наклон чуть меньше 28°.
+// { x, y, w, h } — кадр (квадрат), depth — глубина пятна на экране, rise — высота модели над пятном
+function pzFrame(model, cx, cy, w) {
+  const [mx, md, mh] = PZ_MODELS[model];
+  const s = PZ_TARGET_SPAN / Math.max(mx, md, mh);
+  const H = mh * s;
+  const pitch = 28 * Math.PI / 180;
+  const th = Math.atan2(6 * Math.sin(pitch) - 0.48 * H, 6 * Math.cos(pitch));
+  const k = w / (mx * s);
+  const size = 2.4 * k;
+  const drop = 0.48 * H * Math.cos(th) * k;
+  return { x: cx - size / 2, y: cy - drop - size / 2, w: size, h: size,
+    depth: md * s * Math.sin(th) * k, rise: H * Math.cos(th) * k };
 }
 function houseScale(b) {
   const base = HOUSE_BASE[houseKind(b)];
@@ -119,6 +179,8 @@ class EnvironmentRenderer {
     this.outskirts = null;
     this.bioPuddles = [];
     this.rails = id === 'promzona' ? this.promzonaRails() : [];
+    // Модели Промзоны грузятся при первом заходе в неё, а не на старте города
+    if (id === 'promzona' && window.threeProps) window.threeProps.loadPromzona();
     this.generateDecorations();
   }
 
@@ -1249,7 +1311,7 @@ class EnvironmentRenderer {
       for (let i = 0; i < buildings.length; i++) {
         const b = buildings[i];
         const garage = b.type === 'garage';
-        if (!garage && b.type !== 'panel' && b.type !== 'boiler_house' && b.type !== 'military_hq') continue;
+        if (!garage && !isModelBuilding(b)) continue;
         const f = garage ? tp.garageFrame(b) : tp.majorBuildingFrame(b);
         if (!f || !tp.isLoaded[f.propKey] || !seen(f.x, f.y, f.w, f.h)) continue;
         sc.cast(tp.getFrameCanvas(f.propKey, 0), f.x, f.y, f.w, f.h);
@@ -1274,7 +1336,9 @@ class EnvironmentRenderer {
       // Тайники (поднятые и летящие — их тень рисует game.js)
       for (let i = 0; i < containers.length; i++) {
         const c = containers[i];
-        if (c.airborne || !seen(c.x - 110, c.y - 110, 220, 220)) continue;
+        if (c.airborne) continue;
+        const vr = this.containerViewRect(c);
+        if (!seen(vr.x, vr.y, vr.w, vr.h)) continue;
         const sp = tp.containerSprite(c);
         if (sp) sc.cast(sp.frame, sp.x, sp.y, sp.w, sp.h);
       }
@@ -1453,9 +1517,27 @@ class EnvironmentRenderer {
 
   // Где на экране видна машина, бак или ящик (с запасом: картинка модели квадратная, с полями)
   containerRect(c) {
+    const pz = PZ_CONTAINERS[c.type];
+    if (pz) {
+      // Вагон, машина или бочка Промзоны: (x, y) — середина пятна на земле, модель поднимается на rise
+      const f = pzFrame(pz.model, c.x, c.y, pz.len);
+      return { x: c.x - pz.len / 2, y: c.y - f.depth / 2 - f.rise, w: pz.len, h: f.rise + f.depth };
+    }
     if (c.type === 'car') return { x: c.x - 100, y: c.y - 70, w: 200, h: 110 };
     if (c.type === 'trash') return { x: c.x - 36, y: c.y - 42, w: 72, h: 70 };
     return { x: c.x - 30, y: c.y - 32, w: 60, h: 56 };
+  }
+
+  // Где может быть нарисован тайник, с полями кадра: у машин города — квадрат 220, у вагонов Промзоны — по модели
+  containerViewRect(c) {
+    if (!PZ_CONTAINERS[c.type]) return { x: c.x - 110, y: c.y - 110, w: 220, h: 220 };
+    const r = this.containerRect(c);
+    return { x: r.x - 40, y: r.y - 40, w: r.w + 80, h: r.h + 80 };
+  }
+
+  containerOnScreen(c, camera, screenW, screenH) {
+    const r = this.containerViewRect(c);
+    return this.isVisible(r.x, r.y, r.w, r.h, camera, screenW, screenH);
   }
 
   // a: {x, y, h} — точка ног и высота спрайта персонажа
@@ -1474,7 +1556,7 @@ class EnvironmentRenderer {
     this.deferredContainers.clear();
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
-      if (c.airborne || !this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) continue;
+      if (c.airborne || !this.containerOnScreen(c, camera, screenW, screenH)) continue;
       const r = this.containerRect(c);
       let playerBehind = false, behind = false, front = false;
       for (let j = 0; j < actors.length; j++) {
@@ -1509,7 +1591,7 @@ class EnvironmentRenderer {
       const p = actors[0];
       for (let i = 0; i < buildings.length; i++) {
         const b = buildings[i];
-        if (b.type !== 'panel' && b.type !== 'boiler_house' && b.type !== 'military_hq' && b.type !== 'garage') continue;
+        if (!isModelBuilding(b) && b.type !== 'garage') continue;
         const f = tp.buildingFrame(b);
         if (!f || !this.isVisible(f.x, f.y, f.w, f.h, camera, screenW, screenH)) continue;
         const base = b.y + b.h;
@@ -1752,6 +1834,16 @@ class EnvironmentRenderer {
     // 2. Затем отрисовываем основные здания (3D Хрущевки, Брежневки, Котельные ТЭЦ, Военные штабы и 3D-гаражи)
     buildings.forEach(b => {
       if (b.type === 'fence_wall' || b.type === 'heating_line' || b.type === 'border_fence') return;
+      if (b.type === 'factory') {
+        // Цеха и градирни поднимаются над пятном на сотни пикселей — видимость по кадру модели
+        const f = pzFrame(b.model, b.x + b.w / 2, b.y + b.h / 2, b.w);
+        if (!this.isVisible(f.x, f.y, f.w, f.h, camera, screenW, screenH)) return;
+        if (window.threeProps && window.threeProps.drawMajorBuilding(ctx, b)) return;
+        // Пока модель грузится — тёмное пятно на земле
+        ctx.fillStyle = 'rgba(30, 36, 44, 0.85)';
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        return;
+      }
       if (!this.isVisible(b.x - 40, b.y - 40, b.w + 80, b.h + 80, camera, screenW, screenH)) return;
 
       if (b.type === 'panel' || b.type === 'boiler_house' || b.type === 'military_hq') {
@@ -1800,7 +1892,7 @@ class EnvironmentRenderer {
 
   drawContainers(ctx, camera, screenW, screenH, containers) {
     containers.forEach(c => {
-      if (!this.isVisible(c.x - 110, c.y - 110, 220, 220, camera, screenW, screenH)) return;
+      if (!this.containerOnScreen(c, camera, screenW, screenH)) return;
       // За ним стоит персонаж — нарисуем после персонажей (drawOccludingProps).
       // Поднятый или летящий (громила швыряет) рисует game.js поверх фигур
       if (c.airborne || this.deferredContainers.has(c)) return;

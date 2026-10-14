@@ -886,7 +886,8 @@ const LANGS = {
     boss_dead: "✓ Мясник повержен",
     cleared_hud: "✅ ЛОКАЦИЯ ЗАЧИЩЕНА",
     level_cleared: "ЛОКАЦИЯ ЗАЧИЩЕНА",
-    level_cleared_sub: "Ни одной жабы не осталось. Забор за логовом Мясника треснул — иди и проломи его."
+    level_cleared_sub: "Ни одной жабы не осталось. Забор за логовом Мясника треснул — иди и проломи его.",
+    level_cleared_sub_pz: "Ни одной жабы не осталось. Промзона наша — пока."
   },
   en: {
     game_title: "Vasiliy vs Aliens",
@@ -963,7 +964,8 @@ const LANGS = {
     boss_dead: "✓ Butcher down",
     cleared_hud: "✅ AREA CLEARED",
     level_cleared: "AREA CLEARED",
-    level_cleared_sub: "Not a single toad left. The fence behind the Butcher's lair has cracked — go and smash it."
+    level_cleared_sub: "Not a single toad left. The fence behind the Butcher's lair has cracked — go and smash it.",
+    level_cleared_sub_pz: "Not a single toad left. The industrial zone is ours — for now."
   }
 };
 
@@ -1399,12 +1401,19 @@ function generateWorld() {
     });
   };
 
+  // Ж/д колеи Промзоны (environment.rails): насыпь ~70 px, на неё не строим и не ставим тайники
+  const rails = (window.environmentRenderer && window.environmentRenderer.rails) || [];
+  const onRails = (rx, ry, rw, rh, pad = 50) => rails.some(r => r.horizontal
+    ? ry + rh > r.pos - pad && ry < r.pos + pad && rx + rw > r.from && rx < r.to
+    : rx + rw > r.pos - pad && rx < r.pos + pad && ry + rh > r.from && ry < r.to);
+
   const tryAddBuilding = (x, y, w, h, type, extra = {}) => {
     const rx = Math.round(x);
     const ry = Math.round(y);
     if (rx < 70 || ry < 70 || rx + w > WORLD_WIDTH - 70 || ry + h > WORLD_HEIGHT - 70) return null;
     if (Math.hypot(rx + w / 2 - safeZone.x, ry + h / 2 - safeZone.y) < 390) return null;
     if (isNearRoad(rx, ry, w, h, 30)) return null;
+    if (!extra.overRails && onRails(rx, ry, w, h)) return null;
     if (overlapsAnyBuilding(rx, ry, w, h, null, 24, 28)) return null;
     const obj = Object.assign({ x: rx, y: ry, w, h, type }, extra);
     obj.col = buildingCollisionRect(obj);
@@ -1418,12 +1427,15 @@ function generateWorld() {
     if (cx < 85 || cy < 85 || cx > WORLD_WIDTH - 85 || cy > WORLD_HEIGHT - 85) return false;
     if (Math.hypot(cx - safeZone.x, cy - safeZone.y) < 305) return false;
 
-    const cRadius = type === 'car' ? 48 : (type === 'trash' ? 26 : 22);
-    const pad = type === 'car' ? 56 : 38;
+    const pz = PZ_CONTAINERS[type];
+    // У грузовиков Промзоны (x, y) — середина пятна, радиус — полдлины
+    const cRadius = pz ? Math.round(pz.len * (type === 'barrel' ? 0.5 : 0.45)) : (type === 'car' ? 48 : (type === 'trash' ? 26 : 22));
+    const pad = type === 'car' || (pz && type !== 'barrel') ? 56 : 38;
+    if (onRails(cx - cRadius, cy - cRadius, cRadius * 2, cRadius * 2, 40)) return false;
 
     // Дом рисуется выше своего пятна (крыша уходит назад) — тайник за ним оказался бы на стене
     const insideBuilding = buildings.some(b => {
-      const roof = BUILDING_SPRITE_TOP[b.type] || 0;
+      const roof = buildingSpriteTop(b);
       return cx >= b.x - pad && cx <= b.x + b.w + pad &&
         cy >= b.y - pad - roof && cy <= b.y + b.h + pad;
     });
@@ -1475,8 +1487,7 @@ function generateWorld() {
     return false;
   };
 
-  // Застройка, тайники и жабы города. Промзона пока пустая: её цеха, тайники и жабы появятся вместе с
-  // моделями (docs/LEVEL2_PROMZONA.md, этапы 2-3)
+  // Застройка, тайники и жабы города; Промзоны — generatePromzonaLayout
   if (currentLocation === 'city') {
     // 0. Стартовые мусорные баки у площади Михалыча, по краям главного проспекта (Tier 0 -> Tier 1 переход)
     const C = MAP.CENTER, main = MAP.MAIN;
@@ -1639,6 +1650,8 @@ function generateWorld() {
         }
       });
     });
+  } else if (currentLocation === 'promzona') {
+    generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns });
   }
 
   // Бетонный забор ПО-2 по периметру карты: не выпускает ни Василия, ни жаб, пули в него упираются.
@@ -1660,13 +1673,189 @@ function generateWorld() {
   shockwaves = [];
 
   buildObstacles();
-  if (currentLocation === 'city') generateBioPuddles();
-  else bioPuddles = [];
-  if (window.environmentRenderer) window.environmentRenderer.bioPuddles = bioPuddles;
+  generateBioPuddles();
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   if (currentLocation === 'city') spawnBoss();
   levelEnemyTotal = enemies.filter(e => e.type !== 'boss').length;
   levelCleared = false;
+}
+
+const PZ_ENEMY_PROFILE = {
+  pz_admin: 'garages', pz_breach: 'garages', pz_railyard: 'heating', pz_depot: 'heating',
+  pz_foundry: 'cordon', pz_workshops: 'cordon', pz_warehouses: 'cordon', pz_tankfarm: 'cordon',
+  pz_cooling: 'nest', pz_sludge: 'nest'
+};
+
+/**
+ * Застройка, тайники и жабы Промзоны (docs/LEVEL2_PROMZONA.md, раздел 2). Кварталы — та же сетка MAP.BLOCKS:
+ * столбцы 0..3 с запада на восток, ряды 0..3 с севера на юг. Цеха и декор — постройки factory (модели PZ_MODELS),
+ * глубина пятна считается из модели (pzFrame). Вагоны стоят на колеях сортировки (y 4950 и 5070),
+ * грузовики и бочки — тайники. Помощники — из generateWorld
+ */
+function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns }) {
+  const B = MAP.BLOCKS;
+  const block = (c, r) => ({ x1: B[c][0], x2: B[c][1], y1: B[r][0], y2: B[r][1] });
+  const depthOf = (model, w) => Math.max(24, Math.round(pzFrame(model, 0, 0, w).depth));
+  // Постройка шириной w с левым верхним углом пятна (x, y)
+  const factory = (model, x, y, w, extra = {}) =>
+    tryAddBuilding(x, y, w, depthOf(model, w), 'factory', Object.assign({ model }, extra));
+  // Жабы квартала: n штук по всему кварталу
+  const spawns = (bl, n) => {
+    const dist = getDistrictAt((bl.x1 + bl.x2) / 2, (bl.y1 + bl.y2) / 2);
+    for (let i = 0; i < n; i++) pendingSpawns.push([bl.x1 + 40, bl.y1 + 40, bl.x2 - 40, bl.y2 - 40, dist]);
+  };
+  // Вагон на колее: x — середина, y — ось колеи, стоит вдоль X. На переездах вагонов нет
+  const wagon = (type, x, y, dirIdx = 0) => {
+    const half = PZ_CONTAINERS[type].len / 2;
+    if (x - half < 60 || x + half > WORLD_WIDTH - 60) return false;
+    if (MAP.ROADS.some(r => x + half > r.pos - 20 && x - half < r.pos + r.size + 20)) return false;
+    if (containers.some(c => PZ_CONTAINERS[c.type] && Math.abs(c.y - y) < 40 &&
+      Math.abs(c.x - x) < half + PZ_CONTAINERS[c.type].len / 2 + 90)) return false;
+    const dist = getDistrictAt(x, y);
+    containers.push({ x: Math.round(x), y: Math.round(y), radius: 40, type, subType: null, dirIdx,
+      districtId: dist.id, tier: dist.tier, searched: false });
+    return true;
+  };
+  const TRACK_A = 4950, TRACK_B = 5070;
+
+  // --- Градирни (квако-гнездо) — северо-запад, два квартала
+  [block(0, 0), block(0, 1)].forEach((bl, i) => {
+    factory('building_cooling_tower', bl.x1 + 200, bl.y2 - 400, 520);
+    factory('building_pump_station', bl.x1 + 120, bl.y2 - 120 - depthOf('building_pump_station', 240), 240);
+    factory('prop_pipe_rack', bl.x2 - 330, bl.y1 + 260 + i * 120, 260, { noCollide: true });
+    placeContainer(bl.x2 - 200, bl.y2 - 140, 'barrel');
+    placeContainer(bl.x2 - 150, bl.y2 - 120, 'barrel');
+    placeContainer(bl.x1 + 120, bl.y1 + 160, 'barrel');
+    spawns(bl, 7);
+  });
+
+  // --- Шлам-пруды — запад между проспектом и южной кольцевой: лужи шлама (generateBioPuddles), эстакады
+  {
+    const bl = block(0, 2);
+    factory('prop_pipe_rack', bl.x1 + 140, bl.y1 + 220, 260, { noCollide: true });
+    factory('prop_pipe_rack', bl.x1 + 520, bl.y2 - 420, 260, { noCollide: true });
+    factory('prop_pipe_stack', bl.x2 - 260, bl.y1 + 520, 200);
+    placeContainer(bl.x1 + 200, bl.y2 - 160, 'barrel');
+    placeContainer(bl.x2 - 180, bl.y2 - 200, 'barrel');
+    spawns(bl, 7);
+  }
+
+  // --- Ж/д сортировка — юго-запад: вагоны на двух колеях, тепловоз, катушки кабеля под насыпью
+  wagon('boxcar', 420, TRACK_A);
+  wagon('tankcar', 980, TRACK_A, 8);
+  wagon('gondola', 2420, TRACK_A);
+  wagon('gondola', 640, TRACK_B, 8);
+  wagon('boxcar', 1660, TRACK_B);
+  wagon('tankcar', 2380, TRACK_B, 8);
+  [block(0, 3), block(1, 3)].forEach((bl, i) => {
+    if (i === 1) factory('prop_locomotive', 1500, TRACK_A - 32, 560, { overRails: true });
+    factory('prop_cable_reel', bl.x1 + 140 + i * 260, 5300, 80);
+    factory('prop_cable_reel', bl.x1 + 260 + i * 260, 5420, 80);
+    factory('prop_pipe_stack', bl.x2 - 360, 5560, 200);
+    placeContainer(bl.x1 + 200, 5650, 'barrel');
+    spawns(bl, 5);
+  });
+
+  // --- Литейный цех — центр-север: козловой кран над веткой, цех, труба (ориентир)
+  {
+    const bl = block(1, 1);
+    factory('prop_gantry_crane', 2350 - 210, bl.y1 + 520, 420, { noCollide: true, overRails: true });
+    factory('prop_pipe_stack', bl.x1 + 120, bl.y1 + 260, 200);
+    factory('prop_cable_reel', bl.x1 + 420, bl.y2 - 260, 80);
+    factory('prop_pipe_stack', bl.x1 + 200, bl.y2 - 360, 200);
+    placeContainer(bl.x2 - 180, bl.y1 + 220, 'barrel');
+    placeContainer(bl.x1 + 640, bl.y1 + 900, 'barrel');
+    spawns(bl, 5);
+  }
+  {
+    const bl = block(2, 1);
+    factory('building_foundry', bl.x1 + 90, bl.y1 + 520, 900);
+    factory('building_smokestack', bl.x2 - 290, bl.y1 + 380, 170);
+    factory('prop_pipe_stack', bl.x2 - 330, bl.y2 - 260, 200);
+    placeContainer(bl.x1 + 260, bl.y2 - 140, 'zil', null, 0);
+    placeContainer(bl.x2 - 160, bl.y1 + 160, 'barrel');
+    spawns(bl, 5);
+  }
+
+  // --- Склады продукции — центр-север, вдоль северного забора
+  [block(1, 0), block(2, 0)].forEach((bl, i) => {
+    factory('building_warehouse', bl.x1 + 40 + i * 40, bl.y1 + 230, 640);
+    factory('building_warehouse', i === 0 ? bl.x1 + 40 : bl.x2 - 680, bl.y1 + 690, 640);
+    placeContainer(bl.x2 - 220, bl.y1 + 200, 'kamaz', null, 0);
+    placeContainer(bl.x2 - 140, bl.y2 - 120, 'barrel');
+    placeContainer(bl.x2 - 190, bl.y2 - 100, 'barrel');
+    spawns(bl, 4);
+  });
+
+  // --- Механические цеха — центр: корпуса, эстакады труб над проходами, штабели
+  {
+    const bl = block(1, 2);
+    factory('building_mech_workshop', bl.x1 + 40, bl.y1 + 300, 700);
+    factory('prop_pipe_rack', bl.x1 + 140, bl.y2 - 330, 260, { noCollide: true });
+    factory('prop_pipe_stack', bl.x2 - 330, bl.y2 - 280, 200);
+    placeContainer(bl.x1 + 520, bl.y2 - 140, 'barrel');
+    spawns(bl, 5);
+  }
+  {
+    const bl = block(2, 2);
+    factory('building_mech_workshop', bl.x1 + 60, bl.y1 + 280, 700);
+    factory('building_mech_workshop', bl.x2 - 620, bl.y2 - 360, 560);
+    factory('prop_pipe_rack', bl.x2 - 420, bl.y1 + 220, 260, { noCollide: true });
+    factory('prop_pipe_stack', bl.x1 + 120, bl.y2 - 260, 200);
+    placeContainer(bl.x1 + 420, bl.y2 - 120, 'zil', null, 8);
+    spawns(bl, 5);
+  }
+
+  // --- Резервуарный парк — северо-восток: резервуары, газгольдеры, насосная
+  {
+    const bl = block(3, 0);
+    factory('building_oil_tank', bl.x1 + 60, bl.y1 + 300, 330);
+    factory('building_oil_tank', bl.x2 - 400, bl.y1 + 300, 330);
+    factory('building_gasholder', bl.x1 + 220, bl.y2 - 300, 440);
+    placeContainer(bl.x2 - 150, bl.y2 - 180, 'barrel');
+    placeContainer(bl.x2 - 110, bl.y2 - 150, 'barrel');
+    spawns(bl, 5);
+  }
+  {
+    const bl = block(3, 1);
+    factory('building_gasholder', bl.x1 + 60, bl.y1 + 360, 440);
+    factory('building_oil_tank', bl.x2 - 400, bl.y1 + 520, 330);
+    factory('building_pump_station', bl.x1 + 140, bl.y2 - 260, 240);
+    placeContainer(bl.x2 - 260, bl.y2 - 160, 'kamaz', null, 8);
+    placeContainer(bl.x2 - 160, bl.y1 + 200, 'barrel');
+    spawns(bl, 5);
+  }
+
+  // --- Автобаза — восток: боксы (гаражи города), КАМАЗы, ЗИЛы, бочки с соляркой
+  {
+    const bl = block(3, 2);
+    [[60, 120], [260, 120], [460, 120], [60, 560], [260, 560]].forEach(([dx, dy]) =>
+      tryAddBuilding(bl.x1 + dx, bl.y1 + dy, 140, 100, 'garage'));
+    placeContainer(bl.x1 + 200, bl.y1 + 360, 'kamaz', null, 0);
+    placeContainer(bl.x2 - 220, bl.y1 + 420, 'zil', null, 8);
+    placeContainer(bl.x1 + 250, bl.y2 - 160, 'kamaz', null, 8);
+    placeContainer(bl.x2 - 160, bl.y2 - 260, 'barrel');
+    placeContainer(bl.x2 - 120, bl.y2 - 230, 'barrel');
+    placeContainer(bl.x2 - 170, bl.y2 - 200, 'barrel');
+    spawns(bl, 8);
+  }
+
+  // --- Заводоуправление — юг-центр: управление и проходная (здесь оборона выживших, этап 5)
+  {
+    const bl = block(2, 3);
+    factory('building_admin', bl.x1 + 120, 5420, 760);
+    factory('building_checkpoint', bl.x2 - 330, 5480, 220);
+    placeContainer(bl.x2 - 260, 5720, 'car', 'zhiguli', 0);
+    placeContainer(bl.x1 + 140, 5740, 'trash', null, 0);
+    spawns(bl, 6);
+  }
+
+  // --- У пролома — юго-восток: сюда Василий приходит из города, жаб нет (что здесь будет — решим позже)
+  {
+    const bl = block(3, 3);
+    placeContainer(bl.x1 + 200, 5420, 'zil', null, 0);
+    placeContainer(bl.x1 + 120, 5640, 'barrel');
+  }
 }
 
 // Респауна нет, врагов на локации меньше (69 вместо 83) — зато каждый крепче
@@ -1685,6 +1874,8 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
 
     const dist = distOverride || getDistrictAt(ex, ey);
     if (dist.id === 'hub') continue;
+    // Районы Промзоны берут состав жаб у городского района той же угрозы (ракетчики и штурмовики — этап 3)
+    const kind = PZ_ENEMY_PROFILE[dist.id] || dist.id;
 
     const rand = Math.random();
     let type = 'grunt';
@@ -1694,7 +1885,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     let aggroRadius = 290;
     let color = '#22c55e';
 
-    if (dist.id === 'courtyards') {
+    if (kind === 'courtyards') {
       // 🟡 TIER 1 (Спальные дворы): Болотные Прыгуны (92 HP — требует 4 полных удара битой с гвоздями и контроля выносливости!)
       type = 'grunt';
       radius = 21;
@@ -1702,7 +1893,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
       speed = 2.52;
       aggroRadius = 250;
       color = '#22c55e';
-    } else if (dist.id === 'garages') {
+    } else if (kind === 'garages') {
       // 🟠 TIER 2A (Гаражи): 55% Пехотинец (135 HP), 38% Кислотный Снайпер (110 HP), 7% Громила (360 HP)
       if (rand < 0.07) {
         type = 'brute'; radius = 34; hp = 360; speed = 1.75; aggroRadius = 310; color = '#a855f7';
@@ -1711,7 +1902,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
       } else {
         type = 'grunt'; radius = 22; hp = 135; speed = 2.7; aggroRadius = 300; color = '#22c55e';
       }
-    } else if (dist.id === 'heating') {
+    } else if (kind === 'heating') {
       // 🔵 TIER 2B (Теплотрасса): 50% Пехотинец (140 HP), 38% Снайпер (115 HP), 12% Громила (380 HP)
       if (rand < 0.12) {
         type = 'brute'; radius = 34; hp = 380; speed = 1.8; aggroRadius = 320; color = '#a855f7';
@@ -1720,7 +1911,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
       } else {
         type = 'grunt'; radius = 22; hp = 140; speed = 2.72; aggroRadius = 305; color = '#22c55e';
       }
-    } else if (dist.id === 'cordon') {
+    } else if (kind === 'cordon') {
       // 🔴 TIER 3 (Военный кордон): 38% Бронированный Громила (480 HP), 35% Снайпер (145 HP), 27% Штурмовик (185 HP)
       if (rand < 0.38) {
         type = 'brute'; radius = 35; hp = 480; speed = 1.88; aggroRadius = 345; color = '#a855f7';
@@ -1729,7 +1920,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
       } else {
         type = 'grunt'; radius = 23; hp = 185; speed = 2.82; aggroRadius = 325; color = '#22c55e';
       }
-    } else if (dist.id === 'nest') {
+    } else if (kind === 'nest') {
       // 🟣 TIER 4 (Квако-Гнездо): 52% Элитный Квако-Танк (680 HP), 33% Элитный Снайпер (180 HP), 15% Мутант (230 HP)
       if (rand < 0.52) {
         type = 'brute'; radius = 37; hp = 680; speed = 1.98; aggroRadius = 365; color = '#a855f7';
@@ -1741,13 +1932,14 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     }
     // Ступни этого типа тоже должны стоять на свободном месте (см. footDY)
     if (checkWalkCollision(ex, ey, radius, FOOT_DY[type])) continue;
+    if (insideFactoryShape(ex, ey + FOOT_DY[type])) continue;
     hp = Math.round(hp * ENEMY_HP_SCALE);
 
     enemies.push({
       x: ex,
       y: ey,
       // Громилы в железе: спереди броня гасит большую часть урона (см. damageEnemy)
-      armor: type === 'brute' ? (dist.id === 'nest' ? 0.65 : 0.6) : 0,
+      armor: type === 'brute' ? (kind === 'nest' ? 0.65 : 0.6) : 0,
       throwCooldown: 120 + Math.floor(Math.random() * 240),
       startX: ex,
       startY: ey,
@@ -2023,6 +2215,31 @@ function spawn3DLootItem(x, y, type, val = 1) {
 // чем зачищать район (см. docs/BALANCE.md)
 const STASH_YIELD = 0.75;
 
+// Достаёт ли Василий до тайника: до машин, баков и ящиков — по радиусу, до вагонов и грузовиков Промзоны —
+// до борта (они длинные, середина далеко)
+function canReachContainer(c) {
+  const o = c.obstacle;
+  if (o && o.rect) {
+    const fy = player.y + FOOT_DY.player;
+    const dx = Math.max(o.x1 - player.x, 0, player.x - o.x2);
+    const dy = Math.max(o.y1 - fy, 0, fy - o.y2);
+    return dx * dx + dy * dy < 40 * 40;
+  }
+  if (Math.abs(player.x - c.x) >= 80 || Math.abs(player.y - c.y) >= 80) return false;
+  return Math.hypot(player.x - c.x, player.y - c.y) < c.radius + player.radius + 20;
+}
+
+// Добыча из тайников Промзоны: [стеклотара от, до], [чермет от, до], бонусы с шансами
+const PZ_STASH_LOOT = {
+  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25]] },
+  gondola: { bottles: [0, 1], scrap: [5, 8], bonus: [['mil_parts', 0.2]] },
+  tankcar: { bottles: [2, 3], scrap: [2, 3], bonus: [['vodka', 0.55]] },
+  kamaz: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.45], ['ammo_12g', 0.4], ['mil_parts', 0.2]] },
+  zil: { bottles: [1, 2], scrap: [2, 4], bonus: [['bandage', 0.5], ['stew', 0.35]] },
+  barrel: { bottles: [0, 1], scrap: [1, 2], bonus: [['vodka', 0.15]] }
+};
+const rollRange = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
+
 function scavengeContainer(c) {
   if (c.searched) return;
   c.searched = true;
@@ -2036,7 +2253,15 @@ function scavengeContainer(c) {
   let scrapRoll = 0;
   const bonusDrops = [];
 
-  if (c.type === 'trash') {
+  const pzLoot = PZ_STASH_LOOT[c.type];
+  if (pzLoot) {
+    bottleRoll = Math.round(rollRange(pzLoot.bottles) * bMult);
+    scrapRoll = Math.max(1, Math.round(rollRange(pzLoot.scrap) * sMult));
+    pzLoot.bonus.forEach(([item, chance]) => { if (Math.random() < chance) bonusDrops.push(item); });
+    // Гнездо и шлам — квако-ядра, цеха — оружейные детали
+    if (dist.tier >= 4 && Math.random() < 0.45) bonusDrops.push('alien_core');
+    else if (dist.tier === 3 && Math.random() < 0.25) bonusDrops.push('mil_parts');
+  } else if (c.type === 'trash') {
     // Мусорный бак ЖЭК-4: в спальных дворах — главный источник стеклотары и бинтов
     bottleRoll = Math.max(1, Math.round((2 + Math.floor(Math.random() * 2)) * bMult));
     scrapRoll = Math.floor(Math.random() * 2);
@@ -3653,6 +3878,10 @@ const BUILDING_ROOF_OVERHANG = {
 
 // Насколько модель дома поднимается над его пятном (замерено по силуэтам: до 94 px у брежневки)
 const BUILDING_SPRITE_TOP = { panel: 100, boiler_house: 100, military_hq: 100, garage: 16 };
+function buildingSpriteTop(b) {
+  if (b.type === 'factory') return Math.round(pzFrame(b.model, 0, 0, b.w).rise);
+  return BUILDING_SPRITE_TOP[b.type] || 0;
+}
 
 function buildingCollisionRect(b) {
   const o = BUILDING_ROOF_OVERHANG[houseKind(b)] || { top: 0, side: 0 };
@@ -3663,16 +3892,24 @@ function buildingCollisionRect(b) {
 // Дома и гаражи сталкиваются по силуэту своей 3D-модели (threeProps.silhouetteRects): прямоугольник
 // «пятна» с выступом крыши был шире модели у котельной и гаражей — врезались в пустоту рядом.
 // Пока модель грузится — по пятну (b.col)
-const SILHOUETTE_TYPES = new Set(['panel', 'boiler_house', 'military_hq', 'garage']);
+const SILHOUETTE_TYPES = new Set(['panel', 'boiler_house', 'military_hq', 'garage', 'factory']);
 function buildingShape(b) {
   if (!SILHOUETTE_TYPES.has(b.type) || !window.threeProps || !window.threeProps.silhouetteRects) return null;
   return window.threeProps.silhouetteRects(b);
+}
+
+// Модели Промзоны грузятся при входе в неё, и пока силуэт цеха не посчитан, коллизия — только пятно на земле.
+// Жаба, родившаяся между пятном и крышей, оказалась бы в стене — спавн проверяет всю высоту модели над пятном
+function insideFactoryShape(x, y) {
+  return buildings.some(b => b.type === 'factory' && !b.noCollide &&
+    x > b.x - 20 && x < b.x + b.w + 20 && y < b.y + b.h + 20 && y > b.y - buildingSpriteTop(b) - 20);
 }
 
 // Здания (с крышей): блокируют и персонажей, и пули. Возвращает прямоугольник здания или null
 function checkBuildingCollision(x, y, radius) {
   for (let i = 0; i < buildings.length; i++) {
     const b = buildings[i];
+    if (b.noCollide) continue; // козловой кран, эстакада труб: под ними проходят
     if (b.cols === undefined) {
       const shape = buildingShape(b);
       if (shape) {
@@ -3880,10 +4117,12 @@ const BIO_NESTS = (() => {
   return [r(a, a), r(d, a), r(a, d), r(d, d)];
 })();
 let bioPuddles = [];
+// Шлам-пруды Промзоны: западная полоса между проспектом и южной кольцевой (район pz_sludge)
+const SLUDGE_PONDS = [{ x: 0, y: MAP.MAIN.pos + MAP.MAIN.size, w: MAP.ROADS[0].pos, h: MAP.ROADS[2].pos - (MAP.MAIN.pos + MAP.MAIN.size) }];
 
 function generateBioPuddles() {
   bioPuddles = [];
-  BIO_NESTS.forEach((z, zi) => {
+  (currentLocation === 'promzona' ? SLUDGE_PONDS : BIO_NESTS).forEach((z, zi) => {
     let seed = 1234567 + zi * 7919; // свой генератор у каждого гнезда — раскладка не плывёт
     const rnd = () => {
       seed = (seed * 16807) % 2147483647;
@@ -3907,7 +4146,7 @@ function generateBioPuddles() {
 // (x, y) — точка ступней
 function inBioPuddle(x, y) {
   const out = v => v < MAP.RING_A || v > MAP.RING_B;
-  if (!(out(x) && out(y))) return false; // лужи только в угловых гнёздах
+  if (currentLocation === 'city' && !(out(x) && out(y))) return false; // в городе лужи только в угловых гнёздах
   for (let i = 0; i < bioPuddles.length; i++) {
     const dx = (x - bioPuddles[i].x) / BIO_PUDDLE_RX;
     const dy = (y - bioPuddles[i].y) / BIO_PUDDLE_RY;
@@ -4731,7 +4970,8 @@ const THROWABLE = {
   bin: { dmg: 26, radius: 40, weight: 0.6, bottom: 14 },
   trash: { dmg: 42, radius: 56, weight: 1.0, bottom: 30 },
   box: { dmg: 38, radius: 50, weight: 0.9, bottom: 13 },
-  car: { dmg: 64, radius: 84, weight: 1.6, bottom: 42 }
+  car: { dmg: 64, radius: 84, weight: 1.6, bottom: 42 },
+  barrel: { dmg: 40, radius: 46, weight: 0.95, bottom: 24 }
 };
 // Высота кулаков громилы над его точкой, пока 3D-модель не загрузилась (потом — точно по кадру позы,
 // threeEnemies.getBruteFists): у груди и над головой
@@ -4775,8 +5015,10 @@ function turnToward(cur, target, rate) {
   return cur + Math.max(-rate, Math.min(rate, d));
 }
 
+// Что громила может поднять: баки, ящики, машины города, бочки Промзоны и урны; вагоны и грузовики — нет (null)
 function throwableKind(o) {
-  return o.type === 'trash' || o.type === 'box' || o.type === 'car' ? o.type : 'bin';
+  if (THROWABLE[o.type]) return o.type;
+  return PZ_CONTAINERS[o.type] ? null : 'bin';
 }
 
 function findThrowable(e, radius) {
@@ -4785,7 +5027,7 @@ function findThrowable(e, radius) {
   let best = null, bestD = radius;
   for (let i = 0; i < pool.length; i++) {
     const o = pool[i];
-    if (o.airborne || o.claimedBy) continue;
+    if (o.airborne || o.claimedBy || !throwableKind(o)) continue;
     if (o.type === 'car' && (e.tier || 0) < 4) continue; // машины поднимают только элитные громилы
     // Под куполом не берёт; у края — берёт (туда падает брошенное в стоящего у купола Василия)
     if (Math.hypot(o.x - safeZone.x, o.y - safeZone.y) < safeZone.radius + 10) continue;
@@ -5052,6 +5294,13 @@ function drawAirborneProp(ctx, o, isBin) {
 // Препятствие под машиной, баком или ящиком. Ссылка хранится в c.obstacle: громила может поднять
 // предмет и бросить — тогда препятствие снимается и ставится заново на месте падения
 function containerObstacle(c) {
+  const pz = PZ_CONTAINERS[c.type];
+  if (pz) {
+    // Вагоны, грузовики и бочки Промзоны стоят вдоль оси X: препятствие — пятно модели на земле
+    const f = pzFrame(pz.model, c.x, c.y, pz.len);
+    if (c.type === 'barrel') return { x: c.x, y: c.y, rx: pz.len * 0.45, ry: Math.max(8, f.depth * 0.5), rot: 0 };
+    return { rect: true, x1: c.x - pz.len * 0.47, y1: c.y - f.depth / 2, x2: c.x + pz.len * 0.47, y2: c.y + f.depth / 2 };
+  }
   const rot = typeof c.dirIdx === 'number' ? -(c.dirIdx / 16) * Math.PI * 2 : 0;
   if (c.type === 'car') {
     const isUaz = c.subType === 'uaz';
@@ -5369,6 +5618,7 @@ function spawnLootDrop(enemyOrX, yOpt) {
   const y = isEnemyObj ? enemyOrX.y : yOpt;
   const eType = isEnemyObj ? (enemyOrX.type || 'grunt') : 'grunt';
   const dist = getDistrictAt(x, y);
+  const prof = PZ_ENEMY_PROFILE[dist.id] || dist.id; // район Промзоны — как городской той же угрозы
   const bMult = dist.bottleMult || 1.0;
   const sMult = (dist.scrapMult || 1.0) * ENEMY_SCRAP_YIELD;
 
@@ -5378,9 +5628,9 @@ function spawnLootDrop(enemyOrX, yOpt) {
     spawn3DLootItem(x - 16, y - 6, 'scrap', scrapVal);
     spawn3DLootItem(x + 16, y - 6, 'bottle', bottleVal);
 
-    if (dist.id === 'cordon') {
+    if (prof === 'cordon') {
       if (Math.random() < 0.7) spawn3DLootItem(x, y + 16, 'mil_parts', 1);
-    } else if (dist.id === 'nest') {
+    } else if (prof === 'nest') {
       if (Math.random() < 0.25) spawn3DLootItem(x - 12, y + 16, 'alien_core', 1);
       if (Math.random() < 0.2) spawn3DLootItem(x + 14, y + 16, 'mil_parts', 1);
     } else if (Math.random() < 0.55) {
@@ -5390,18 +5640,18 @@ function spawnLootDrop(enemyOrX, yOpt) {
   } else if (eType === 'sniper') {
     const bottleVal = Math.round((2 + Math.floor(Math.random() * 2)) * bMult);
     spawn3DLootItem(x - 10, y, 'bottle', bottleVal);
-    if (dist.id === 'nest' && Math.random() < 0.2) {
+    if (prof === 'nest' && Math.random() < 0.2) {
       spawn3DLootItem(x + 12, y + 6, 'alien_core', 1);
-    } else if (dist.id === 'cordon' && Math.random() < 0.3) {
+    } else if (prof === 'cordon' && Math.random() < 0.3) {
       spawn3DLootItem(x + 12, y + 6, 'mil_parts', 1);
     } else if (Math.random() < 0.42) {
       spawn3DLootItem(x + 12, y + 6, Math.random() < 0.5 ? 'bandage' : 'ammo_9x18', 6);
-    } else if (dist.id === 'garages') {
+    } else if (prof === 'garages') {
       spawn3DLootItem(x + 12, y + 6, 'scrap', Math.round(2 * sMult));
     }
   } else {
     const r = Math.random();
-    const scrapBias = dist.id === 'garages' ? 0.78 : (dist.id === 'courtyards' ? 0.30 : 0.58);
+    const scrapBias = prof === 'garages' ? 0.78 : (prof === 'courtyards' ? 0.30 : 0.58);
     if (r < scrapBias) {
       const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * sMult));
       spawn3DLootItem(x, y, 'scrap', val);
@@ -5409,13 +5659,13 @@ function spawnLootDrop(enemyOrX, yOpt) {
       const val = Math.max(1, Math.round((1 + Math.floor(Math.random() * 2)) * bMult));
       spawn3DLootItem(x, y, 'bottle', val);
     }
-    if (dist.id === 'cordon' && Math.random() < 0.15) {
+    if (prof === 'cordon' && Math.random() < 0.15) {
       spawn3DLootItem(x + 14, y - 8, 'mil_parts', 1);
-    } else if (dist.id === 'nest' && Math.random() < 0.1) {
+    } else if (prof === 'nest' && Math.random() < 0.1) {
       spawn3DLootItem(x + 14, y - 8, 'alien_core', 1);
     }
   }
-  if (isEnemyObj) dropTrophies(x, y, eType, dist.id);
+  if (isEnemyObj) dropTrophies(x, y, eType, prof);
 }
 
 function handleEnemyKilled(index) {
@@ -6497,11 +6747,9 @@ function update() {
   } else {
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
-      if (!c.searched && !c.airborne && Math.abs(player.x - c.x) < 80 && Math.abs(player.y - c.y) < 80) {
-        if (Math.hypot(player.x - c.x, player.y - c.y) < c.radius + player.radius + 20) {
-          nearbyInteractable = { type: 'container', target: c };
-          break;
-        }
+      if (!c.searched && !c.airborne && canReachContainer(c)) {
+        nearbyInteractable = { type: 'container', target: c };
+        break;
       }
     }
   }
@@ -7505,7 +7753,7 @@ function drawLastEnemyMarkers() {
 function checkLevelCleared() {
   if (levelCleared || levelEnemyTotal === 0 || enemies.length > 0) return;
   levelCleared = true;
-  showToast(t('level_cleared'), t('level_cleared_sub'));
+  showToast(t('level_cleared'), t(currentLocation === 'city' ? 'level_cleared_sub' : 'level_cleared_sub_pz'));
   SoundFX.reload();
   if (window.Menu) window.Menu.requestSave();
 }
