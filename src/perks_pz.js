@@ -301,11 +301,12 @@ function shootFireGoo() {
   }
   gooShots.push({ mx, my, tx, ty, angle: a, t: 0, drops, landed: false });
   player.gooCd = FIRE_GOO.cooldown;
-  SoundFX.reload && SoundFX.reload();
+  FireSound.shot();
   addFloatingText(player.x, player.y - 34, currentLang === 'ru' ? '🔥 ГОРЮЧАЯ ЖИЖА' : '🔥 FIRE GOO', '#fb923c');
 }
 
 function landGoo(sh) {
+  FireSound.land(enemySoundVolume(sh.tx, sh.ty));
   // Лужа растекается от места попадания; огонь бежит по ней (pool.spread)
   // Очаги огня разложены по всей круглой луже: середина, внутреннее и внешнее кольцо; рисуются от дальних к ближним
   const cols = [{ dx: 0, dy: 0, r: 0 }];
@@ -431,7 +432,204 @@ function updateFireGoo() {
   }
   for (let i = scorches.length - 1; i >= 0; i--) if (++scorches[i].t >= SCORCH_LIFE) scorches.splice(i, 1);
   updateFireFx();
+  updateFireSound();
   if (player.gooCd > 0) player.gooCd--;
+}
+
+// ===== Звук огня (WebAudio, синтез — как остальные звуки игры в SoundFX) =====
+// Выстрел: влажный плевок под давлением, бульканье, толчок, «фух» воспламенения. Падение — глухой «вумп».
+// Горение — непрерывный гул пламени (громкость — сколько огня и как близко), поверх — случайный треск
+// и хлопки; горящие жабы шипят. SoundFX объявлен в game.js — здесь он берётся только во время игры
+const FireSound = {
+  loop: null,        // { src, gain, lp, bp, lfo } — гул пламени, пока есть огонь
+  level: 0,
+  quietFrames: 0,
+  longNoise: null,
+
+  // Шум на 2 с — для зацикленного гула (общий в SoundFX — полсекунды, на петле слышен повтор)
+  noise(ac) {
+    if (this.longNoise) return this.longNoise;
+    const sr = ac.sampleRate;
+    const buf = ac.createBuffer(1, sr * 2, sr);
+    const d = buf.getChannelData(0);
+    // Коричневый шум — тёплый, «рокочущий», без шипения белого
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = last * 3.5;
+    }
+    this.longNoise = buf;
+    return buf;
+  },
+
+  // Кусок шума через фильтр с огибающей: type, частота от/до, громкость, длительность
+  burst(ac, at, { type = 'bandpass', f0, f1, q = 1, vol, dur, attack = 0.004, brown = false }) {
+    const src = ac.createBufferSource();
+    src.buffer = brown ? this.noise(ac) : SoundFX.noiseBuf;
+    src.playbackRate.value = 0.8 + Math.random() * 0.4;
+    const f = ac.createBiquadFilter();
+    f.type = type;
+    f.Q.value = q;
+    f.frequency.setValueAtTime(f0, at);
+    if (f1 && f1 !== f0) f.frequency.exponentialRampToValueAtTime(f1, at + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    src.connect(f);
+    f.connect(g);
+    g.connect(SoundFX.out);
+    src.start(at, Math.random() * 0.3);
+    src.stop(at + dur + 0.02);
+  },
+
+  tone(ac, at, { type = 'sine', f0, f1, vol, dur }) {
+    const o = ac.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, at);
+    o.frequency.exponentialRampToValueAtTime(f1, at + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    o.connect(g);
+    g.connect(SoundFX.out);
+    o.start(at);
+    o.stop(at + dur + 0.02);
+  },
+
+  // Выстрел горючей жижей
+  shot() {
+    const ac = SoundFX.ensure();
+    if (!ac) return;
+    const t = ac.currentTime;
+    // 1. Плевок под давлением: короткое «пш», полоса уходит вверх
+    this.burst(ac, t, { type: 'bandpass', f0: 700, f1: 2600, q: 0.9, vol: 0.32, dur: 0.11, attack: 0.003 });
+    // 2. Толчок помпы
+    this.tone(ac, t, { type: 'triangle', f0: 150, f1: 52, vol: 0.32, dur: 0.16 });
+    // 3. Бульканье жижи — несколько мокрых пузырей
+    for (let i = 0; i < 4; i++) {
+      const at = t + 0.03 + i * (0.028 + Math.random() * 0.02);
+      const f = 380 + Math.random() * 520;
+      this.burst(ac, at, { type: 'bandpass', f0: f, f1: f * 1.6, q: 7, vol: 0.12 + Math.random() * 0.06, dur: 0.05 });
+    }
+    // 4. «Фух» воспламенения: тёплый шум разгорается и опадает
+    this.burst(ac, t + 0.05, { type: 'lowpass', f0: 320, f1: 1900, q: 0.7, vol: 0.34, dur: 0.38, attack: 0.09, brown: true });
+  },
+
+  // Струя упала — лужа вспыхнула: глухой «вумп» и первый треск
+  land(vol = 1) {
+    const ac = SoundFX.ensure();
+    if (!ac || vol <= 0.02) return;
+    const t = ac.currentTime;
+    this.burst(ac, t, { type: 'lowpass', f0: 1400, f1: 180, q: 0.8, vol: 0.5 * vol, dur: 0.45, attack: 0.012, brown: true });
+    this.tone(ac, t, { type: 'sine', f0: 95, f1: 38, vol: 0.42 * vol, dur: 0.3 });
+    // Шлепок жижи
+    this.burst(ac, t, { type: 'bandpass', f0: 520, f1: 260, q: 2.5, vol: 0.22 * vol, dur: 0.09 });
+    for (let i = 0; i < 5; i++) this.crackle(vol * 0.8, t + 0.05 + Math.random() * 0.25);
+  },
+
+  // Щелчок треска; иногда — хлопок погромче и ниже
+  crackle(vol = 1, at = null) {
+    const ac = SoundFX.ensure();
+    if (!ac || vol <= 0.02) return;
+    const t = at === null ? ac.currentTime : at;
+    const pop = Math.random() < 0.12;
+    const f = pop ? 900 + Math.random() * 900 : 2200 + Math.random() * 4200;
+    this.burst(ac, t, { type: pop ? 'bandpass' : 'highpass', f0: f, f1: f * 0.7, q: pop ? 3 : 0.8,
+      vol: (pop ? 0.3 : 0.07 + Math.random() * 0.1) * vol, dur: pop ? 0.05 : 0.008 + Math.random() * 0.018, attack: 0.001 });
+  },
+
+  // Шипение горящей жабы
+  sizzle(vol = 1) {
+    const ac = SoundFX.ensure();
+    if (!ac || vol <= 0.02) return;
+    const t = ac.currentTime;
+    this.burst(ac, t, { type: 'highpass', f0: 3200 + Math.random() * 1500, f1: 5200, q: 0.6, vol: 0.07 * vol, dur: 0.25 + Math.random() * 0.2, attack: 0.03 });
+  },
+
+  // Гул пламени: level 0..1 каждый кадр. Петля заводится, когда огонь появился, и глохнет через секунду тишины
+  setLevel(level) {
+    this.level = level;
+    if (level <= 0.01) {
+      if (this.loop && ++this.quietFrames > 60) this.stopLoop();
+      if (this.loop) this.loop.gain.gain.setTargetAtTime(0.0001, SoundFX.ctx.currentTime, 0.15);
+      return;
+    }
+    this.quietFrames = 0;
+    const ac = SoundFX.ensure();
+    if (!ac) return;
+    if (!this.loop) this.startLoop(ac);
+    const t = ac.currentTime;
+    // Пламя дышит: громкость и тембр слегка колышутся
+    const flutter = 0.82 + 0.18 * Math.sin(t * 7.3) * Math.sin(t * 3.1 + 1);
+    // Если обновления прекратятся (пауза, меню) — гул сам затихнет через четверть секунды
+    const g = this.loop.gain.gain;
+    g.cancelScheduledValues(t);
+    g.setTargetAtTime(0.28 * level * flutter, t, 0.08);
+    g.setTargetAtTime(0.0001, t + 0.25, 0.12);
+    this.loop.lp.frequency.setTargetAtTime(380 + 520 * level * flutter, t, 0.1);
+  },
+
+  startLoop(ac) {
+    const src = ac.createBufferSource();
+    src.buffer = this.noise(ac);
+    src.loop = true;
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 500;
+    lp.Q.value = 0.6;
+    // Второй слой — «рёв» в середине: полосовой шум
+    const src2 = ac.createBufferSource();
+    src2.buffer = this.noise(ac);
+    src2.loop = true;
+    src2.playbackRate.value = 1.6;
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 0.8;
+    const bpGain = ac.createGain();
+    bpGain.gain.value = 0.35;
+    const gain = ac.createGain();
+    gain.gain.value = 0.0001;
+    src.connect(lp);
+    lp.connect(gain);
+    src2.connect(bp);
+    bp.connect(bpGain);
+    bpGain.connect(gain);
+    gain.connect(SoundFX.out);
+    src.start(0, Math.random());
+    src2.start(0, Math.random());
+    this.loop = { src, src2, gain, lp };
+  },
+
+  stopLoop() {
+    if (!this.loop) return;
+    try {
+      this.loop.src.stop();
+      this.loop.src2.stop();
+    } catch (e) { /* уже остановлен */ }
+    this.loop.gain.disconnect();
+    this.loop = null;
+  }
+};
+
+// Каждый кадр из updateFireGoo: сколько огня слышно (лужи, брызги, горящие жабы — с учётом расстояния),
+// гул и случайный треск
+function updateFireSound() {
+  let level = 0;
+  firePools.forEach(p => { level += poolPower(p) * enemySoundVolume(p.x, p.y); });
+  for (let j = 0; j < enemies.length; j++) {
+    const e = enemies[j];
+    if (!(e.burnLeft > 0)) continue;
+    const v = burnPower(e) * enemySoundVolume(e.x, e.y);
+    level += v * 0.45;
+    if (Math.random() < 0.012) FireSound.sizzle(v);
+  }
+  level += splashFires.length * 0.02;
+  level = Math.min(1, level);
+  FireSound.setLevel(gameState === 'PLAYING' ? level : 0);
+  if (gameState === 'PLAYING' && Math.random() < level * 0.22) FireSound.crackle(0.5 + level * 0.5); // ~13 щелчков в секунду у полного огня
 }
 
 // ===== Отрисовка лужи, брызг, струи (слой земли, под фигурами) =====
