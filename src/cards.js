@@ -1,6 +1,7 @@
 // Три карты после босса уровня. За Золотого Мясника — «Скорость», «Ловкость», «Живучесть», за
 // Межпространственного Долбильщика — «Лазерный бластер», «Рывок», «Гиперрегенерация»; рубашка общая.
-// Карты показываются лицом, переворачиваются рубашкой вверх и тасуются — Василий тянет одну.
+// Карты показываются лицом и лежат, пока игрок их не запомнит и не кликнет мышью, — тогда переворачиваются
+// рубашкой вверх и тасуются, Василий тянет одну.
 // Здесь только показ; что даёт каждая карта — CARD_EFFECTS и applyBossCard в game.js.
 // Скрипты обычные, без модулей: currentLang и SoundFX — из game.js.
 window.BossCards = (function () {
@@ -60,6 +61,7 @@ window.BossCards = (function () {
     kicker: { ru: 'ТРОФЕЙ ЗОЛОТОГО МЯСНИКА', en: 'GOLDEN BUTCHER\'S TROPHY' },
     kicker_pounder: { ru: 'ТРОФЕЙ МЕЖПРОСТРАНСТВЕННОГО ДОЛБИЛЬЩИКА', en: 'THE INTERDIMENSIONAL POUNDER\'S TROPHY' },
     remember: { ru: 'Запомни карты…', en: 'Remember the cards…' },
+    ready: { ru: 'Запомнил? Кликни мышью — Михалыч начнёт тасовать', en: 'Got them? Click to let Mikhalych shuffle' },
     shuffle: { ru: 'Михалыч тасует…', en: 'Mikhalych shuffles…' },
     pick: { ru: 'Тяни одну карту', en: 'Draw one card' },
     accept: { ru: 'ПРИНЯТЬ', en: 'ACCEPT' }
@@ -70,6 +72,17 @@ window.BossCards = (function () {
   const tx = key => TEXT[key][lang()];
   const wait = ms => new Promise(r => setTimeout(r, ms));
   const click = () => { if (typeof SoundFX !== 'undefined') SoundFX.emptyClick(); };
+  // Клик мышью по окну карт (кнопкой, где угодно)
+  const waitClick = () => new Promise(resolve => {
+    const modal = $('cards-modal');
+    const onClick = () => {
+      modal.removeEventListener('click', onClick);
+      modal.classList.remove('await-click');
+      resolve();
+    };
+    modal.classList.add('await-click');
+    modal.addEventListener('click', onClick);
+  });
 
   let els = [];       // карты по номеру в CARDS
   let order = [];     // order[место] = номер карты
@@ -157,7 +170,11 @@ window.BossCards = (function () {
     });
 
     (async () => {
-      await wait(2400);
+      // Карты легли — ждём, пока игрок запомнит и кликнет (раньше 0,8 с клик не считается: мог остаться от боя)
+      await wait(800);
+      $('cards-sub').textContent = tx('ready');
+      await waitClick();
+      $('cards-sub').textContent = '';
       els.forEach(el => el.classList.add('flipped'));
       click();
       await wait(650);

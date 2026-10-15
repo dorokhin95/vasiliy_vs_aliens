@@ -575,6 +575,10 @@
     .cards-kicker { font-size: 12px; letter-spacing: 3px; color: #a8a29e; }
     .cards-title { font-size: 30px; font-weight: 900; letter-spacing: 3px; color: #facc15; min-height: 38px; }
     .cards-sub { font-size: 15px; color: #e2e8f0; min-height: 20px; }
+    /* Карты лежат лицом, пока игрок не кликнет (src/cards.js): курсор-рука, подсказка пульсирует */
+    .cards-modal.await-click { cursor: pointer; }
+    .cards-modal.await-click .cards-sub { color: #fbbf24; animation: cardsHint 1.4s ease-in-out infinite; }
+    @keyframes cardsHint { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
     .cards-table { position: relative; width: 700px; height: 320px; perspective: 1200px; }
     .bcard {
       position: absolute;
@@ -1970,7 +1974,7 @@
   <script src="src/sounds.js?v=1175"></script>
   <script src="src/menu.js?v=1182"></script>
   <script src="src/comic.js?v=1160"></script>
-  <script src="src/cards.js?v=1126"></script>
+  <script src="src/cards.js?v=1184"></script>
   <script src="src/inventory.js?v=1182"></script>
   <script src="src/workshop.js?v=1177"></script>
   <script src="src/canteen.js?v=1182"></script>
