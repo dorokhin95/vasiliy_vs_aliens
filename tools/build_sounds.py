@@ -48,6 +48,7 @@ add('metal_l', kenney(K, 'impactMetal_light', range(3)))
 add('plate_h', kenney(K, 'impactPlate_heavy', range(3)))
 add('tin', kenney(K, 'impactTin_medium', range(3)))
 add('wood_h', kenney(K, 'impactWood_heavy', range(3)))
+add('wood_m', kenney(K, 'impactWood_medium', range(2)))
 add('plank', kenney(K, 'impactPlank_medium', range(3)))
 add('wood_l', kenney(K, 'impactWood_light', range(2)))
 add('glass_h', kenney(K, 'impactGlass_heavy', range(3)))
@@ -71,6 +72,17 @@ add('motor', [F + 'spaceEngineSmall_000.ogg'], start=1.0, dur=2.0, fade=0.01, le
 add('thruster', [F + 'thrusterFire_003.ogg'], start=1.1, dur=0.9, fade=0.25, lead=False)
 add('boom', kenney(F, 'lowFrequency_explosion', (1, 0)), dur=1.0, fade=0.3)
 add('crunch', kenney(F, 'explosionCrunch', (0, 1)), dur=1.2, fade=0.3)
+# Боссы, громила, дрель (выбрано на слух в прослушке): лезвие из ножен, силовое поле, научно-фантастический металл,
+# глухие и хрустящие взрывы — с громкостью записи (keep)
+add('knife_draw', [R + 'drawKnife3.ogg'], keep=True, lead=False)
+add('field0', [F + 'forceField_000.ogg'], keep=True, lead=False)
+add('field1', [F + 'forceField_001.ogg'], keep=True, lead=False)
+add('field2', [F + 'forceField_002.ogg'], keep=True, lead=False)
+add('scimetal', kenney(F, 'impactMetal', range(4)), keep=True, lead=False)
+add('lowboom', [F + 'lowFrequency_explosion_000.ogg'], keep=True, lead=False)
+add('lowboom2', [F + 'lowFrequency_explosion_001.ogg'], keep=True, lead=False)
+add('crunch3', [F + 'explosionCrunch_002.ogg'], keep=True, lead=False)
+add('crunch4', [F + 'explosionCrunch_003.ogg'], keep=True, lead=False)
 # Выстрелы — The Free Firearm Sound Library: start — момент выстрела в записи (с), near — вблизи (у Василия),
 # far — со средней дистанции, с эхом (выжившие и чужие выстрелы вдали). ПМ — Bersa .380 (9×17, ближе всего к
 # 9×18) и Walther PPQ 9 мм, обрез — дробовики 12-го калибра Mossberg, Nova, Winchester Model 12
@@ -130,7 +142,8 @@ def process(src, opt):
         x[-fade:] *= np.linspace(1, 0, fade) ** 2
     x[:int(SR * 0.002)] *= np.linspace(0, 1, int(SR * 0.002))
     peak = np.abs(x).max()
-    if peak > 0:
+    # keep — громкость как в записи: подобрано на слух в прослушке, где файлы звучали без выравнивания
+    if peak > 0 and not opt.get('keep'):
         x *= 10 ** (opt.get('peak', -1.0) / 20) / peak
     return x
 

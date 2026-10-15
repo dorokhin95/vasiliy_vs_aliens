@@ -2588,6 +2588,9 @@ const PZ_STASH_LOOT = {
 };
 const rollRange = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 
+// Звуки удара битой от лёгкого к тяжёлому (src/sounds.js batSwing)
+const BAT_HIT_RANK = [null, 'flesh', 'knock', 'heavy', 'armor'];
+
 function scavengeContainer(c) {
   if (c.searched) return;
   c.searched = true;
@@ -3472,7 +3475,7 @@ function onBossShieldBroken(e) {
   addFloatingText(e.x - 70, e.y - 130, t('boss_shield_down'), '#38bdf8');
   spawnDirectionalSparks(e.x, e.y - 52, -Math.PI / 2, Math.PI * 2, 30, '#7dd3fc', 4, 13, 18);
   createParticles(e.x, e.y - 52, '#bae6fd', 20);
-  SoundFX.overheat();
+  SoundFX.bossFx('butcher_shield', e.x, e.y);
   cameraKickX += (Math.random() - 0.5) * 14;
   cameraKickY += (Math.random() - 0.5) * 14;
 }
@@ -4018,9 +4021,11 @@ function shootPlayerWeapon() {
 
           const hit = damageEnemy(e, dmg, 'bat', player.x, player.y);
           e.hitFlash = 6;
-          // Звук удара: по броне (наплечники, золотая кожа, щит) звенит, по жабе — шлепок
-          if (hit.armored || hit.shielded || hit.invuln || e.type === 'boss' || e.type === 'pounder') hitKind = 'armor';
-          else if (!hitKind) hitKind = 'flesh';
+          // Звук удара: по броне (наплечники, золотая кожа, щит) звенит, по громиле — тяжело, по штурмовику
+          // и ракетчику — со стуком биты, по остальным жабам — со шлепком; из нескольких — самый тяжёлый
+          const kind = hit.armored || hit.shielded || hit.invuln || e.type === 'boss' || e.type === 'pounder' ? 'armor'
+            : e.type === 'brute' ? 'heavy' : e.type === 'stormtrooper' || e.type === 'rocketeer' ? 'knock' : 'flesh';
+          if (BAT_HIT_RANK.indexOf(kind) > BAT_HIT_RANK.indexOf(hitKind)) hitKind = kind;
 
           // Отбрасывание жабы шипованной битой (чтобы можно было держать дистанцию в стартовой зоне!)
           const kb = (e.type === 'boss' || e.type === 'pounder') ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
@@ -4895,7 +4900,7 @@ function bruteSlamImpact(e) {
   const fx = e.x, fy = e.y + footDY(e);
   spawnShockwave(fx, fy, SLAM_RADIUS, '#d6b98c', 28);
   spawnDirectionalSparks(fx, fy, -Math.PI / 2, Math.PI * 2, 12, '#a8a29e', 3, 8, 14);
-  SoundFX.bossSwing(true);
+  SoundFX.bossFx('brute_slam', fx, fy);
   if (Math.hypot(player.x - e.x, player.y - e.y) < 520) {
     cameraKickX += (Math.random() - 0.5) * 22;
     cameraKickY += (Math.random() - 0.5) * 22;
@@ -5576,8 +5581,7 @@ function breakFence() {
   spawnDirectionalSparks(x, y, Math.PI / 2, 2.6, 24, '#9ca3af', 4, 12, 18);
   createParticles(x, y + 20, '#6b7280', 30);
   shakeScreen(30, 18);
-  SoundFX.bossSwing(true);
-  SoundFX.batSwing(true);
+  SoundFX.bossFx('fence_break', x, y);
   showToast(t('breach_title'), t('breach_sub'));
   if (window.Menu) window.Menu.requestSave();
 }
@@ -6250,7 +6254,7 @@ function launchThrowable(e, o, kind) {
     spin: (Math.random() < 0.5 ? -1 : 1) * (0.06 + Math.random() * 0.05)
   });
   o.claimedBy = null;
-  SoundFX.bossSwing(kind === 'car');
+  SoundFX.bossFx(kind === 'car' ? 'brute_throw_heavy' : 'brute_throw', o.x, o.y);
 }
 
 function updateThrownProps() {
@@ -6982,6 +6986,8 @@ function startPounderAttack(e, key) {
   }
   if (key === 'storm') e.stormCd = POUNDER_STORM_CD;
   if (key === 'hook') e.hookCd = def.cooldown;
+  // Замах: энергоядро молота заряжается — слышно перед электрическими приёмами
+  if (key === 'electric' || key === 'storm' || key === 'hook') SoundFX.bossFx('pounder_wind', e.x, e.y);
   e.attack = a;
 }
 
@@ -7013,42 +7019,38 @@ function onPounderStrike(e, a, def) {
     spawnShockwave(c.x, c.y, def.range, '#a855f7', 28);
     spawnDirectionalSparks(c.x, c.y, -Math.PI / 2, Math.PI * 2, 16, '#c084fc', 4, 12, 16);
     shakeScreen(16, 14);
-    SoundFX.bossSwing(true);
+    SoundFX.bossFx('pounder_slam', c.x, c.y);
   } else if (a.kind === 'sweep') {
     muzzleFlashes.push({ x: e.x, y: e.y - 30, angle: a.aim, type: 'boss_slash', life: 12, maxLife: 12, scale: def.range / 54 });
-    SoundFX.bossSwing(false);
+    SoundFX.bossFx('pounder_sweep', e.x, e.y);
   } else if (a.key === 'electric') {
     // Боёк в землю — разряд бежит по земле прямой
     a.bolt = { x: e.x + Math.cos(a.aim) * 50, y: e.y + 4 + Math.sin(a.aim) * 50 * GROUND_SQUASH };
     spawnDirectionalSparks(a.bolt.x, a.bolt.y, -Math.PI / 2, Math.PI * 2, 18, '#e9d5ff', 4, 12, 14);
     shakeScreen(10, 8);
-    SoundFX.bossSwing(true);
-    const vol = enemySoundVolume(e.x, e.y);
-    if (vol > 0) SoundFX.explosion(vol * 0.6);
+    SoundFX.bossFx('pounder_electric', e.x, e.y);
   } else if (a.key === 'leap') {
     e.z = 0;
     spawnShockwave(e.x, e.y + 4, def.range, '#a855f7', 30);
     spawnDirectionalSparks(e.x, e.y, -Math.PI / 2, Math.PI * 2, 20, '#c084fc', 4, 12, 16);
     shakeScreen(22, 18);
-    SoundFX.bossSwing(true);
+    SoundFX.bossFx('pounder_land', e.x, e.y);
   } else if (a.key === 'storm') {
     spawnShockwave(e.x, e.y + 4, 180, '#c084fc', 30);
     spawnDirectionalSparks(e.x, e.y, -Math.PI / 2, Math.PI * 2, 26, '#e9d5ff', 4, 13, 18);
     shakeScreen(28, 20);
-    SoundFX.bossSwing(true);
-    const vol = enemySoundVolume(e.x, e.y);
-    if (vol > 0) SoundFX.explosion(vol * 0.8);
+    SoundFX.bossFx('pounder_storm', e.x, e.y);
     a.ringsLeft = def.rings;
     a.ringTimer = 0;
   } else if (a.key === 'spin') {
-    SoundFX.bossSwing(true);
+    SoundFX.bossFx('pounder_spin', e.x, e.y);
   } else if (a.key === 'hook') {
     // Луч схватил: кто в луче и не в перекате — рывок к Долбильщику
     const fy = player.y + footDY(player);
     const along = (player.x - e.x) * Math.cos(a.aim) + (fy - e.y) * Math.sin(a.aim);
     const across = Math.abs(-(player.x - e.x) * Math.sin(a.aim) + (fy - e.y) * Math.cos(a.aim));
     a.bolt = { x: e.x, y: e.y - 60, len: def.range };
-    SoundFX.toadPlasma(1);
+    SoundFX.bossFx('pounder_hook', e.x, e.y);
     if (along > 0 && along < def.range && across < def.width / 2 + player.radius * 0.5 && !player.isRolling && !playerDodged()) {
       let to = null;
       for (let r = def.land; r <= def.land + 120 && !to; r += 20) {
@@ -7259,7 +7261,7 @@ function updatePounderPhases(e) {
     e.stormCd = 0;
     addFloatingText(e.x - 60, e.y - 150, `⚡ ${t('pounder_storm')}`, '#c084fc');
     spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 24, '#a855f7', 4, 11, 18);
-    SoundFX.bossSwing(true);
+    SoundFX.bossFx('pounder_phase', e.x, e.y);
   }
   if (!e.snipersCalled && e.hp < e.maxHp * POUNDER_SNIPERS_AT) {
     e.snipersCalled = true;
@@ -7275,6 +7277,7 @@ function updatePounderPhases(e) {
     addFloatingText(e.x - 120, e.y - 150, `✦ ${t('pounder_clones')}`, '#e9d5ff');
     spawnDirectionalSparks(e.x, e.y - 60, -Math.PI / 2, Math.PI * 2, 30, '#c084fc', 4, 12, 18);
     shakeScreen(24, 16);
+    SoundFX.bossFx('pounder_phase', e.x, e.y);
     spawnPounderClones(e);
   }
 }
@@ -7358,6 +7361,7 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
       e.hopTimer = 30;
       e.blinkAnim = 16;
       addFloatingText(e.x - 80, e.y - 150, `✦ ${t('pounder_blink')}`, '#e9d5ff');
+      SoundFX.bossFx('pounder_blink', e.x, e.y);
       spawnDirectionalSparks(e.x, e.y - 60, -Math.PI / 2, Math.PI * 2, 24, '#c084fc', 4, 12, 18);
     }
   }
@@ -7403,7 +7407,7 @@ function spawnPounderMini(e) {
   enemies.push(m);
   spawnDirectionalSparks(s.x, s.y - 40, -Math.PI / 2, Math.PI * 2, 20, '#e9d5ff', 4, 12, 16);
   addFloatingText(e.x - 140, e.y - 160, `✦ ${t('pounder_mini')}`, '#e9d5ff');
-  SoundFX.toadPlasma(1);
+  SoundFX.bossFx('pounder_mini', s.x, s.y);
 }
 
 // 40%: снайперы гнезда появляются кольцом вокруг Долбильщика — вспышкой, как он сам перескакивает
@@ -7448,7 +7452,7 @@ function raisePounderArena(e) {
   e.arena = { x: (e.x + player.x) / 2, y: (e.y + player.y) / 2, r: POUNDER_ARENA_R, t: 0, hitCd: 0 };
   addFloatingText(player.x - 70, player.y - 90, currentLang === 'ru' ? '⛔ Барьер — не уйти!' : '⛔ Barrier — no way out!', '#c084fc');
   shakeScreen(14, 8);
-  SoundFX.toadPlasma(1);
+  SoundFX.bossFx('arena_up', e.arena.x, e.arena.y);
 }
 
 // Где Василий относительно кольца: 1 — на стене (в осях земли: по вертикали сжато, как всё на земле)
@@ -7478,7 +7482,7 @@ function updatePounderArena(e) {
     const a = Math.atan2(player.y - ar.y, player.x - ar.x);
     spawnDirectionalSparks(player.x + Math.cos(a) * 14, player.y - 20, a + Math.PI, 1.6, 10, '#e9d5ff', 3, 10, 12);
     addFloatingText(player.x - 30, player.y - 70, currentLang === 'ru' ? 'Барьер!' : 'Barrier!', '#c084fc');
-    SoundFX.toadPlasma(0.6);
+    SoundFX.bossFx('arena_hit', player.x, player.y);
   }
 }
 
@@ -7554,7 +7558,7 @@ function pounderPull(e) {
   player.knockFrames = 0;
   spawnDirectionalSparks(player.x, player.y - 40, -Math.PI / 2, Math.PI * 2, 22, '#e9d5ff', 4, 12, 16);
   shakeScreen(16, 12);
-  SoundFX.toadPlasma(1);
+  SoundFX.bossFx('pounder_pull', player.x, player.y);
   addFloatingText(player.x - 40, player.y - 80, currentLang === 'ru' ? '↯ Выдернуло!' : '↯ Pulled back!', '#e9d5ff');
 }
 
@@ -7608,7 +7612,7 @@ function onPounderDefeated(e) {
   createParticles(e.x, e.y, '#a855f7', 40);
   spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 30, '#e9d5ff', 5, 14, 22);
   shakeScreen(30, 18);
-  SoundFX.bossSwing(true);
+  SoundFX.bossFx('pounder_death', e.x, e.y);
   addFloatingText(e.x - 140, e.y - 100, t('pounder_defeated'), '#c084fc');
   player.pendingCards = true;
   cardOfferTimer = 150;
@@ -7981,10 +7985,12 @@ function startBossAttack(e, key) {
     hit: false
   };
   if (key === 'lunge') e.lungeCooldown = 240;
+  // Замах тесаком над головой — скрежет металла перед рубящим и землетрясением
+  if (key === 'chop' || key === 'quake') SoundFX.bossFx('butcher_wind', e.x, e.y);
 }
 
 function onBossStrike(e, a, def) {
-  SoundFX.bossSwing(a.key === 'chop' || a.key === 'quake');
+  SoundFX.bossFx('butcher_' + a.key, e.x, e.y);
   if (a.key === 'quake') {
     // Меч в землю: волна на всё логово, трещины по асфальту и по забору за логовом
     spawnShockwave(e.x, e.y + 4, def.range, '#f59e0b', 42);
@@ -8133,6 +8139,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
     e.attack = null;
     addFloatingText(e.x - 50, e.y - 120, `💢 ${t('boss_berserk')}`, '#ef4444');
     spawnDirectionalSparks(e.x, e.y - 40, -Math.PI / 2, Math.PI * 2, 24, '#ef4444', 4, 11, 18);
+    SoundFX.bossFx('butcher_berserk', e.x, e.y);
     startBossAttack(e, 'quake');
     return;
   }
@@ -8141,7 +8148,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
     e.enraged = true;
     addFloatingText(e.x - 30, e.y - 96, `🔥 ${t('boss_enraged')}`, '#f97316');
     spawnDirectionalSparks(e.x, e.y - 30, -Math.PI / 2, Math.PI * 2, 24, '#f97316', 4, 11, 18);
-    SoundFX.bossSwing(true);
+    SoundFX.bossFx('butcher_enrage', e.x, e.y);
     spawnBossAdds();
   }
 
@@ -8246,7 +8253,7 @@ function onBossDefeated(e) {
   spawnDirectionalSparks(e.x, e.y - 30, -Math.PI / 2, Math.PI * 2, 30, '#fde047', 5, 14, 22);
   cameraKickX += (Math.random() - 0.5) * 20;
   cameraKickY += (Math.random() - 0.5) * 20;
-  SoundFX.bossSwing(true);
+  SoundFX.bossFx('butcher_death', e.x, e.y);
   addFloatingText(e.x - 110, e.y - 80, t('boss_defeated'), '#facc15');
   // Забор за логовом трещит (если берсерк не успел его расколоть), а Василию — выбор из трёх карт
   crackFence();

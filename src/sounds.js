@@ -805,13 +805,14 @@
     plasma: 3, laser_s: 3, pew: 1, motor: 1, thruster: 1, boom: 2, crunch: 2,
     // бита и удары
     swish: 6, punch_h: 5, punch_m: 5, splat: 4, metal_h: 5, metal_m: 5, metal_l: 3, plate_h: 3, tin: 3,
-    wood_h: 3, plank: 3, wood_l: 2, glass_h: 3, glass_l: 3, mining: 3, soft_h: 4, soft_m: 3,
+    wood_h: 3, wood_m: 2, plank: 3, wood_l: 2, glass_h: 3, glass_l: 3, mining: 3, soft_h: 4, soft_m: 3,
     // шаги
     step_conc: 5, step_grass: 5, step_snow: 5, step_mud: 4, step_bare: 4, drip: 1,
     // тайники
+    knife_draw: 1, field0: 1, field1: 1, field2: 1, scimetal: 4, lowboom: 1, lowboom2: 1, crunch3: 1, crunch4: 1,
     creak: 3, door: 2, latch: 1, click: 1, pot: 3, cloth: 3, coins: 1, paper: 2
   };
-  const SOUND_V = 1170;
+  const SOUND_V = 1175;
   const buffers = {};
   const lastPick = {};
   let loading = false;
@@ -899,7 +900,7 @@
 
   const synth = {};
   ['batSwing', 'makarov', 'shotgun', 'plasma', 'laser', 'drill', 'drillHit', 'reloadStart', 'reloadEnd', 'emptyClick',
-    'impact', 'liftProp', 'containerOpen', 'toadPlasma', 'rocketLaunch', 'explosion'].forEach(k => { synth[k] = S[k]; });
+    'impact', 'liftProp', 'containerOpen', 'toadPlasma', 'rocketLaunch', 'explosion', 'bossSwing'].forEach(k => { synth[k] = S[k]; });
   const ready = () => {
     start();
     loadBank();
@@ -913,9 +914,18 @@
     if (hit === 'armor') {
       play('metal_m', { vol: 0.5, at: 0.03, wet: 0.15 });
       play('punch_m', { vol: 0.3, at: 0.03 });
+    } else if (hit === 'heavy') {
+      // Громила (не по броне): дерево по мягкому, тяжело — выбрано на слух (Б8)
+      play('wood_m', { vol: 0.35, at: 0.03, rate: 0.9 });
+      play('soft_h', { vol: 0.45, at: 0.03 });
+    } else if (hit === 'knock') {
+      // Штурмовик, ракетчик: удар и стук биты (Б7)
+      play('punch_h', { vol: 0.45, at: 0.03 });
+      play('wood_l', { vol: 0.25, at: 0.03 });
     } else if (hit === 'flesh') {
-      play('punch_h', { vol: 0.42, at: 0.03 });
-      play('splat', { vol: 0.22, at: 0.04, rate: 0.9, dur: 0.25 });
+      // Жаба, снайпер: удар и короткий влажный шлепок (Б9)
+      play('punch_h', { vol: 0.45, at: 0.03 });
+      play('drip', { vol: 0.2, at: 0.04 });
     } else if (hit) {
       play('wood_h', { vol: 0.45, at: 0.03, wet: 0.1 });
     }
@@ -982,9 +992,10 @@
     drillLoop.keep();
   };
   S.drillHit = function () {
-    if (!ready() || !has('mining')) return synth.drillHit();
-    play('mining', { vol: 0.45, rate: 1.4, jitter: 0.15 });
-    play('splat', { vol: 0.35, rate: 1.3, dur: 0.15 });
+    if (!ready() || !has('soft_m')) return synth.drillHit();
+    // Мягкий удар и короткий шлепок — выбрано на слух
+    play('soft_m', { vol: 0.5, rate: 1.5 });
+    play('drip', { vol: 0.3 });
   };
 
   // Перезарядка — из защёлок и щелчков: ПМ — кнопка, магазин выходит, входит, затвор; обрез — переломил,
@@ -1101,6 +1112,139 @@
     if (!ready() || !has('soft_m')) return synth.liftProp(kind, vol, p);
     play('soft_m', { vol: 0.5 * vol, pan: p, rate: 0.7 });
     if (kind === 'car' || kind === 'trash' || kind === 'bin' || kind === 'barrel') play('metal_l', { vol: 0.25 * vol, pan: p, rate: 0.8 });
+  };
+
+  // --- Боссы ---
+  // Рёв жабы-воина: две расстроенные «пилы» через гласную, дрожь голоса, хрип; f — высота, dur — длина
+  function roar(at, dest, f, dur, vol) {
+    const ac = S.ctx;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(vol, at + 0.08);
+    g.gain.setValueAtTime(vol, at + dur * 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+    const sh = shaper(g, 3);
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.Q.value = 2.5;
+    bp.frequency.setValueAtTime(420, at);
+    bp.frequency.linearRampToValueAtTime(680, at + dur * 0.4);
+    bp.frequency.linearRampToValueAtTime(380, at + dur);
+    bp.connect(sh);
+    const vib = ac.createOscillator();
+    vib.frequency.value = 7;
+    const vg = ac.createGain();
+    vg.gain.value = f * 0.06;
+    vib.connect(vg);
+    [1, 1.51, 0.5].forEach((m, i) => {
+      const o = ac.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.setValueAtTime(f * m, at);
+      o.frequency.linearRampToValueAtTime(f * m * 1.15, at + dur * 0.35);
+      o.frequency.linearRampToValueAtTime(f * m * 0.8, at + dur);
+      vg.connect(o.frequency);
+      const og = ac.createGain();
+      og.gain.value = [0.5, 0.25, 0.4][i];
+      o.connect(og);
+      og.connect(bp);
+      o.start(at);
+      o.stop(at + dur + 0.05);
+    });
+    vib.start(at);
+    vib.stop(at + dur + 0.05);
+    g.connect(dest);
+    burst(at, dest, { f0: 600, f1: 300, q: 1, vol: vol * 0.35, dur, attack: 0.08, noise: 'brown' });   // хрип
+  }
+
+  // Треск разряда — короткие щелчки
+  const crackle = (at, dest, vol) => grains(at, dest, 8, 0.25, { type: 'highpass', f0: 3000, f1: 8000, vol: vol * 0.12 });
+
+  // Звуки боссов: P(ключ, параметры) — запись с громкостью, панорамой и глухостью по расстоянию до босса
+  const BOSS_FX = {
+    // Золотой Мясник: тесак, рёв
+    butcher_wind: P => P('knife_draw', { rate: 0.6, vol: 1.6 }),
+    butcher_slash: P => { P('swish', { rate: 0.45, vol: 0.8, jitter: 0.05 }); P('swish', { rate: 0.55, vol: 0.4, at: 0.05 }); },
+    butcher_spin: P => { for (let k = 0; k < 4; k++) P('swish', { rate: 0.5, vol: 0.6, at: k * 0.12 }); },
+    butcher_lunge: P => { P('swish', { rate: 0.4, vol: 0.8 }); P('soft_h', { rate: 0.5, vol: 0.6, at: 0.1 }); },
+    butcher_grab: P => { P('punch_h', { rate: 0.55, vol: 0.9 }); P('soft_h', { rate: 0.5, vol: 0.7 }); },
+    butcher_chop: P => {
+      P('swish', { rate: 0.4, vol: 0.7 });
+      P('metal_h', { rate: 0.55, vol: 0.9, at: 0.06, wet: 0.3 });
+      P('crunch', { vol: 0.45, lp: 2500, dur: 0.6, at: 0.06 });
+      P('mining', { rate: 0.7, vol: 0.5, at: 0.08 });
+    },
+    butcher_quake: P => {
+      P('lowboom', { vol: 0.9 });
+      P('crunch3', { vol: 0.6 });
+      P('mining', { rate: 0.55, vol: 0.6, at: 0.3 });
+    },
+    butcher_enrage: (P, t, d) => { roar(t, d, 62, 1.0, 1.1); P('boom', { vol: 0.35 }); },
+    butcher_berserk: (P, t, d) => { roar(t, d, 52, 1.2, 1.3); P('boom', { vol: 0.6 }); },
+    butcher_shield: P => { P('glass_h', { rate: 0.7, vol: 0.8, wet: 0.3 }); P('glass_l', { vol: 0.6, at: 0.12 }); P('plasma', { rate: 0.5, vol: 0.4 }); },
+    butcher_death: P => {
+      P('crunch4', { vol: 0.8 });
+      P('soft_h', { rate: 0.4, vol: 0.9, at: 0.4 });
+      P('metal_h', { rate: 0.5, vol: 0.6, at: 0.7 });
+    },
+    // Межпространственный Долбильщик: молот с энергоядром, электричество, мерцание
+    pounder_wind: P => P('field0', { rate: 0.8, vol: 0.6, dur: 0.6 }),
+    pounder_slam: P => {
+      P('scimetal', { rate: 0.6, vol: 0.9, wet: 0.35 });
+      P('boom', { vol: 0.8 });
+      P('crunch', { vol: 0.4, lp: 2200, dur: 0.5 });
+    },
+    pounder_sweep: P => { P('swish', { rate: 0.4, vol: 0.9 }); P('swish', { rate: 0.5, vol: 0.5, at: 0.08 }); },
+    pounder_electric: (P, t, d) => {
+      P('metal_h', { rate: 0.55, vol: 0.8 });
+      P('plasma', { rate: 0.6, vol: 0.6, wet: 0.3 });
+      P('laser_s', { rate: 0.5, vol: 0.5, at: 0.05 });
+      crackle(t, d, 1.3);
+    },
+    pounder_land: P => {
+      P('boom', { vol: 1 });
+      P('metal_h', { rate: 0.45, vol: 0.8, wet: 0.4 });
+      P('crunch', { vol: 0.5, lp: 2000 });
+      P('mining', { rate: 0.6, vol: 0.5, at: 0.1 });
+    },
+    pounder_storm: P => { P('crunch4', { vol: 0.8, wet: 0.3 }); P('plasma', { rate: 0.3, vol: 0.6 }); },
+    pounder_spin: P => { for (let k = 0; k < 6; k++) P('swish', { rate: 0.45, vol: 0.6, at: k * 0.13 }); },
+    pounder_hook: P => { P('field1', { rate: 1.5, vol: 0.6, dur: 0.5 }); P('latch', { rate: 0.6, vol: 0.6, at: 0.15 }); },
+    pounder_pull: P => { P('field2', { rate: 2, vol: 0.6, dur: 0.4 }); P('punch_h', { rate: 0.6, vol: 0.7 }); },
+    pounder_phase: P => { P('field0', { rate: 0.5, vol: 0.8, wet: 0.5 }); P('boom', { vol: 0.7 }); },
+    pounder_blink: P => P('field1', { rate: 2.5, vol: 0.6, dur: 0.3 }),
+    pounder_mini: P => P('field2', { rate: 2, vol: 0.6, dur: 0.35 }),
+    arena_up: P => { P('field0', { rate: 0.5, vol: 0.9, wet: 0.5 }); P('boom', { vol: 0.5 }); },
+    arena_hit: P => P('field2', { rate: 2.2, vol: 0.6, dur: 0.25 }),
+    pounder_death: P => {
+      P('boom', { vol: 1 });
+      P('crunch', { vol: 0.6 });
+      P('plasma', { rate: 0.3, vol: 0.7, wet: 0.5 });
+      P('metal_h', { rate: 0.45, vol: 0.7, at: 0.5, wet: 0.3 });
+    },
+    // Громила швыряет (машину — тяжелее), бьёт кулаками в землю; пролом в заборе
+    brute_throw: P => P('swish', { rate: 0.5, vol: 0.7 }),
+    brute_throw_heavy: P => { P('swish', { rate: 0.35, vol: 0.9 }); P('soft_m', { rate: 0.6, vol: 0.4 }); },
+    brute_slam: P => { P('lowboom2', { vol: 0.6 }); P('soft_h', { rate: 0.5, vol: 0.7 }); },
+    fence_break: P => {
+      P('crunch', { vol: 0.8 });
+      P('mining', { rate: 0.6, vol: 0.8 });
+      P('mining', { rate: 0.5, vol: 0.6, at: 0.12 });
+      P('boom', { vol: 0.7 });
+      P('soft_h', { rate: 0.5, vol: 0.6 });
+    }
+  };
+
+  // Звук события босса: ev — ключ BOSS_FX, (x, y) — где (громкость и глухость — по расстоянию до Василия)
+  S.bossFx = function (ev, x, y) {
+    const fx = BOSS_FX[ev];
+    if (!fx) return;
+    if (!ready() || !has('boom')) return synth.bossSwing(!/slash|sweep|spin|wind|blink|hook|mini/.test(ev));
+    const sp = spatial(x, y, 1700);
+    if (sp.vol < 0.03) return;
+    const P = (key, o = {}) => play(key, Object.assign({}, o, {
+      vol: (o.vol === undefined ? 1 : o.vol) * sp.vol * 0.8, pan: sp.pan, lp: Math.min(o.lp || 20000, sp.lp)
+    }));
+    fx(P, S.ctx.currentTime, bus(sp.vol * 0.8, sp.pan, 0.3));
   };
 
   // --- Тайники и сейфы ---
