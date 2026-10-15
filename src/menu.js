@@ -40,7 +40,7 @@ window.Menu = (() => {
   const COMBAT_RADIUS = 750;
   const LOOT_LIMIT = 150;
   const CONFIRM_MS = 3500;
-  const LOOT_TYPES = new Set(['scrap', 'bottle', 'mil_parts', 'alien_core', 'ammo_9x18', 'ammo_12g', 'stew', 'vodka', 'bandage']);
+  const LOOT_TYPES = new Set(['scrap', 'bottle', 'mil_parts', 'alien_core', 'ammo_9x18', 'ammo_12g', 'ammo_762n', 'stew', 'vodka', 'bandage']);
 
   const TEXT = {
     ru: {
@@ -296,7 +296,7 @@ window.Menu = (() => {
         items: Object.assign({}, player.items),
         resources: Object.assign({}, player.resources),
         weapons: Object.keys(player.unlockedWeapons).filter(k => player.unlockedWeapons[k]),
-        ammo: { makarov: ammo('makarov'), shotgun: ammo('shotgun'), launcher: ammo('launcher') },
+        ammo: { makarov: ammo('makarov'), shotgun: ammo('shotgun'), launcher: ammo('launcher'), nagant: ammo('nagant') },
         empGrenades: player.empGrenades || 0,
         arcCharge: player.arcCharge || 0,
         currentWeapon: player.currentWeapon,
@@ -420,7 +420,7 @@ window.Menu = (() => {
       window.Canteen.loadState(s.canteen);
       player.hp = num(p.hp, player.maxHp, 1, player.maxHp);
     }
-    ['makarov', 'shotgun', 'launcher'].forEach(k => {
+    ['makarov', 'shotgun', 'launcher', 'nagant'].forEach(k => {
       const a = p.ammo && p.ammo[k];
       if (!a) return;
       player.ammo[k].clip = Math.floor(num(a.clip, player.ammo[k].clip, 0, player.ammo[k].maxClip));

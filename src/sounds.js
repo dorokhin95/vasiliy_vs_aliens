@@ -938,6 +938,16 @@
     else play('pm', { vol: 1.5 * vol, pan: p, wet: 0.12, jitter: 0.04 });
   };
 
+  // Наган Зины: запись ПМ ниже и гулче; патрон в барабан — щелчок дверцы
+  S.nagant = function () {
+    if (!ready() || !has('pm')) return synth.makarov(1.15, 0);
+    play('pm', { vol: 1.75, rate: 0.8, wet: 0.2, jitter: 0.03 });
+  };
+  S.nagantRound = function () {
+    if (!ready() || !has('click')) return synth.emptyClick();
+    play('click', { vol: 0.45, rate: 1.9, dur: 0.08, jitter: 0.08 });
+  };
+
   S.shotgun = function (vol = 1, p = 0) {
     if (!ready() || !has('sg')) return synth.shotgun(vol, p);
     if (vol < 0.75 && has('sg_far')) play('sg_far', { vol: 1.8 * vol, pan: p, lp: 12000 * vol + 1500, jitter: 0.03 });

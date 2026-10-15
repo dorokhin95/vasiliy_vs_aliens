@@ -7,8 +7,11 @@
 //     ждёт на земле рядом. Над тайником с предметом — жёлтый «!».
 //   - Цель «принести» (bring: { ресурс: сколько }): квест готов к сдаче, когда у Василия столько есть; сдача забирает.
 //   - Цель «проба» (sample): постоять у первой лужи шлам-прудов Промзоны и нажать E (game.js handleInteract).
+//   - Цель «зачистить» (clear: район): в районе не осталось жаб — считаются живые в Промзоне, а из города —
+//     по снимку Промзоны (locationWorlds); когда осталось мало, над ними «!».
+//   - Цель «после босса» (boss): Долбильщик побеждён — там, где он пал (или в логове), лежит предмет.
 //   - Награда: открыть мастерскую или столовую, патроны на посту при каждом возвращении, ящик припасов,
-//     бесплатное улучшение в мастерской, гранатомёт (src/workshop.js).
+//     бесплатное улучшение в мастерской, гранатомёт (src/workshop.js), чертёж, наган Зины.
 //   - Над головой выжившего: «!» — есть новый квест, «?» — можно сдать. Журнал — вкладка окна инвентаря (J),
 //     строка прогресса — слева под полосками здоровья.
 //   - В сохранении — `quests` в корне забега: состояние, найденные предметы, открытое.
@@ -17,6 +20,7 @@ window.Quests = (function () {
   const L = (r, e) => (currentLang === 'ru' ? r : e);
   const T = pair => L(pair[0], pair[1]);
   const PICK_R = 46;               // как близко подойти к предмету, чтобы подобрать
+  const CLEAR_HINT = 3;            // зачистка: столько жаб и меньше осталось — над ними «!»
 
   const QUESTS = [
     {
@@ -124,6 +128,20 @@ window.Quests = (function () {
       done: ['…Петров. Гуляев. Сашка Мохов… Спасибо. Пусть хоть имена останутся. Возвращаться будешь — заходи на пост, патронов отсыплю. Каждый раз.', '…Petrov. Gulyaev. Sashka Mokhov… Thank you. At least their names remain. Whenever you come back, drop by the post — I\'ll give you ammo. Every time.']
     },
     {
+      id: 'stepanych_pipe', giver: 'stepanych', reward: 'blueprint', clear: 'pz_foundry', icon: 'quest_foundry_pipe',
+      title: ['Труба', 'The pipe'],
+      item: ['Литейный цех', 'The foundry'],
+      where: ['Литейный цех: перебить всех жаб', 'The foundry: kill every toad'],
+      offer: [
+        ['Знаешь, откуда они к посту лезут? Из литейки. Там теплотрасса — труба до самого забора, по ней и ползут.', 'Know where they crawl to the post from? The foundry. There\'s a heating main — a pipe right up to the fence, they crawl along it.'],
+        ['Пока литейка жабья — нам труба. Вычисти её, Василий. Всю, до последней. А я тебе кое-что отдам — на чёрный день берёг.', 'As long as the foundry is theirs, we\'re done for. Clear it out, Vasiliy. All of it, down to the last one. And I\'ll give you something — I was saving it for a rainy day.']
+      ],
+      accepted: ['В литейном их много, и громилы там злые. Бей по одному, в толпу не лезь.', 'There are a lot of them in the foundry, and the brutes there are mean. One at a time, don\'t charge into a crowd.'],
+      progress: ['Литейку — дочиста. Пока хоть одна там сидит, лезть будут.', 'The foundry — clean. As long as even one sits there, they\'ll keep crawling.'],
+      turnIn: ['Литейка чистая', 'The foundry is clear'],
+      done: ['Чистая? Вот это дело. Держи — чертёж, из бригадирского стола вынес, когда всё началось. Разрядник какой-то сварочный. Толику покажи — он разберётся.', 'Clear? Now that\'s something. Here — a blueprint, I took it from the foreman\'s desk when it all started. Some welding arc discharger. Show Tolik — he\'ll figure it out.']
+    },
+    {
       id: 'zina_armory', giver: 'zina', reward: 'armory', icon: 'quest_guard_log',
       title: ['Оружейка ВОХР', 'The guard armory'],
       item: ['Журнал караула', 'Guard log'],
@@ -137,6 +155,22 @@ window.Quests = (function () {
       progress: ['Кассовый сейф в заводоуправлении. Журнал караула там.', 'The vault in the admin building. The guard log is in there.'],
       turnIn: ['Вот журнал караула', 'Here\'s the guard log'],
       done: ['Последняя запись Колина: «Ушёл к градирням, там свет. Буду к утру». Не пришёл… На, держи — это из нашей заначки. Заслужил.', 'Kolya\'s last entry: "Went to the cooling towers, there\'s a light. Back by morning." He never came… Here, take this — from our stash. You\'ve earned it.']
+    },
+    {
+      id: 'zina_kolya', giver: 'zina', reward: 'nagant', boss: true, icon: 'quest_kolya_pass',
+      title: ['Коля', 'Kolya'],
+      item: ['Пропуск Коли', 'Kolya\'s pass'],
+      where: ['Логово у градирен: одолеть Долбильщика, забрать пропуск', 'The lair by the cooling towers: defeat the Pounder, take the pass'],
+      offer: [
+        ['Видел того, у градирен? Здоровый, с кувалдой. А на плече — наша нашивка, ВОХР. Я её Коле сама пришивала.', 'Have you seen the one by the cooling towers? Huge, with a sledgehammer. And on his shoulder — our guard patch. I sewed it on for Kolya myself.'],
+        ['Это Коля, Василий. Был Коля. Отпусти его… А пропуск его принеси — он всегда в нагрудном кармане носил. Хочу, чтобы хоть что-то осталось.', 'That\'s Kolya, Vasiliy. Used to be. Let him go… And bring me his pass — he always kept it in his breast pocket. I want something of him to remain.']
+      ],
+      accepted: ['Он и раньше был самый сильный в карауле. Бинтов возьми побольше.', 'He was the strongest in the guard even before. Take plenty of bandages.'],
+      // Долбильщик уже побеждён, когда Зина просит
+      acceptedDown: ['Ты его уже… Значит, отмучился. Пропуск там, у логова, поищи.', 'You already… So his suffering is over. Look for the pass there, by the lair.'],
+      progress: ['Логово у градирен. Пропуск — при нём.', 'His lair is by the cooling towers. The pass is on him.'],
+      turnIn: ['Вот Колин пропуск', 'Here\'s Kolya\'s pass'],
+      done: ['…Рябов Николай Петрович, начальник караула. На фото ещё с усами… Спасибо, Василий. Держи мой наган — пристрелянный. Мне из оружейки ТТ хватит. А ты береги себя.', '…Ryabov, Nikolai Petrovich, head of the guard. Still with his mustache in the photo… Thank you, Vasiliy. Take my Nagant — it\'s well zeroed. A TT from the armory is enough for me. And you take care of yourself.']
     }
   ];
   const byId = {};
@@ -162,16 +196,33 @@ window.Quests = (function () {
   const isActive = q => state[q.id] && state[q.id].s === 'active';
   const isDone = q => state[q.id] && state[q.id].s === 'done';
   const gotCount = q => (state[q.id] ? state[q.id].got.filter(Boolean).length : 0);
-  const isReady = q => isActive(q) && (q.bring ? canAffordCost(q.bring) : gotCount(q) >= (q.find ? q.find.n : 1));
-  // Сколько собрано: «2/3» у поиска, «12/30» у «принести»; пусто, если предмет один
+  const isReady = q => isActive(q) && (q.bring ? canAffordCost(q.bring) : q.clear ? clearLeft(q) === 0
+    : gotCount(q) >= (q.find ? q.find.n : 1));
+  // Сколько собрано: «2/3» у поиска, «12/30» у «принести», «осталось 5» у зачистки; пусто, если предмет один
   function progressText(q) {
     if (q.bring) return Object.keys(q.bring).map(k => `${Math.min(player.resources[k] || 0, q.bring[k])}/${q.bring[k]}`).join(', ');
+    if (q.clear) {
+      const left = clearLeft(q);
+      return left === null ? '' : L(`осталось ${left}`, `${left} left`);
+    }
     return q.find && q.find.n > 1 ? `${gotCount(q)}/${q.find.n}` : '';
   }
   const suffix = (q, a, b = '') => {
     const p = progressText(q);
     return p ? a + p + b : '';
   };
+  // Зачистка: сколько жаб района живо — в Промзоне по живым, из города по снимку Промзоны; не была — null
+  function clearLeft(q) {
+    const list = currentLocation === 'promzona' ? enemies
+      : (locationWorlds.promzona && Array.isArray(locationWorlds.promzona.enemies) ? locationWorlds.promzona.enemies : null);
+    if (!list) return null;
+    return list.filter(e => e.districtId === q.clear && !e.summon && !e.defense && e.type !== 'pounder' && e.type !== 'boss').length;
+  }
+  // Долбильщик побеждён: в Промзоне его нет, из города — по снимку Промзоны
+  const bossDown = () => (currentLocation === 'promzona' ? !pounderRef
+    : !!(locationWorlds.promzona && locationWorlds.promzona.pounderDefeated));
+  let bossAt = null;   // где Долбильщик был последний раз — там и пропуск, когда он падёт
+
   // Квест, который сейчас у этого выжившего: первый не сданный по цепочке
   const current = giver => QUESTS.find(q => q.giver === giver && !isDone(q)) || null;
   const available = () => !!window.Defense && window.Defense.stage === 'done';
@@ -207,12 +258,12 @@ window.Quests = (function () {
   }
 
   function accept(q, ui) {
-    state[q.id] = { s: 'active', got: Array(q.find ? q.find.n : q.sample ? 1 : 0).fill(false) };
+    state[q.id] = { s: 'active', got: Array(q.find ? q.find.n : q.sample || q.boss ? 1 : 0).fill(false) };
     prepared = false;
     showToast(L('НОВОЕ ЗАДАНИЕ', 'NEW QUEST'), `${T(q.title)} — ${T(q.where)}`);
     SoundFX.reload();
     if (window.Menu) window.Menu.requestSave();
-    ui.menu(T(q.accepted));
+    ui.menu(T(q.boss && q.acceptedDown && bossDown() ? q.acceptedDown : q.accepted));
   }
 
   function turnIn(q, ui) {
@@ -228,6 +279,19 @@ window.Quests = (function () {
   function giveReward(q) {
     flags[q.reward] = true;
     if (q.reward === 'launcher' && window.Workshop) window.Workshop.giveLauncher();
+    if (q.reward === 'blueprint') {
+      player.resources.blueprint = (player.resources.blueprint || 0) + 1;
+      addFloatingText(player.x - 40, player.y - 50, L('+1 ЧЕРТЁЖ', '+1 BLUEPRINT'), '#60a5fa');
+    }
+    if (q.reward === 'nagant') {
+      // Наган Зины: сразу с собой и в руках, барабан полный и 28 в запас
+      player.unlockedWeapons.nagant = true;
+      player.equipped.nagant = true;
+      player.ammo.nagant.clip = player.ammo.nagant.maxClip;
+      player.ammo.nagant.reserve += 28;
+      applyHotbarOrder();
+      window.switchWeapon('nagant');
+    }
     if (q.reward === 'armory') {
       // Заначка ВОХР: патроны к купленным стволам и бинты — у ног Василия
       const drop = [['bandage', 3]];
@@ -266,6 +330,7 @@ window.Quests = (function () {
     const drop = [['bandage', 1]];
     if (player.unlockedWeapons.makarov) drop.push(['ammo_9x18', 18]);
     if (player.unlockedWeapons.shotgun) drop.push(['ammo_12g', 8]);
+    if (player.unlockedWeapons.nagant) drop.push(['ammo_762n', 7]);
     drop.forEach(([type, val], i) => spawn3DLootItem(5555 - 40 + i * 40, 300, type, val));
     addFloatingText(5480, 260, L('Степаныч: «Бери, заслужил»', 'Stepanych: "Take it, you earned it"'), '#fde68a');
   }
@@ -304,7 +369,7 @@ window.Quests = (function () {
     const st = state[p.q.id];
     st.got[p.k] = true;
     pickups.splice(pickups.indexOf(p), 1);
-    const n = p.q.find.n;
+    const n = p.q.find ? p.q.find.n : 1;
     const giver = window.Defense.SURVIVORS.find(s => s.id === p.q.giver);
     const name = giver ? L(giver.name[0], giver.name[1]) : '';
     addFloatingText(p.x - 50, p.y - 50, `+ ${T(p.q.item)}${n > 1 ? ` ${gotCount(p.q)}/${n}` : ''}`, '#fbbf24');
@@ -314,8 +379,22 @@ window.Quests = (function () {
     if (window.Menu) window.Menu.requestSave();
   }
 
+  function bossDrops() {
+    if (currentLocation !== 'promzona') return;
+    if (pounderRef) {
+      bossAt = { x: pounderRef.x, y: pounderRef.y };
+      return;
+    }
+    QUESTS.forEach(q => {
+      if (!q.boss || !isActive(q) || state[q.id].got[0] || pickups.some(p => p.q === q)) return;
+      const at = bossAt || POUNDER_HOME;
+      pickups.push({ q, k: 0, x: at.x, y: at.y + 50 });
+    });
+  }
+
   function update() {
     if (!prepared) prepare();
+    bossDrops();
     for (let i = pickups.length - 1; i >= 0; i--) {
       const p = pickups[i];
       if (Math.hypot(player.x - p.x, player.y - p.y) < PICK_R) pickUp(p);
@@ -403,6 +482,13 @@ window.Quests = (function () {
         drawBang(ctx, c.x, c.y - 70 + Math.sin(now * 3 + k) * 4, '!');
       });
     });
+    // Зачистка: последние жабы района — с «!», чтобы не искать их по всем закоулкам
+    QUESTS.forEach(q => {
+      if (!q.clear || !isActive(q)) return;
+      const left = enemies.filter(e => e.districtId === q.clear && !e.summon && !e.defense && e.type !== 'pounder');
+      if (left.length === 0 || left.length > CLEAR_HINT) return;
+      left.forEach((e, k) => drawBang(ctx, e.x, e.y - (e.radius || 20) - 40 + Math.sin(now * 3 + k) * 4, '!'));
+    });
     // Лужа, где набрать пробу шлама
     const sp = sampleQuest() ? sampleSpot() : null;
     if (sp) drawBang(ctx, sp.x, sp.y - 60 + Math.sin(performance.now() / 1000 * 3) * 4, '!');
@@ -442,7 +528,8 @@ window.Quests = (function () {
     return QUESTS.filter(isActive).map(q => {
       const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
       const name = giver ? L(giver.name[0], giver.name[1]) : '';
-      return { q, title: T(q.title), text: isReady(q) ? L(`отнеси — ${name}`, `bring it to ${name}`) : `${T(q.where)}${suffix(q, ' ')}`, ready: isReady(q) };
+      const ready = q.clear ? L(`доложи — ${name}`, `report to ${name}`) : L(`отнеси — ${name}`, `bring it to ${name}`);
+      return { q, title: T(q.title), text: isReady(q) ? ready : `${T(q.where)}${suffix(q, q.clear ? ' — ' : ' ')}`, ready: isReady(q) };
     });
   }
 
@@ -475,7 +562,8 @@ window.Quests = (function () {
   function journal() {
     return QUESTS.filter(q => state[q.id]).map(q => {
       const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
-      const ready = q.bring || q.sample ? L('Собрано — отнести в Новохмуринск', 'Collected — take it back to Novokhmurinsk')
+      const ready = q.clear ? L('Зачищено — доложить в Новохмуринске', 'Cleared — report back in Novokhmurinsk')
+        : q.bring || q.sample ? L('Собрано — отнести в Новохмуринск', 'Collected — take it back to Novokhmurinsk')
         : L('Найдено — отнести в Новохмуринск', 'Found — take it back to Novokhmurinsk');
       return {
         icon: iconSrc(q),

@@ -368,7 +368,8 @@ class EnvironmentRenderer {
       { key: 'loot_kvako_charge', path: 'assets/sprites/loot/loot_kvako_charge.png?v=1', type: 'loot' },
       { key: 'loot_electronics', path: 'assets/sprites/loot/loot_electronics.png?v=1', type: 'loot' },
       { key: 'loot_ammo_9x18', path: 'assets/sprites/loot/ammo_9x18.png?v=1026', type: 'loot' },
-      { key: 'loot_ammo_12g', path: 'assets/sprites/loot/ammo_12g.png?v=1026', type: 'loot' }
+      { key: 'loot_ammo_12g', path: 'assets/sprites/loot/ammo_12g.png?v=1026', type: 'loot' },
+      { key: 'loot_ammo_762n', path: 'assets/sprites/loot/ammo_762n.png?v=1', type: 'loot' }
     ];
 
     let remaining = assetsToLoad.length;
@@ -2294,7 +2295,7 @@ class EnvironmentRenderer {
     else if (l.type === 'bottle') glowColor = 'rgba(34, 197, 94, 0.22)';
     else if (l.type === 'mil_parts') glowColor = 'rgba(239, 68, 68, 0.34)';
     else if (l.type === 'alien_core') glowColor = 'rgba(168, 85, 247, 0.42)';
-    else if (l.type === 'ammo_9x18' || l.type === 'ammo_12g') glowColor = 'rgba(250, 204, 21, 0.28)';
+    else if (l.type === 'ammo_9x18' || l.type === 'ammo_12g' || l.type === 'ammo_762n') glowColor = 'rgba(250, 204, 21, 0.28)';
     // Жабьи трофеи — с пульсирующим ореолом: их выпадает немного, мимо пройти не должны
     const isTrophy = l.type === 'toad_eye' || l.type === 'toad_leg' || l.type === 'toad_liver';
     if (isTrophy) {

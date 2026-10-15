@@ -99,6 +99,8 @@ class ThreeCharacterManager {
     this.launcherObj = null; // гранатомёт — в руках на месте обреза
     this.arcObj = null;      // сварочный разрядник — на месте дрели
     this.empObj = null;      // ЭМИ-граната — в руке, где пистолет
+    this.nagantObj = null;   // наган Зины (квест «Коля») — на месте ПМ, длиннее его по стволу
+    this.nagantTipZ = 0;     // насколько дуло нагана дальше дула ПМ (getMuzzlePosition)
     this.armLDown = null;
     this.armRPistol = null;
     this.armRBat = null;
@@ -196,6 +198,12 @@ class ThreeCharacterManager {
             grenade.visible = false;
             this.makarovObj.parent.add(grenade);
             this.empObj = grenade;
+            this.setWeapon(this.currentWeaponId || 'bat');
+          });
+          // Наган: рукоять там же, где у ПМ, ствол длиннее — 235 мм против 161
+          loader.load('assets/models/weapon_nagant.glb?v=1', (g) => {
+            this.nagantObj = this.fitLike(g.scene, this.makarovObj, 235 / 161);
+            if (this.nagantObj) this.nagantTipZ = this.nagantObj.userData.extraZ;
             this.setWeapon(this.currentWeaponId || 'bat');
           });
           this.setWeapon(this.currentWeaponId || 'bat');
@@ -450,7 +458,8 @@ class ThreeCharacterManager {
 
   // Новый ствол на месте старого (ref): тот же родитель, оси — как у модели Василия (ствол +Z, верх +Y),
   // длина по стволу и середина — как у ref. Возвращает obj (скрытым) или null, если ref нет
-  fitLike(obj, ref) {
+  // k — во сколько раз длиннее ref по стволу: тыльная часть остаётся на месте, ствол уходит вперёд
+  fitLike(obj, ref, k = 1) {
     if (!ref || !ref.parent) return null;
     const parent = ref.parent;
     parent.add(obj);
@@ -461,9 +470,12 @@ class ThreeCharacterManager {
     obj.position.set(0, 0, 0);
     obj.scale.set(1, 1, 1);
     const rb = this.localBox(ref), ob = this.localBox(obj);
-    obj.scale.setScalar(rb.getSize(new THREE.Vector3()).z / Math.max(1e-6, ob.getSize(new THREE.Vector3()).z));
+    const refLen = rb.getSize(new THREE.Vector3()).z;
+    obj.scale.setScalar(k * refLen / Math.max(1e-6, ob.getSize(new THREE.Vector3()).z));
     const center = this.localBox(obj).getCenter(new THREE.Vector3());
     const want = rb.getCenter(new THREE.Vector3());
+    want.z += (k - 1) * refLen / 2;
+    obj.userData.extraZ = (k - 1) * refLen;
     const w = obj.getWorldPosition(new THREE.Vector3())
       .add(this.model.localToWorld(want.clone()).sub(this.model.localToWorld(center.clone())));
     obj.position.copy(parent.worldToLocal(w));
@@ -475,13 +487,14 @@ class ThreeCharacterManager {
     // 'none' — всё оружие оставлено у Михалыча: руки как с битой, но пустые
     const unarmed = (weaponId === 'none');
     const isBat = (weaponId === 'bat');
-    const isMakarov = (weaponId === 'makarov' || weaponId === 'emp');
+    const isMakarov = (weaponId === 'makarov' || weaponId === 'emp' || weaponId === 'nagant');
     const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma' || weaponId === 'laser' ||
       weaponId === 'launcher' || weaponId === 'arc');
 
     if (this.batObj) this.batObj.visible = isBat;
     if (this.makarovObj) this.makarovObj.visible = (weaponId === 'makarov');
     if (this.empObj) this.empObj.visible = (weaponId === 'emp');
+    if (this.nagantObj) this.nagantObj.visible = (weaponId === 'nagant');
     if (this.launcherObj) this.launcherObj.visible = (weaponId === 'launcher');
     if (this.arcObj) this.arcObj.visible = (weaponId === 'arc');
     if (this.shotgunObj) this.shotgunObj.visible = (weaponId === 'shotgun');
@@ -520,6 +533,7 @@ class ThreeCharacterManager {
       if (this.launcherObj) this.launcherObj.visible = false;
       if (this.arcObj) this.arcObj.visible = false;
       if (this.empObj) this.empObj.visible = false;
+      if (this.nagantObj) this.nagantObj.visible = false;
       this.currentWeaponId = null;
     } else if (this.currentWeaponId !== currentWeapon) {
       this.currentWeaponId = currentWeapon;
@@ -650,10 +664,10 @@ class ThreeCharacterManager {
       tipX = -0.220;
       tipY = 1.240;
       tipZ = 0.960;
-    } else if (weaponId === 'makarov' || weaponId === 'emp') {
+    } else if (weaponId === 'makarov' || weaponId === 'emp' || weaponId === 'nagant') {
       tipX = -0.140;
       tipY = 1.310;
-      tipZ = 0.770;
+      tipZ = 0.770 + (weaponId === 'nagant' ? this.nagantTipZ : 0);
     } else if (weaponId === 'drill' || weaponId === 'arc') {
       tipX = -0.090;
       tipY = 1.215;

@@ -55,6 +55,7 @@ MODELS = {
     'weapon_launcher':        ([0.95, 0.12, 0.3], 'homemade single-shot grenade launcher: steel pipe barrel, spring, wooden rifle stock'),
     'weapon_arc':             ([0.8, 0.14, 0.3], 'homemade welding arc discharger gun with copper coil, cables and electrode tip'),
     'weapon_emp':             ([0.1, 0.1, 0.16], 'homemade EMP grenade: soldered metal canister with circuit boards and a glowing blue core'),
+    'weapon_nagant':          ([0.235, 0.035, 0.14], 'Soviet Nagant M1895 revolver: seven-round cylinder, long thin barrel, walnut grip'),
     # Жаба-снайпер: новая модель по старому концепту (assets/enemies/toad_sniper_perfect.png на белом), чтобы
     # винтовку можно было вскинуть — скелет, прицел и дуло собирает tools/build_promzona_toads_blender.py
     'toad_sniper':        ([1.3, 0.6, 1.85], 'full body game character, lean alien toad sniper in a ragged ghillie camouflage cloak and hood with a green night-vision monocle, holding a long sniper rifle diagonally across the body, rifle muzzle clearly away from the body'),

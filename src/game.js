@@ -1059,6 +1059,8 @@ function updateUILanguage() {
   if (lblBat) lblBat.innerText = currentLang === 'ru' ? 'Бита' : 'Spiked Bat';
   const lblMakarov = document.getElementById('lbl-w-makarov');
   if (lblMakarov) lblMakarov.innerText = currentLang === 'ru' ? 'ПМ 9×18' : 'Makarov PM';
+  const lblNagant = document.getElementById('lbl-w-nagant');
+  if (lblNagant) lblNagant.innerText = currentLang === 'ru' ? 'Наган' : 'Nagant';
   const lblShotgun = document.getElementById('lbl-w-shotgun');
   if (lblShotgun) lblShotgun.innerText = currentLang === 'ru' ? 'Обрез' : 'Shotgun';
   const lblDrill = document.getElementById('lbl-w-drill');
@@ -1234,12 +1236,15 @@ const player = {
     // Мастерская Толика (src/workshop.js)
     launcher: false,
     arc: false,
-    emp: false
+    emp: false,
+    nagant: false   // наган Зины — награда квеста «Коля» (src/quests.js)
   },
   ammo: {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
     shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 },
-    launcher: { clip: 0, maxClip: 1, reserve: 0, reloadTime: 90 }
+    launcher: { clip: 0, maxClip: 1, reserve: 0, reloadTime: 90 },
+    // Наган заряжается по патрону: reloadTime — на один
+    nagant: { clip: 0, maxClip: 7, reserve: 0, reloadTime: 20 }
   },
   empGrenades: 0,       // ЭМИ-гранаты (src/workshop.js)
   arcCharge: 0,         // заряд разрядника: кадры дуги из текущей плазменной ячейки
@@ -2240,8 +2245,8 @@ window.addEventListener('wheel', (e) => {
 // --- ХОТБАР: слоты перетаскиваются мышью, клавиши 1–8 идут по видимому порядку, порядок сохраняется ---
 // Ячейки 1–3 (c0, c1, c2) — расходники, какой в какой — выбирает игрок (consumableSlots); оружие — с 4-й
 const HOTBAR_CONSUMABLES = ['c0', 'c1', 'c2'];
-const HOTBAR_DEFAULT_ORDER = ['c0', 'c1', 'c2', 'bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser'];
-const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser']);
+const HOTBAR_DEFAULT_ORDER = ['c0', 'c1', 'c2', 'bat', 'makarov', 'nagant', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser'];
+const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'nagant', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser']);
 const HOTBAR_STORAGE_KEY = 'vasiliy.hotbarOrder';
 let hotbarOrder = loadHotbarOrder();
 
@@ -2443,12 +2448,14 @@ function startGame(save = null) {
     laser: false,
     launcher: false,
     arc: false,
-    emp: false
+    emp: false,
+    nagant: false
   };
   player.ammo = {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
     shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 },
-    launcher: { clip: 0, maxClip: 1, reserve: 0, reloadTime: 90 }
+    launcher: { clip: 0, maxClip: 1, reserve: 0, reloadTime: 90 },
+    nagant: { clip: 0, maxClip: 7, reserve: 0, reloadTime: 20 }
   };
   player.empGrenades = 0;
   player.arcCharge = 0;
@@ -2628,6 +2635,7 @@ function spawn3DLootItem(x, y, type, val = 1) {
     alien_core: '🔮',
     ammo_9x18: '🔫',
     ammo_12g: '💥',
+    ammo_762n: '🔫',
     stew: '🥫',
     vodka: '🍾',
     bandage: '🩹',
@@ -2670,7 +2678,7 @@ function canReachContainer(c) {
 // Добыча из тайников Промзоны: [стеклотара от, до], [чермет от, до], бонусы с шансами.
 // Цветмет — из полувагонов с ломом, крытых вагонов и грузовиков (проводка, обмотки), техспирт — из цистерн и бочек
 const PZ_STASH_LOOT = {
-  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25], ['nonferrous', 0.3]] },
+  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25], ['ammo_762n', 0.3], ['nonferrous', 0.3]] },
   gondola: { bottles: [0, 1], scrap: [5, 8], bonus: [['mil_parts', 0.2], ['nonferrous', 0.55]] },
   tankcar: { bottles: [2, 3], scrap: [2, 3], bonus: [['vodka', 0.55], ['tech_spirit', 0.6]] },
   kamaz: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.45], ['ammo_12g', 0.4], ['mil_parts', 0.2], ['nonferrous', 0.3]] },
@@ -2700,7 +2708,10 @@ function scavengeContainer(c) {
   if (pzLoot) {
     bottleRoll = Math.round(rollRange(pzLoot.bottles) * bMult);
     scrapRoll = Math.max(1, Math.round(rollRange(pzLoot.scrap) * sMult));
-    pzLoot.bonus.forEach(([item, chance]) => { if (Math.random() < chance) bonusDrops.push(item); });
+    pzLoot.bonus.forEach(([item, chance]) => {
+      if (item === 'ammo_762n' && !player.unlockedWeapons.nagant) return;
+      if (Math.random() < chance) bonusDrops.push(item);
+    });
     // Гнездо и шлам — квако-ядра, цеха — оружейные детали
     if (dist.tier >= 4 && Math.random() < 0.45) bonusDrops.push('alien_core');
     else if (dist.tier === 3 && Math.random() < 0.25) bonusDrops.push('mil_parts');
@@ -2763,7 +2774,7 @@ function scavengeContainer(c) {
       c.x + Math.cos(spreadAngle) * dropDist,
       c.y + Math.sin(spreadAngle) * dropDist,
       itemType,
-      itemType === 'ammo_9x18' ? 8 : (itemType === 'ammo_12g' ? 4 : 1)
+      itemType === 'ammo_9x18' ? 8 : itemType === 'ammo_12g' ? 4 : itemType === 'ammo_762n' ? 7 : 1
     );
   });
 
@@ -2914,6 +2925,28 @@ const SHOP_ARSENAL_ITEMS = [
     desc_ru: 'Самоделка из плат НИИ. Глушит всю электронику вокруг на минуту — и твою тоже.',
     desc_en: 'Homemade from research-institute boards. Jams all electronics around for a minute — yours too.',
     zone_ru: '🔧 Мастерская Толика', zone_en: '🔧 Tolik\'s workshop', cost: {}
+  },
+  // Наган Зины — награда квеста «Коля» (src/quests.js): здесь — только взять с собой или оставить
+  {
+    id: 'nagant', type: 'weapon', weaponKey: 'nagant', cardOnly: true,
+    img: 'assets/sprites/weapons/weapon_nagant.png?v=1',
+    name_ru: 'Наган Зины', name_en: 'Zina\'s Nagant revolver',
+    desc_ru: 'Барабан на 7 патронов, бьёт сильнее ПМ, пуля прошивает жабу навылет. Заряжается по патрону (R).',
+    desc_en: '7-round cylinder, hits harder than the PM, the bullet goes through a toad. Loads one round at a time (R).',
+    zone_ru: '🎖 Подарок Зины', zone_en: '🎖 A gift from Zina', cost: {}
+  },
+  {
+    id: 'ammo_762n',
+    type: 'ammo',
+    ammoKey: 'nagant',
+    amount: 14,
+    img: 'assets/sprites/loot/ammo_762n.png?v=1',
+    name_ru: 'Патроны 7,62 к нагану (+14 шт.)',
+    name_en: '7.62 Nagant rounds (+14)',
+    desc_ru: 'Пополняют боезапас нагана Зины (зарядить — клавиша R).',
+    desc_en: 'Replenishes reserve ammo for Zina\'s Nagant (press R to load).',
+    zone_ru: '📦 У Михалыча, раз уж наган есть', zone_en: '📦 Mikhalych has them, now that you own a Nagant',
+    cost: { bottles: 6, scrap: 3 }
   }
 ];
 
@@ -3417,7 +3450,8 @@ window.switchWeapon = function(weaponKey) {
     laser: currentLang === 'ru' ? 'ЛАЗЕРНЫЙ БЛАСТЕР' : 'LASER BLASTER',
     launcher: currentLang === 'ru' ? 'САМОПАЛЬНЫЙ ГРАНАТОМЁТ' : 'HOMEMADE GRENADE LAUNCHER',
     arc: currentLang === 'ru' ? 'СВАРОЧНЫЙ РАЗРЯДНИК' : 'WELDING ARC',
-    emp: currentLang === 'ru' ? 'ЭМИ-ГРАНАТА' : 'EMP GRENADE'
+    emp: currentLang === 'ru' ? 'ЭМИ-ГРАНАТА' : 'EMP GRENADE',
+    nagant: currentLang === 'ru' ? 'НАГАН ЗИНЫ' : 'ZINA\'S NAGANT'
   };
   addFloatingText(player.x, player.y - 35, `${names[weaponKey]}`, '#38bdf8');
   createParticles(player.x, player.y, '#38bdf8', 8);
@@ -3450,7 +3484,7 @@ function startReload() {
     rechargeLaser();
     return;
   }
-  if (wKey !== 'makarov' && wKey !== 'shotgun' && wKey !== 'launcher') return;
+  if (wKey !== 'makarov' && wKey !== 'shotgun' && wKey !== 'launcher' && wKey !== 'nagant') return;
   if (player.reloadingWeapon) return;
 
   const ammoState = player.ammo[wKey];
@@ -3490,6 +3524,9 @@ const WEAPONS = {
   // Мастерская Толика (src/workshop.js): гранатомёт — урон взрыва в середине; разрядник — урон дуги за тик,
   // range — до первой жабы, chain — на сколько ещё перескакивает, chainR — как далеко
   launcher: { dmg: b => b * 1.5 + 54, cooldown: 30, pen: 1.0 },
+  // Наган Зины (квест «Коля»): сильнее и медленнее ПМ, пуля прошивает первую жабу (pierce) и бьёт следующую
+  // слабее (pierceMult); барабан заряжается по патрону — player.ammo.nagant.reloadTime кадров на штуку
+  nagant: { dmg: b => b * 1.4 + 28, cooldown: 24, pen: 0.5, pierce: 1, pierceMult: 0.75 },
   arc: { dmg: b => b * 0.3 + 4, cooldown: 6, pen: 0.6, range: 150, chain: 2, chainR: 120 },
   chain: { pen: 1.0 },  // цепная молния перка «Аккумулятор от КАМАЗа»
   shock: { pen: 0.5 },  // ударная волна переката перка «Рука-перфоратор»
@@ -3581,7 +3618,7 @@ function damageBoss(e, dmg, weapon, fromX, fromY) {
     if (weapon !== 'plasma') {
       spawnDirectionalSparks(e.x + Math.cos(hitAngle) * 64, e.y - 52 + Math.sin(hitAngle) * 44, hitAngle, 1.2, 5, '#7dd3fc', 3, 9, 8);
       // Василий догадывается, что так щит не взять (цепная молния и волна переката — не его удары)
-      if (weapon === 'makarov' || weapon === 'shotgun') sayLine('say_shield_bullets');
+      if (weapon === 'makarov' || weapon === 'shotgun' || weapon === 'nagant') sayLine('say_shield_bullets');
       else if (weapon === 'bat' || weapon === 'drill') sayLine('say_shield_melee');
       return { dealt: 0, shielded: true };
     }
@@ -4094,8 +4131,13 @@ function shootPlayerWeapon() {
     return;
   }
 
-  // Если оружие сейчас перезаряжается — ждём окончания перезарядки
-  if (player.reloadingWeapon === wKey) return;
+  // Если оружие сейчас перезаряжается — ждём окончания перезарядки. Наган заряжается по патрону:
+  // выстрел прерывает зарядку, если в барабане уже что-то есть
+  if (player.reloadingWeapon === wKey) {
+    if (wKey !== 'nagant' || player.ammo.nagant.clip <= 0) return;
+    player.reloadingWeapon = null;
+    player.reloadTimer = 0;
+  }
 
   const stamMult = player.hasPerk('third_frog_eye') ? 0.75 : 1.0;
 
@@ -4274,6 +4316,46 @@ function shootPlayerWeapon() {
           startReload();
         }
       }, 220);
+    }
+    updateHUD(true);
+    return;
+  }
+
+  // =========================================================================
+  // [5б] НАГАН ЗИНЫ (7,62, барабан на 7, пуля навылет; гильзы остаются в барабане)
+  // =========================================================================
+  if (wKey === 'nagant') {
+    const nAmmo = player.ammo.nagant;
+    if (nAmmo.clip <= 0) {
+      startReload();
+      shootCooldown = 14;
+      return;
+    }
+    nAmmo.clip--;
+    shootCooldown = WEAPONS.nagant.cooldown;
+    SoundFX.nagant();
+    if (window.threeCharacter) window.threeCharacter.triggerRecoil(0.9);
+
+    const spread = drunkAim() ? 0.12 : 0.025;
+    const angle = player.angle + (Math.random() - 0.5) * spread;
+    const speed = 27;
+    const isCrit = Math.random() < (player.critChance + 0.05);
+    const dmg = weaponDmg('nagant') * (player.isDrunk ? 1.6 : 1.0) * (isCrit ? player.critMult : 1.0);
+    cameraKickX -= Math.cos(angle) * 3;
+    cameraKickY -= Math.sin(angle) * 3;
+    muzzleFlashes.push({ x: muzzle.x, y: muzzle.y, angle, type: 'makarov', life: 4, maxLife: 4, scale: 0.95 + Math.random() * 0.15 });
+    bullets.push({
+      x: muzzle.x, y: muzzle.y, prevX: muzzle.x, prevY: muzzle.y,
+      vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, angle, speed, drag: 0.993,
+      radius: 3.2, damage: dmg, isCrit, weaponType: 'nagant', trailLen: 36, life: 36, maxLife: 36,
+      pierce: WEAPONS.nagant.pierce, color: isCrit ? '#ef4444' : '#fde047'
+    });
+    spawnDirectionalSparks(muzzle.x, muzzle.y, angle, 0.4, 7, '#fbbf24', 5, 13, 10);
+    spawnGunpowderSmoke(muzzle.x, muzzle.y, angle, 3);
+    if (nAmmo.clip === 0 && nAmmo.reserve > 0) {
+      setTimeout(() => {
+        if (player.currentWeapon === 'nagant' && player.ammo.nagant.clip === 0) startReload();
+      }, 260);
     }
     updateHUD(true);
     return;
@@ -6769,11 +6851,12 @@ function updateHUD(forceWeaponRefresh = false) {
       // Мастерская Толика: гранаты, заряд и ячейки, сколько ЭМИ-гранат
       if (window.Workshop) setHudText(document.getElementById(`ammo-w-${w}`), window.Workshop.slotText(w));
       slotEl.classList.toggle('overheated', w === 'arc' && player.empT > 0);
-    } else if (w === 'makarov' || w === 'shotgun') {
+    } else if (w === 'makarov' || w === 'shotgun' || w === 'nagant') {
       const ammoEl = document.getElementById(`ammo-w-${w}`);
       const wrapEl = document.getElementById(`wrap-w-${w}`);
       const barEl = document.getElementById(`bar-w-${w}`);
-      if (player.reloadingWeapon === w) {
+      // Наган заряжается по патрону — видно, сколько уже в барабане
+      if (player.reloadingWeapon === w && w !== 'nagant') {
         setHudText(ammoEl, 'R...');
       } else {
         setHudText(ammoEl, `${player.ammo[w].clip}/${player.ammo[w].reserve}`);
@@ -8924,10 +9007,21 @@ function update() {
     player.stamina = Math.min(player.maxStamina, player.stamina + regenRate);
   }
 
-  // Прогресс перезарядки огнестрельного оружия (ПМ и Обрез)
+  // Прогресс перезарядки огнестрельного оружия (ПМ, обрез, гранатомёт, наган — по патрону)
   if (player.reloadingWeapon) {
     player.reloadTimer--;
     if (player.reloadTimer <= 0) {
+      const rw = player.reloadingWeapon;
+      const aState = player.ammo[rw];
+      // Наган: в барабан — один патрон, и дальше, пока не полон и есть чем
+      if (rw === 'nagant' && aState.reserve > 0 && aState.clip < aState.maxClip) {
+        aState.clip++;
+        aState.reserve--;
+        SoundFX.nagantRound();
+        if (aState.clip < aState.maxClip && aState.reserve > 0) player.reloadTimer = player.reloadMaxTimer;
+      }
+    }
+    if (player.reloadingWeapon && player.reloadTimer <= 0) {
       const rw = player.reloadingWeapon;
       const aState = player.ammo[rw];
       const needed = aState.maxClip - aState.clip;
@@ -9175,6 +9269,7 @@ function update() {
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
       if (Math.abs(b.x - e.x) > b.radius + e.radius + 10 || Math.abs(b.y - e.y) > b.radius + e.radius + 10) continue;
+      if (b.hits && b.hits.includes(e)) continue;
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
         // Удар пришёл оттуда, откуда летела пуля
@@ -9213,6 +9308,13 @@ function update() {
           });
         }
 
+        // Наган: пуля прошивает жабу (кроме боссов) и летит дальше слабее
+        if (b.pierce > 0 && e.type !== 'boss' && e.type !== 'pounder') {
+          b.pierce--;
+          (b.hits || (b.hits = [])).push(e);
+          b.damage *= WEAPONS[b.weaponType].pierceMult || 1;
+          break;
+        }
         bullets.splice(i, 1);
         break;
       }
@@ -9475,6 +9577,9 @@ function update() {
         } else if (item.type === 'ammo_12g') {
           player.ammo.shotgun.reserve += item.val;
           addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 12К`, '#fb923c');
+        } else if (item.type === 'ammo_762n') {
+          player.ammo.nagant.reserve += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 7,62 Н`, '#facc15');
         } else if (item.type === 'stew') {
           player.items.stew += item.val;
           addFloatingText(item.x, item.y - 20, `+${item.val} ТУШЁНКА`, '#fbbf24');
@@ -10307,6 +10412,10 @@ function weaponDps(w, base) {
   if (w === 'shotgun') return W.dmg(base) * W.pellets * W.clip * 60 / (W.clip * W.cooldown + W.reload);
   if (w === 'makarov') {
     const clip = player.ammo.makarov.maxClip, reload = player.ammo.makarov.reloadTime;
+    return W.dmg(base) * clip * 60 / (clip * W.cooldown + reload);
+  }
+  if (w === 'nagant') {
+    const clip = player.ammo.nagant.maxClip, reload = clip * player.ammo.nagant.reloadTime;
     return W.dmg(base) * clip * 60 / (clip * W.cooldown + reload);
   }
   if (w === 'plasma') return W.dmg(base) * 7 * 60 / (7 * W.cooldown + 180); // 7 выстрелов до перегрева + 3 с

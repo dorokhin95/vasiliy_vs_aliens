@@ -140,6 +140,11 @@ window.CharacterPanel = (function () {
     if (player.unlockedWeapons.shotgun) {
       ammo.push(cell('assets/sprites/loot/ammo_12g.png', L('Патроны 12 калибра', '12-gauge shells'), `${sg.clip} + ${sg.reserve}`));
     }
+    // Наган Зины (квест «Коля»)
+    if (player.unlockedWeapons.nagant) {
+      const ng = player.ammo.nagant;
+      ammo.push(cell('assets/sprites/loot/ammo_762n.png?v=1', L('Патроны 7,62 к нагану', '7.62 Nagant rounds'), `${ng.clip} + ${ng.reserve}`));
+    }
     // Мастерская Толика (src/workshop.js)
     if (player.unlockedWeapons.launcher) {
       const gl = player.ammo.launcher;
