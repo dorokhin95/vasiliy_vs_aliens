@@ -6,7 +6,8 @@
 //   - Мастерская: Толик у верстака во дворе к юго-западу от перекрёстка Михалыча, искрит сваркой.
 //   - Столовая: Лена у котла на костре во дворе к северо-востоку от перекрёстка.
 //   - Серёга, оправившийся после ранения, бродит между ними (ещё прихрамывает).
-// С каждым можно поговорить (E): реплика облачком над головой. Окна мастерской и столовой — следующий шаг.
+// С каждым можно поговорить (E) — окно диалога (src/dialog.js). Облачко над головой — только для окриков
+// («Лезут!»). Окна мастерской и столовой — следующий шаг.
 // Модели — те же, что в обороне (src/three_survivors.js), мешки баррикады — оттуда же (Defense.drawPiece).
 // Скрипты обычные, без модулей: player, enemies, currentLocation, SoundFX и прочее — из game.js.
 window.Settlers = (function () {
@@ -39,36 +40,6 @@ window.Settlers = (function () {
     seryoga: { at: ROUTE[0], walker: true }
   };
 
-  // Реплики — по кругу, по одной на каждое «E»
-  const LINES = {
-    stepanych: [
-      ['Стоим, Василий. Сунется жаба в дыру — получит дуплетом.', 'We\'re holding, Vasiliy. A toad pokes through that hole — it gets both barrels.'],
-      ['Тридцать лет в литейке отстоял, теперь вот забор стерегу. Ничего, тоже работа.', 'Thirty years in the foundry, now I guard a fence. Still a job.'],
-      ['Ты на заводе осторожнее. Долбильщик этот — уже не человек.', 'Careful at the plant. That Pounder isn\'t human anymore.']
-    ],
-    zina: [
-      ['Пропуск предъявляем! …Шучу, проходи.', 'Pass, please! …Kidding, go on through.'],
-      ['Двадцать лет на проходной — мимо меня ни одна жаба не прошмыгнёт.', 'Twenty years at the gate — no toad slips past me.'],
-      ['Наган ещё дедов. Старый, а не подводит — как я.', 'This revolver was my granddad\'s. Old, but reliable — like me.']
-    ],
-    tolik: [
-      ['Обустраиваю мастерскую. Скоро стволы тебе подшаманю.', 'Setting up a workshop. Soon I\'ll tune up your guns.'],
-      ['Принеси с завода цветмета — сварю что хочешь, хоть танк.', 'Bring me nonferrous metal from the plant — I\'ll weld you anything, even a tank.'],
-      ['Чертежи в заводских сейфах лежат. Найдёшь — соберём такое, что жабы обквакаются.', 'Blueprints are in the plant\'s safes. Find them and we\'ll build something the toads will croak at.']
-    ],
-    lena: [
-      ['Кухню развернула. Скоро и похлёбку сварим, и настойки.', 'Kitchen\'s set up. Soon there\'ll be soup and tinctures.'],
-      ['Из жабьих лапок, между прочим, бульон наваристый. Не морщись.', 'Toad legs make a hearty broth, you know. Don\'t make that face.'],
-      ['Береги себя, Василий. Бинтов мало, а ты у нас один.', 'Take care of yourself, Vasiliy. Bandages are scarce, and there\'s only one of you.']
-    ],
-    seryoga: [
-      ['Нога почти не болит. Спасибо, что перевязал тогда.', 'My leg barely hurts now. Thanks for patching me up back then.'],
-      ['Я в ночную видел: градирня светилась фиолетовым. Думал, мерещится…', 'On a night shift I saw the cooling tower glowing purple. Thought I was seeing things…'],
-      ['Михалыч говорит, ты Мясника битой уложил. Правда, что ли?', 'Mikhalych says you took down the Butcher with a bat. For real?'],
-      ['Степаныч ворчит, а сам по ночам жаб считает — не спит.', 'Stepanych grumbles, but he counts toads all night — never sleeps.']
-    ]
-  };
-
   let settlers = [], shots = [], bubble = null;
   let greeted = false, greetT = 0, crawlT = CRAWL_FIRST, weldT = 0, obstaclesPlaced = false;
 
@@ -91,7 +62,7 @@ window.Settlers = (function () {
       const [x, y] = sp.at;
       const angle = sp.post ? Math.atan2(POST.y + 60 - y, POST.x - x) : (sp.angle || Math.PI / 2);
       return { def, sp, x, y, angle, home: angle, t: Math.random() * 100, phase: Math.random() * 6, moving: false, dist: 0,
-        aimT: 0, kick: 0, cd: 30 + Math.random() * 60, talkT: 0, line: 0, wp: 0, waitT: 60 + Math.random() * 120 };
+        aimT: 0, kick: 0, cd: 30 + Math.random() * 60, talkT: 0, wp: 0, waitT: 60 + Math.random() * 120 };
     });
   }
 
@@ -262,12 +233,13 @@ window.Settlers = (function () {
     return L(`[E] — поговорить: ${s.def.name[0]}`, `[E] — talk: ${s.def.name[1]}`);
   }
 
+  // Разговор: повернуться к Василию и открыть окно диалога (пока оно открыто, игра стоит)
   function talk(s) {
-    const lines = LINES[s.def.id];
-    const [ru, en] = lines[s.line % lines.length];
-    s.line++;
-    s.talkT = 60 * 4.5;
-    say(s, L(ru, en));
+    if (!s.sp.pose) face(s, player.x, player.y);
+    s.moving = false;
+    s.talkT = 60 * 2;
+    bubble = null;
+    if (window.Dialog) window.Dialog.open(s);
   }
 
   // --- Отрисовка ---
@@ -592,9 +564,17 @@ window.Settlers = (function () {
     });
   }
 
-  // Облачко с репликой над головой — поверх всего
+  // Облачко с репликой над головой — поверх всего; у кого есть квест — «!», у кого можно сдать — «?»
   function drawBubble(ctx) {
-    if (!bubble || !active()) return;
+    if (!active()) return;
+    if (window.Quests) {
+      const now = performance.now() / 1000;
+      settlers.forEach(s => {
+        const m = window.Quests.marker(s.def.id);
+        if (m && !(bubble && bubble.s === s)) window.Quests.drawBang(ctx, s.x, s.y - figureH(s) - 24 + Math.sin(now * 3) * 3, m === 'ready' ? '?' : '!');
+      });
+    }
+    if (!bubble) return;
     const s = bubble.s;
     const a = Math.min(1, bubble.t / 20, (bubble.max - bubble.t) / 8);
     ctx.save();

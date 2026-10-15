@@ -127,6 +127,8 @@ window.Safes = (function () {
       spawn3DLootItem(c.x + Math.cos(a) * (c.radius + 26), c.y + Math.sin(a) * (c.radius + 20), type, val);
     });
     addFloatingText(c.x - 40, c.y - 60, L('🔓 Вскрыт!', '🔓 Cracked!'), '#4ade80');
+    // Журнал Лены, журнал караула Зины (src/quests.js)
+    if (window.Quests) window.Quests.onSearched(c);
     createParticles(c.x, c.y - 20, '#fde047', 16);
     SoundFX.batSwing(true);
     if (window.Menu) window.Menu.requestSave();

@@ -1,5 +1,5 @@
-// Окно «Инвентарь / Персонаж»: I — что у Василия с собой (только то, что есть), C — его характеристики,
-// перки, карты и прогресс локации. Пока окно открыто, мир стоит (gameState 'INVENTORY'); ESC или та же
+// Окно «Инвентарь / Персонаж / Задания»: I — что у Василия с собой (только то, что есть), C — его
+// характеристики, перки, карты и прогресс локации, J — журнал квестов спасённых (src/quests.js). Пока окно открыто, мир стоит (gameState 'INVENTORY'); ESC или та же
 // клавиша закрывают. Скрипты обычные, без модулей: player, currentLang, t и таблицы — из game.js.
 window.CharacterPanel = (function () {
   const $ = id => document.getElementById(id);
@@ -172,20 +172,45 @@ window.CharacterPanel = (function () {
     body.append(section(L('Прогресс', 'Progress'), progress, true));
   }
 
+  // Журнал: взятые квесты — сверху, сданные — ниже
+  function renderQuests(body) {
+    const list = window.Quests ? window.Quests.journal() : [];
+    const row = q => {
+      const d = statRow(`${q.title} · ${q.giver}`, q.text);
+      d.classList.add('perk-row');
+      d.querySelector('span').style.color = q.state === 'done' ? '#64748b' : q.state === 'ready' ? '#4ade80' : '#fbbf24';
+      return d;
+    };
+    const active = section(L('Взятые', 'Active'), list.filter(q => q.state !== 'done').map(row), true);
+    const done = section(L('Выполненные', 'Completed'), list.filter(q => q.state === 'done').map(row), true);
+    if (!active && !done) {
+      const p = document.createElement('p');
+      p.className = 'inv-empty';
+      p.textContent = L('Заданий нет. Поговори со спасёнными в Новохмуринске.', 'No quests. Talk to the rescued survivors in Novokhmurinsk.');
+      body.append(p);
+    }
+    if (active) body.append(active);
+    if (done) body.append(done);
+  }
+
   function render() {
     $('char-tab-inventory').textContent = L('🎒 ИНВЕНТАРЬ [I]', '🎒 INVENTORY [I]');
     $('char-tab-stats').textContent = L('👤 ПЕРСОНАЖ [C]', '👤 CHARACTER [C]');
+    $('char-tab-quests').textContent = L('📜 ЗАДАНИЯ [J]', '📜 QUESTS [J]');
     $('char-tab-inventory').classList.toggle('active', tab === 'inventory');
     $('char-tab-stats').classList.toggle('active', tab === 'stats');
+    $('char-tab-quests').classList.toggle('active', tab === 'quests');
     $('char-close').textContent = L('ЗАКРЫТЬ [ESC]', 'CLOSE [ESC]');
     const body = $('char-body');
     body.innerHTML = '';
     if (tab === 'inventory') renderInventory(body);
+    else if (tab === 'quests') renderQuests(body);
     else renderStats(body);
   }
 
   $('char-tab-inventory').addEventListener('click', () => open('inventory'));
   $('char-tab-stats').addEventListener('click', () => open('stats'));
+  $('char-tab-quests').addEventListener('click', () => open('quests'));
   $('char-close').addEventListener('click', close);
   $('hud-btn-inventory').addEventListener('click', () => toggle('inventory'));
   $('hud-btn-stats').addEventListener('click', () => toggle('stats'));

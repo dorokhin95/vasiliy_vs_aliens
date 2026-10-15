@@ -1516,6 +1516,7 @@ function generateWorld() {
   rocketBlasts = [];
   pounderRings = [];
   if (window.Defense) window.Defense.onWorld();
+  if (window.Quests) window.Quests.onWorld(); // предметы квестов и охрана — когда мир загрузится
   particles = [];
   muzzleFlashes = [];
   shellCasings = [];
@@ -2168,6 +2169,8 @@ let shootCooldown = 0;
 let nearbyInteractable = null;
 
 window.addEventListener('keydown', (e) => {
+  // Окно диалога забирает все клавиши: ответы, «дальше», ESC (src/dialog.js)
+  if (window.Dialog && window.Dialog.handleKey(e)) return;
   // Окно сейфа забирает цифры, Enter, Backspace, ESC и E (src/safes.js)
   if (window.Safes && gameState === 'PLAYING' && window.Safes.handleKey(e)) return;
   keys[e.code] = true;
@@ -2178,9 +2181,10 @@ window.addEventListener('keydown', (e) => {
     else if (gameState === 'SHOP') closeShop();
   }
 
-  // I — инвентарь, C — персонаж (src/inventory.js); та же клавиша закрывает
-  if ((e.code === 'KeyI' || e.code === 'KeyC') && window.CharacterPanel && (gameState === 'PLAYING' || gameState === 'INVENTORY')) {
-    window.CharacterPanel.toggle(e.code === 'KeyI' ? 'inventory' : 'stats');
+  // I — инвентарь, C — персонаж, J — журнал заданий (src/inventory.js); та же клавиша закрывает
+  const panelTab = { KeyI: 'inventory', KeyC: 'stats', KeyJ: 'quests' }[e.code];
+  if (panelTab && window.CharacterPanel && (gameState === 'PLAYING' || gameState === 'INVENTORY')) {
+    window.CharacterPanel.toggle(panelTab);
     return;
   }
 
@@ -2400,6 +2404,7 @@ function startGame(save = null) {
     window.Defense.onEnter();
   }
   if (window.Settlers) window.Settlers.loadState(save ? save.settlers : undefined);
+  if (window.Quests) window.Quests.loadState(save ? save.quests : undefined);
   // В Промзоне купола Михалыча нет — после загрузки Василий у пролома
   if (currentLocation !== 'city') placePlayerAtBreach();
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
@@ -2666,6 +2671,8 @@ function scavengeContainer(c) {
   });
 
   createParticles(c.x, c.y, dist.color || '#94a3b8', 14);
+  // Предмет квеста в этом тайнике — выпадает рядом (src/quests.js)
+  if (window.Quests) window.Quests.onSearched(c);
   updateHUD(true);
 }
 
@@ -5675,8 +5682,9 @@ function drawBreachHint(ctx) {
 // Когда город зачищен, золотая стрелка у края экрана показывает, где пролом, и сколько до него
 function drawBreachMarker() {
   if (gameState !== 'PLAYING' || fenceBreach.state === 'intact') return;
-  // Только в городе, когда он зачищен: показывает, куда идти дальше. В Промзоне стрелки нет
-  if (currentLocation !== 'city' || !levelCleared) return;
+  // Только в городе, когда он зачищен, и только до первого перехода: показывает, куда идти дальше.
+  // Кто уже был в Промзоне, дорогу знает. В самой Промзоне стрелки нет
+  if (currentLocation !== 'city' || !levelCleared || locationsVisited.has('promzona')) return;
   const markY = breachFenceY() + breachInward() * 20;
   const sx = fenceBreach.x - camera.x, sy = markY - camera.y;
   const w = viewW, h = viewH;
@@ -8997,6 +9005,7 @@ function update() {
   if (window.Safes) window.Safes.update();
   if (window.Defense) window.Defense.update();
   if (window.Settlers) window.Settlers.update();
+  if (window.Quests) window.Quests.update();
   updatePounderRings();
   updateShockwaves();
   updateShieldShards();
@@ -9646,6 +9655,7 @@ function render() {
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
   if (window.Defense) window.Defense.drawGround(ctx); // баррикада у пролома — низкая, под фигурами
   if (window.Settlers) window.Settlers.drawGround(ctx); // мешки поста у пролома в городе
+  if (window.Quests) window.Quests.drawWorld(ctx); // предметы квестов на земле и «!» над тайниками
   drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // куда упадут ракеты
   drawFirePools(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // горючая жижа Василия
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
@@ -9887,6 +9897,7 @@ function render() {
   drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   // 9.6. Реплика спасённого облачком над головой (src/settlers.js)
   if (window.Settlers) window.Settlers.drawBubble(ctx);
+  if (window.Quests) window.Quests.drawOverlay(ctx); // «!» над тайниками с предметами квестов
 
   // 10. Частицы (искры, пороховой дым, брызги) и текст — только в пределах экрана
   for (let i = 0; i < particles.length; i++) {

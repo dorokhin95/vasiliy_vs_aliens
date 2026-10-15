@@ -97,7 +97,7 @@ window.Menu = (() => {
         ['Мышь', 'Прицеливание'],
         ['ЛКМ', 'Удар / стрельба'],
         ['Пробел', 'Перекат (тратит выносливость)'],
-        ['E', 'Обыскать тайник / лавка Михалыча'],
+        ['E', 'Обыскать тайник / лавка Михалыча / поговорить'],
         ['R', 'Перезарядка'],
         ['Q', 'Смена оружия в ячейках 4 и 5 (жёлтые)'],
         ['Колесо', 'Сменить оружие'],
@@ -105,6 +105,7 @@ window.Menu = (() => {
         ['ПКМ', 'Способность карты босса: рывок / гиперрегенерация'],
         ['I', 'Инвентарь'],
         ['C', 'Персонаж: характеристики, перки, карты'],
+        ['J', 'Журнал заданий'],
         ['ESC', 'Пауза / закрыть окно'],
         ['F3', 'Счётчик FPS']
       ]
@@ -163,7 +164,7 @@ window.Menu = (() => {
         ['Mouse', 'Aim'],
         ['LMB', 'Attack / shoot'],
         ['Space', 'Dodge roll (uses stamina)'],
-        ['E', 'Scavenge / Mikhalych\'s shop'],
+        ['E', 'Scavenge / Mikhalych\'s shop / talk'],
         ['R', 'Reload'],
         ['Q', 'Swap the weapons in slots 4 and 5 (yellow)'],
         ['Wheel', 'Switch weapon'],
@@ -171,6 +172,7 @@ window.Menu = (() => {
         ['RMB', 'Boss card ability: dash / hyper-regeneration'],
         ['I', 'Inventory'],
         ['C', 'Character: stats, perks, cards'],
+        ['J', 'Quest journal'],
         ['ESC', 'Pause / close window'],
         ['F3', 'FPS counter']
       ]
@@ -247,7 +249,8 @@ window.Menu = (() => {
   let lastSaveAt = 0;
   let saveRequested = false;
 
-  const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED' || gameState === 'INVENTORY';
+  const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED' || gameState === 'INVENTORY' ||
+    gameState === 'DIALOG';
 
   // Бой — когда рядом есть враг, который гонится за Василием. Иначе можно было бы сохраниться
   // посреди драки и обновлением страницы сбежать к Михалычу со всем добытым в бою
@@ -273,6 +276,8 @@ window.Menu = (() => {
       defense: window.Defense ? window.Defense.saveState() : undefined,
       // Спасённые в городе: видел ли Василий их на местах (приветствие — один раз)
       settlers: window.Settlers ? window.Settlers.saveState() : undefined,
+      // Квесты спасённых: взятые, сданные, найденные предметы, что открыто (src/quests.js)
+      quests: window.Quests ? window.Quests.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),
@@ -818,6 +823,7 @@ window.Menu = (() => {
     if (settingsOpen()) closeSettings();
     else if (gameState === 'SHOP') closeShop();
     else if (gameState === 'INVENTORY') window.CharacterPanel.close();
+    else if (gameState === 'DIALOG') window.Dialog.close();
     else if (gameState === 'PLAYING') pause();
     else if (gameState === 'PAUSED') resume();
   }
