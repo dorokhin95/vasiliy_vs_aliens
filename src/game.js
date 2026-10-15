@@ -2433,7 +2433,7 @@ const Loading = {
     if (el) el.style.display = 'flex';
     this.step();
   },
-  // Модели, без которых сцену не показать: окружение, Василий, жабы и пропсы локации, её босс
+  // Модели, без которых сцену не показать: окружение, Василий, жабы и пропсы локации, её босс; и звуки
   modelsReady() {
     const er = window.environmentRenderer, tp = window.threeProps, te = window.threeEnemies;
     const ch = window.threeCharacter;
@@ -2449,7 +2449,9 @@ const Loading = {
       !tp || (tp.allSettled() && (currentLocation !== 'promzona' || tp.promzonaRequested)),
       !te || (te.allSettled() && (currentLocation !== 'promzona' || te.promzonaRequested)),
       !boss || !boss.loadRequested || boss.isLoaded || boss.loadFailed,
-      !survivors || ts.allSettled()
+      !survivors || ts.allSettled(),
+      // Записи звуков (src/sounds.js) — иначе первые секунды игры без звука
+      !SoundFX.preloadSounds || SoundFX.preloadSounds()
     ];
     return { done: checks.filter(Boolean).length, total: checks.length };
   },
@@ -2465,7 +2467,7 @@ const Loading = {
     const timedOut = performance.now() - this.t0 > LOADING_MAX_MS;
     const m = this.modelsReady();
     if (m.done < m.total && !timedOut) {
-      this.show(0.05 + 0.4 * m.done / m.total, ru ? 'Загружаем модели…' : 'Loading models…');
+      this.show(0.05 + 0.4 * m.done / m.total, ru ? 'Загружаем модели и звуки…' : 'Loading models and sounds…');
       setTimeout(() => this.step(), 100);
       return;
     }

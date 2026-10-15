@@ -816,20 +816,36 @@
   const lastPick = {};
   let loading = false;
 
+  // Файлы качаются сразу при открытии страницы (контекст звука для этого не нужен), раскодируются —
+  // когда он есть: экран загрузки (game.js Loading) создаёт его заранее и ждёт, пока раскодируется всё
+  const raw = [];
+  Object.entries(BANK).forEach(([key, n]) => {
+    for (let i = 1; i <= n; i++) {
+      raw.push([key, fetch(`assets/sounds/${key}_${i}.ogg?v=${SOUND_V}`)
+        .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))]);
+    }
+  });
+  let settled = 0;
+
   function loadBank() {
     if (loading || !S.ctx) return;
     loading = true;
-    Object.entries(BANK).forEach(([key, n]) => {
-      buffers[key] = [];
-      for (let i = 1; i <= n; i++) {
-        fetch(`assets/sounds/${key}_${i}.ogg?v=${SOUND_V}`)
-          .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
-          .then(ab => S.ctx.decodeAudioData(ab))
-          .then(buf => { buffers[key].push(buf); })
-          .catch(() => {});
-      }
+    Object.keys(BANK).forEach(key => { buffers[key] = []; });
+    raw.forEach(([key, bytes]) => {
+      bytes.then(ab => S.ctx.decodeAudioData(ab))
+        .then(buf => { buffers[key].push(buf); })
+        .catch(() => {})
+        .then(() => { settled++; });
     });
   }
+
+  // Экран загрузки: завести звук (без жеста он стоит на паузе — запустится с первым звуком) и раскодировать
+  // записи. true — всё раскодировано (или не загрузилось — тогда звучит синтез)
+  S.preloadSounds = function () {
+    if (!S.ensure()) return true;
+    loadBank();
+    return settled >= raw.length;
+  };
   const has = key => !!(buffers[key] && buffers[key].length);
 
   // Проиграть запись: vol, pan, rate (высота), jitter (разброс высоты), wet (эхо), at (задержка, с),
