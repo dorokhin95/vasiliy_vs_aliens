@@ -7,7 +7,9 @@
   abilities — значки способностей ПКМ (у горючей жижи — значок её перка): blender_assets/perk_concepts/,
              в assets/sprites/perks/;
   quest — предметы квестов (src/quests.js): blender_assets/perk_concepts/quest_items_concept.png,
-             в assets/sprites/quest/.
+             в assets/sprites/quest/;
+  weapons_ws — стволы мастерской Толика (гранатомёт, разрядник, ЭМИ-граната) из их концептов для Rodin,
+             electronics — продвинутая электроника (лут сейфов).
 
 Концепты — из того же чата Gemini, что и лут, тем же промтом: предметы в ряд на белом фоне.
 Лут висит над землёй как остальной 2D-лут
@@ -40,6 +42,12 @@ SETS = {
     'abilities': (PERKS + 'abilities_concept.png', ['ability_dash', 'ability_regen'], 'assets/sprites/perks'),
     'quest': (PERKS + 'quest_items_concept.png',
               ['quest_welding_rig', 'quest_sample_log', 'quest_shift_tag', 'quest_guard_log'], 'assets/sprites/quest'),
+    # Мастерская Толика: значки стволов (160 px, как у остального оружия) — из концептов для Rodin, и плата
+    # Длинные стволы — наискось (дулом вверх-вправо, как обрез), иначе в квадрате ячейки они тонкие
+    'weapons_ws': [('blender_assets/promzona_concepts/weapon_launcher.png', ['weapon_launcher'], 'assets/sprites/weapons', 160, 22),
+                   ('blender_assets/promzona_concepts/weapon_arc.png', ['weapon_arc'], 'assets/sprites/weapons', 160, 22),
+                   ('blender_assets/promzona_concepts/weapon_emp.png', ['weapon_emp'], 'assets/sprites/weapons', 160)],
+    'electronics': (PERKS + 'electronics_concept.png', ['loot_electronics']),
 }
 DST = 'assets/sprites/loot'
 MIN_PART = 6        # кусок меньше (пикселей маски в 1/4) — пыль, не прибавляется
@@ -175,7 +183,7 @@ def split_items(im, n):
     return masks
 
 
-def make_set(src, names, dst=DST):
+def make_set(src, names, dst=DST, out=OUT, rot=0):
     im = Image.open(src).convert('RGB')
     rgba = cut_background(im, enclosed=dst != DST)
     masks = split_items(rgba, len(names))
@@ -184,10 +192,13 @@ def make_set(src, names, dst=DST):
         part = rgba.copy()
         part.putalpha(ImageChops.darker(rgba.getchannel('A'), mask))
         part = part.crop(part.getchannel('A').point(lambda v: 255 if v > 20 else 0).getbbox())
+        if rot:
+            part = part.rotate(rot, resample=Image.BICUBIC, expand=True)
+            part = part.crop(part.getchannel('A').point(lambda v: 255 if v > 20 else 0).getbbox())
         side = int(max(part.size) * (1 + PAD * 2))
         sq = Image.new('RGBA', (side, side), (0, 0, 0, 0))
         sq.paste(part, ((side - part.width) // 2, (side - part.height) // 2), part)
-        sq = sq.resize((OUT, OUT), Image.LANCZOS)
+        sq = sq.resize((out, out), Image.LANCZOS)
         os.makedirs(dst, exist_ok=True)
         path = os.path.join(dst, name + '.png')
         sq.save(path, optimize=True)
@@ -196,7 +207,9 @@ def make_set(src, names, dst=DST):
 
 def main():
     for key in sys.argv[1:] or SETS:
-        make_set(*SETS[key])
+        parts = SETS[key] if isinstance(SETS[key], list) else [SETS[key]]
+        for part in parts:
+            make_set(*part)
 
 
 if __name__ == '__main__':

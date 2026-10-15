@@ -250,7 +250,7 @@ window.Menu = (() => {
   let saveRequested = false;
 
   const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED' || gameState === 'INVENTORY' ||
-    gameState === 'DIALOG';
+    gameState === 'DIALOG' || gameState === 'WORKSHOP';
 
   // Бой — когда рядом есть враг, который гонится за Василием. Иначе можно было бы сохраниться
   // посреди драки и обновлением страницы сбежать к Михалычу со всем добытым в бою
@@ -278,6 +278,8 @@ window.Menu = (() => {
       settlers: window.Settlers ? window.Settlers.saveState() : undefined,
       // Квесты спасённых: взятые, сданные, найденные предметы, что открыто (src/quests.js)
       quests: window.Quests ? window.Quests.saveState() : undefined,
+      // Мастерская Толика: купленные улучшения, бесплатное потрачено, сколько ЭМИ-гранат сделано (src/workshop.js)
+      workshop: window.Workshop ? window.Workshop.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),
@@ -290,7 +292,9 @@ window.Menu = (() => {
         items: Object.assign({}, player.items),
         resources: Object.assign({}, player.resources),
         weapons: Object.keys(player.unlockedWeapons).filter(k => player.unlockedWeapons[k]),
-        ammo: { makarov: ammo('makarov'), shotgun: ammo('shotgun') },
+        ammo: { makarov: ammo('makarov'), shotgun: ammo('shotgun'), launcher: ammo('launcher') },
+        empGrenades: player.empGrenades || 0,
+        arcCharge: player.arcCharge || 0,
         currentWeapon: player.currentWeapon,
         equipped: Object.keys(player.equipped || {}).filter(k => player.equipped[k]),
         perks: Array.from(player.unlockedPerks),
@@ -403,7 +407,11 @@ window.Menu = (() => {
     for (const k in player.unlockedWeapons) {
       player.unlockedWeapons[k] = k === 'bat' || weapons.includes(k);
     }
-    ['makarov', 'shotgun'].forEach(k => {
+    player.empGrenades = Math.floor(num(p.empGrenades, 0, 0, 9));
+    player.arcCharge = Math.floor(num(p.arcCharge, 0, 0, 99999));
+    // Мастерская: магазин ПМ и перезарядка обреза зависят от улучшений — до патронов (clip не больше maxClip)
+    if (window.Workshop) window.Workshop.loadState(s.workshop);
+    ['makarov', 'shotgun', 'launcher'].forEach(k => {
       const a = p.ammo && p.ammo[k];
       if (!a) return;
       player.ammo[k].clip = Math.floor(num(a.clip, player.ammo[k].clip, 0, player.ammo[k].maxClip));
@@ -828,6 +836,7 @@ window.Menu = (() => {
     else if (gameState === 'SHOP') closeShop();
     else if (gameState === 'INVENTORY') window.CharacterPanel.close();
     else if (gameState === 'DIALOG') window.Dialog.close();
+    else if (gameState === 'WORKSHOP') window.Workshop.close();
     else if (gameState === 'PLAYING') pause();
     else if (gameState === 'PAUSED') resume();
   }

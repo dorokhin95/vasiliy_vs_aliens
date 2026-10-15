@@ -5,7 +5,9 @@
 //     места постоянные — `find`: район и тип, первые по порядку). Обыскал тайник или вскрыл сейф, пока квест
 //     взят, — рядом выпадает предмет (подобрать — подойти). Тайник обыскан раньше, чем взят квест, — предмет
 //     ждёт на земле рядом. Над тайником с предметом — жёлтый «!».
-//   - Награда: открыть мастерскую или столовую, патроны на посту при каждом возвращении, ящик припасов.
+//   - Цель «принести» (bring: { ресурс: сколько }): квест готов к сдаче, когда у Василия столько есть; сдача забирает.
+//   - Награда: открыть мастерскую или столовую, патроны на посту при каждом возвращении, ящик припасов,
+//     бесплатное улучшение в мастерской, гранатомёт (src/workshop.js).
 //   - Над головой выжившего: «!» — есть новый квест, «?» — можно сдать. Журнал — вкладка окна инвентаря (J),
 //     строка прогресса — слева под полосками здоровья.
 //   - В сохранении — `quests` в корне забега: состояние, найденные предметы, открытое.
@@ -30,6 +32,36 @@ window.Quests = (function () {
       progress: ['Аппарат в кузове ЗИЛа, в механических цехах. Без него никак.', 'The rig is in the ZIL truck bed, in the machine shops. Can\'t do without it.'],
       turnIn: ['Вот твой аппарат', 'Here\'s your rig'],
       done: ['Живой! И аппарат живой! Дай мне его настроить — и мастерская заработает.', 'You\'re alive! And so is the rig! Let me set it up — and the workshop will be open.']
+    },
+    {
+      id: 'tolik_cable', giver: 'tolik', reward: 'freeUpgrade',
+      title: ['Цветмет на кабель', 'Copper for cable'],
+      item: ['Цветмет', 'Non-ferrous metal'],
+      where: ['Принести Толику 30 цветмета', 'Bring Tolik 30 non-ferrous metal'],
+      bring: { nonferrous: 30 },
+      offer: [
+        ['Аппарат гудит, а варить толком нечем: кабель весь порченый, жабы погрызли. Медь нужна — много меди.', 'The rig hums, but there\'s nothing proper to weld with: the cables are ruined, chewed by toads. I need copper — lots of copper.'],
+        ['Притащи цветмета штук тридцать — с катушек, с подстанции, с вагонов. За это первую доработку твоего ствола сделаю бесплатно.', 'Bring me about thirty pieces of non-ferrous metal — from cable drums, the substation, the wagons. In return I\'ll upgrade one of your guns for free.']
+      ],
+      accepted: ['Медь — она везде, где ток был. Не надорвись только.', 'Copper is wherever there was current. Just don\'t break your back.'],
+      progress: ['Тридцать цветмета, Василий. Без меди обмотку не перемотаешь.', 'Thirty non-ferrous, Vasiliy. Can\'t rewind a coil without copper.'],
+      turnIn: ['Вот цветмет', 'Here\'s the copper'],
+      done: ['Вот это я понимаю! Выбирай любой ствол — первую доработку сделаю бесплатно.', 'Now that\'s what I\'m talking about! Pick any gun — the first upgrade is on me.']
+    },
+    {
+      id: 'tolik_rockets', giver: 'tolik', reward: 'launcher',
+      title: ['Ракетная начинка', 'Rocket filling'],
+      item: ['Квако-заряды', 'Kvako charges'],
+      where: ['Принести Толику 5 квако-зарядов (с ракетчиков)', 'Bring Tolik 5 kvako charges (from rocketeers)'],
+      bring: { kvako_charge: 5 },
+      offer: [
+        ['Видел у ракетчиков пусковые? Труба, пружина и жабья химия. Я такое из водопроводной трубы соберу — начинка только нужна.', 'Seen the rocketeers\' launchers? A pipe, a spring and toad chemistry. I can build one from a water pipe — I just need the filling.'],
+        ['Принеси пять квако-зарядов с ракетчиков. Соберу тебе гранатомёт, а из зарядов потом гранаты буду крутить.', 'Bring me five kvako charges from the rocketeers. I\'ll build you a grenade launcher, and later I\'ll make grenades out of the charges.']
+      ],
+      accepted: ['Ракетчика после залпа бей — он пустой ходит.', 'Hit a rocketeer right after a volley — he walks around empty.'],
+      progress: ['Пять квако-зарядов. С ракетчиков, больше неоткуда.', 'Five kvako charges. From rocketeers, nowhere else.'],
+      turnIn: ['Вот квако-заряды', 'Here are the kvako charges'],
+      done: ['Держи. Труба, пружина, приклад от «Сайги» — и бахает как надо. Гранаты к нему — у меня в мастерской: заряд на три штуки.', 'Here you go. A pipe, a spring, a Saiga stock — and it bangs just right. Grenades are at my workshop: one charge makes three.']
     },
     {
       id: 'lena_log', giver: 'lena', reward: 'canteen', icon: 'quest_sample_log',
@@ -100,7 +132,16 @@ window.Quests = (function () {
   const isActive = q => state[q.id] && state[q.id].s === 'active';
   const isDone = q => state[q.id] && state[q.id].s === 'done';
   const gotCount = q => (state[q.id] ? state[q.id].got.filter(Boolean).length : 0);
-  const isReady = q => isActive(q) && gotCount(q) >= q.find.n;
+  const isReady = q => isActive(q) && (q.bring ? canAffordCost(q.bring) : gotCount(q) >= q.find.n);
+  // Сколько собрано: «2/3» у поиска, «12/30» у «принести»; пусто, если предмет один
+  function progressText(q) {
+    if (q.bring) return Object.keys(q.bring).map(k => `${Math.min(player.resources[k] || 0, q.bring[k])}/${q.bring[k]}`).join(', ');
+    return q.find.n > 1 ? `${gotCount(q)}/${q.find.n}` : '';
+  }
+  const suffix = (q, a, b = '') => {
+    const p = progressText(q);
+    return p ? a + p + b : '';
+  };
   // Квест, который сейчас у этого выжившего: первый не сданный по цепочке
   const current = giver => QUESTS.find(q => q.giver === giver && !isDone(q)) || null;
   const available = () => !!window.Defense && window.Defense.stage === 'done';
@@ -115,7 +156,7 @@ window.Quests = (function () {
 
   // Тайники с предметами квеста: район и тип, первые по порядку (раскладка Промзоны постоянная)
   function targets(q) {
-    if (currentLocation !== 'promzona') return [];
+    if (currentLocation !== 'promzona' || !q.find) return [];
     return containers.filter(c => c.districtId === q.find.district && q.find.types.includes(c.type)).slice(0, q.find.n);
   }
 
@@ -127,8 +168,7 @@ window.Quests = (function () {
     if (!q) return [work, () => ui.menu(L('Пока ничего. Спасибо тебе, Василий.', 'Nothing for now. Thank you, Vasiliy.'))];
     if (isReady(q)) return [`★ ${T(q.turnIn)}`, () => turnIn(q, ui)];
     if (isActive(q)) {
-      const n = q.find.n > 1 ? ` (${gotCount(q)} / ${q.find.n})` : '';
-      return [work, () => ui.menu(T(q.progress) + n)];
+      return [work, () => ui.menu(T(q.progress) + suffix(q, ' (', ')'))];
     }
     return [`★ ${work}`, () => ui.pages(q.offer.map(T), last => ui.say(last, [
       [L('Берусь', 'I\'m on it'), () => accept(q, ui)],
@@ -137,7 +177,7 @@ window.Quests = (function () {
   }
 
   function accept(q, ui) {
-    state[q.id] = { s: 'active', got: Array(q.find.n).fill(false) };
+    state[q.id] = { s: 'active', got: Array(q.find ? q.find.n : 0).fill(false) };
     prepared = false;
     showToast(L('НОВОЕ ЗАДАНИЕ', 'NEW QUEST'), `${T(q.title)} — ${T(q.where)}`);
     SoundFX.reload();
@@ -147,6 +187,7 @@ window.Quests = (function () {
 
   function turnIn(q, ui) {
     state[q.id].s = 'done';
+    if (q.bring) payCost(q.bring);
     giveReward(q);
     showToast(L('ЗАДАНИЕ ВЫПОЛНЕНО', 'QUEST COMPLETE'), T(q.title));
     SoundFX.batSwing(true);
@@ -156,6 +197,7 @@ window.Quests = (function () {
 
   function giveReward(q) {
     flags[q.reward] = true;
+    if (q.reward === 'launcher' && window.Workshop) window.Workshop.giveLauncher();
     if (q.reward === 'armory') {
       // Заначка ВОХР: патроны к купленным стволам и бинты — у ног Василия
       const drop = [['bandage', 3]];
@@ -252,7 +294,7 @@ window.Quests = (function () {
   }
 
   // Значки предметов (icon): assets/sprites/quest/ (tools/make_trophy_sprites.py quest) — на земле и в журнале
-  const iconSrc = q => `assets/sprites/quest/${q.icon}.png?v=1`;
+  const iconSrc = q => (q.bring ? RES_DISPLAY[Object.keys(q.bring)[0]].img : `assets/sprites/quest/${q.icon}.png?v=1`);
   const ICONS = {};
   QUESTS.forEach(q => {
     ICONS[q.id] = new Image();
@@ -345,8 +387,7 @@ window.Quests = (function () {
     return QUESTS.filter(isActive).map(q => {
       const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
       const name = giver ? L(giver.name[0], giver.name[1]) : '';
-      const n = q.find.n > 1 ? ` ${gotCount(q)}/${q.find.n}` : '';
-      return { q, title: T(q.title), text: isReady(q) ? L(`отнеси — ${name}`, `bring it to ${name}`) : `${T(q.where)}${n}`, ready: isReady(q) };
+      return { q, title: T(q.title), text: isReady(q) ? L(`отнеси — ${name}`, `bring it to ${name}`) : `${T(q.where)}${suffix(q, ' ')}`, ready: isReady(q) };
     });
   }
 
@@ -379,11 +420,12 @@ window.Quests = (function () {
   function journal() {
     return QUESTS.filter(q => state[q.id]).map(q => {
       const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
-      const n = q.find.n > 1 ? ` — ${gotCount(q)} / ${q.find.n}` : '';
+      const ready = q.bring ? L('Собрано — отнести в Новохмуринск', 'Collected — take it back to Novokhmurinsk')
+        : L('Найдено — отнести в Новохмуринск', 'Found — take it back to Novokhmurinsk');
       return {
         icon: iconSrc(q),
         title: T(q.title), giver: giver ? L(giver.name[0], giver.name[1]) : '',
-        text: isDone(q) ? T(q.done) : isReady(q) ? L('Найдено — отнести в Новохмуринск', 'Found — take it back to Novokhmurinsk') : `${T(q.where)}${n}`,
+        text: isDone(q) ? T(q.done) : isReady(q) ? ready : `${T(q.where)}${suffix(q, ' — ')}`,
         state: isDone(q) ? 'done' : isReady(q) ? 'ready' : 'active'
       };
     });

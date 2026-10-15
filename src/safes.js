@@ -137,6 +137,8 @@ window.Safes = (function () {
       if (Math.random() < chance) drops.push([type, a + Math.floor(Math.random() * (b - a + 1))]);
     });
     const toPlayer = Math.atan2(player.y - c.y, player.x - c.x);
+    // Продвинутая электроника — всегда в одних и тех же сейфах, ровно на ЭМИ-гранаты (src/workshop.js)
+    if (window.Workshop && window.Workshop.isElectronicsSafe(c)) drops.push(['electronics', 1]);
     drops.forEach(([type, val], i) => {
       const a = toPlayer + (i - (drops.length - 1) / 2) * 0.5;
       spawn3DLootItem(c.x + Math.cos(a) * (c.radius + 26), c.y + Math.sin(a) * (c.radius + 20), type, val);

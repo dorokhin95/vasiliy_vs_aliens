@@ -212,7 +212,9 @@ window.Dialog = (function () {
     if (c.extra && window.Quests && window.Quests.flag(c.extra[0])) list.push([T(c.extra[1]), () => pages(c.extra[2], 0)]);
     if (c.place) {
       const open = window.Quests && window.Quests.flag(c.place[0]);
-      list.push([T(LABELS[c.place[0]]), () => menu(T(c.place[open ? 2 : 1]))]);
+      // Мастерская работает — тема открывает её окно (src/workshop.js)
+      if (open && c.place[0] === 'workshop' && window.Workshop) list.push([`🔧 ${T(LABELS.workshop)}`, () => window.Workshop.open()]);
+      else list.push([T(LABELS[c.place[0]]), () => menu(T(c.place[open ? 2 : 1]))]);
     }
     list.push([T(LABELS.bye), close]);
     return list;

@@ -95,6 +95,10 @@ class ThreeCharacterManager {
     this.drillObj = null;
     this.plasmaObj = null;
     this.laserObj = null; // лазерный бластер (карта Долбильщика) — перекрашенная копия плазмагана
+    // Стволы мастерской Толика (src/workshop.js; модели — tools/finalize_weapons_blender.py)
+    this.launcherObj = null; // гранатомёт — в руках на месте обреза
+    this.arcObj = null;      // сварочный разрядник — на месте дрели
+    this.empObj = null;      // ЭМИ-граната — в руке, где пистолет
     this.armLDown = null;
     this.armRPistol = null;
     this.armRBat = null;
@@ -141,6 +145,16 @@ class ThreeCharacterManager {
           this.laserObj.visible = false;
           this.plasmaObj.parent.add(this.laserObj);
         }
+        // Гранатомёт и разрядник: модель стволом вперёд (+Z glTF), встаёт на место обреза / дрели в тех же
+        // руках — та же длина по стволу и та же середина (подгонка — fitLike, в осях модели Василия)
+        loader.load('assets/models/weapon_launcher.glb?v=2', (g) => {
+          this.launcherObj = this.fitLike(g.scene, this.shotgunObj);
+          this.setWeapon(this.currentWeaponId || 'bat');
+        });
+        loader.load('assets/models/weapon_arc.glb?v=2', (g) => {
+          this.arcObj = this.fitLike(g.scene, this.drillObj);
+          this.setWeapon(this.currentWeaponId || 'bat');
+        });
         this.armLDown = this.model.getObjectByName('Vasiliy_Arm_L_Down');
         this.armRPistol = this.model.getObjectByName('Vasiliy_Arm_R_Pistol');
         this.armRBat = this.model.getObjectByName('Vasiliy_Arm_R_Bat');
@@ -175,6 +189,15 @@ class ThreeCharacterManager {
             this.model.updateMatrixWorld(true);
             this.armRPistol.attach(this.makarovObj);
           }
+          // ЭМИ-граната — в той же руке, где пистолет, у его рукояти (модель ~14 см, середина в начале координат)
+          loader.load('assets/models/weapon_emp.glb?v=2', (g) => {
+            const grenade = g.scene;
+            grenade.position.copy(this.makarovObj.position).add(new THREE.Vector3(0, 0.05, 0.1));
+            grenade.visible = false;
+            this.makarovObj.parent.add(grenade);
+            this.empObj = grenade;
+            this.setWeapon(this.currentWeaponId || 'bat');
+          });
           this.setWeapon(this.currentWeaponId || 'bat');
         });
 
@@ -411,15 +434,56 @@ class ThreeCharacterManager {
     return player.isRolling && !player.isDashing;
   }
 
+  // Габарит объекта в осях модели Василия (не мира: корень может быть повёрнут к прицелу)
+  localBox(o) {
+    this.model.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(this.model.matrixWorld).invert();
+    const box = new THREE.Box3(), part = new THREE.Box3(), m = new THREE.Matrix4();
+    o.traverse((c) => {
+      if (!c.isMesh || !c.geometry) return;
+      if (!c.geometry.boundingBox) c.geometry.computeBoundingBox();
+      part.copy(c.geometry.boundingBox).applyMatrix4(m.multiplyMatrices(inv, c.matrixWorld));
+      box.union(part);
+    });
+    return box;
+  }
+
+  // Новый ствол на месте старого (ref): тот же родитель, оси — как у модели Василия (ствол +Z, верх +Y),
+  // длина по стволу и середина — как у ref. Возвращает obj (скрытым) или null, если ref нет
+  fitLike(obj, ref) {
+    if (!ref || !ref.parent) return null;
+    const parent = ref.parent;
+    parent.add(obj);
+    this.model.updateMatrixWorld(true);
+    const pq = parent.getWorldQuaternion(new THREE.Quaternion());
+    const mq = this.model.getWorldQuaternion(new THREE.Quaternion());
+    obj.quaternion.copy(pq.invert().multiply(mq));
+    obj.position.set(0, 0, 0);
+    obj.scale.set(1, 1, 1);
+    const rb = this.localBox(ref), ob = this.localBox(obj);
+    obj.scale.setScalar(rb.getSize(new THREE.Vector3()).z / Math.max(1e-6, ob.getSize(new THREE.Vector3()).z));
+    const center = this.localBox(obj).getCenter(new THREE.Vector3());
+    const want = rb.getCenter(new THREE.Vector3());
+    const w = obj.getWorldPosition(new THREE.Vector3())
+      .add(this.model.localToWorld(want.clone()).sub(this.model.localToWorld(center.clone())));
+    obj.position.copy(parent.worldToLocal(w));
+    obj.visible = false;
+    return obj;
+  }
+
   setWeapon(weaponId) {
     // 'none' — всё оружие оставлено у Михалыча: руки как с битой, но пустые
     const unarmed = (weaponId === 'none');
     const isBat = (weaponId === 'bat');
-    const isMakarov = (weaponId === 'makarov');
-    const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma' || weaponId === 'laser');
+    const isMakarov = (weaponId === 'makarov' || weaponId === 'emp');
+    const isTwoHanded = (weaponId === 'shotgun' || weaponId === 'drill' || weaponId === 'plasma' || weaponId === 'laser' ||
+      weaponId === 'launcher' || weaponId === 'arc');
 
     if (this.batObj) this.batObj.visible = isBat;
-    if (this.makarovObj) this.makarovObj.visible = isMakarov;
+    if (this.makarovObj) this.makarovObj.visible = (weaponId === 'makarov');
+    if (this.empObj) this.empObj.visible = (weaponId === 'emp');
+    if (this.launcherObj) this.launcherObj.visible = (weaponId === 'launcher');
+    if (this.arcObj) this.arcObj.visible = (weaponId === 'arc');
     if (this.shotgunObj) this.shotgunObj.visible = (weaponId === 'shotgun');
     if (this.drillObj) this.drillObj.visible = (weaponId === 'drill');
     if (this.plasmaObj) this.plasmaObj.visible = (weaponId === 'plasma');
@@ -453,6 +517,9 @@ class ThreeCharacterManager {
       if (this.drillObj) this.drillObj.visible = false;
       if (this.plasmaObj) this.plasmaObj.visible = false;
       if (this.laserObj) this.laserObj.visible = false;
+      if (this.launcherObj) this.launcherObj.visible = false;
+      if (this.arcObj) this.arcObj.visible = false;
+      if (this.empObj) this.empObj.visible = false;
       this.currentWeaponId = null;
     } else if (this.currentWeaponId !== currentWeapon) {
       this.currentWeaponId = currentWeapon;
@@ -583,11 +650,11 @@ class ThreeCharacterManager {
       tipX = -0.220;
       tipY = 1.240;
       tipZ = 0.960;
-    } else if (weaponId === 'makarov') {
+    } else if (weaponId === 'makarov' || weaponId === 'emp') {
       tipX = -0.140;
       tipY = 1.310;
       tipZ = 0.770;
-    } else if (weaponId === 'drill') {
+    } else if (weaponId === 'drill' || weaponId === 'arc') {
       tipX = -0.090;
       tipY = 1.215;
       tipZ = 1.137;

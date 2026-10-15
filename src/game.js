@@ -1217,7 +1217,8 @@ const player = {
     blueprint: 0,
     tech_spirit: 0,
     plasma_cell: 0,
-    kvako_charge: 0
+    kvako_charge: 0,
+    electronics: 0   // продвинутая электроника: только в сейфах, на ЭМИ-гранаты (src/workshop.js)
   },
   // карты, выбранные после боссов: Мясника — speed, agility, vitality; Долбильщика — laser, dash, regen
   cards: { speed: 0, agility: 0, vitality: 0, laser: 0, dash: 0, regen: 0 },
@@ -1227,12 +1228,20 @@ const player = {
     drill: false,
     shotgun: false,
     plasma: false,
-    laser: false // только картой Долбильщика
+    laser: false, // только картой Долбильщика
+    // Мастерская Толика (src/workshop.js)
+    launcher: false,
+    arc: false,
+    emp: false
   },
   ammo: {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
-    shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 }
+    shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 },
+    launcher: { clip: 0, maxClip: 1, reserve: 0, reloadTime: 90 }
   },
+  empGrenades: 0,       // ЭМИ-гранаты (src/workshop.js)
+  arcCharge: 0,         // заряд разрядника: кадры дуги из текущей плазменной ячейки
+  empT: 0,              // ЭМИ: сколько кадров ещё молчат плазма, лазер и разрядник
   reloadingWeapon: null,
   reloadTimer: 0,
   reloadMaxTimer: 0,
@@ -2227,8 +2236,8 @@ window.addEventListener('wheel', (e) => {
 }, { passive: true });
 
 // --- ХОТБАР: слоты перетаскиваются мышью, клавиши 1–8 идут по видимому порядку, порядок сохраняется ---
-const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser'];
-const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser']);
+const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser'];
+const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser']);
 const HOTBAR_STORAGE_KEY = 'vasiliy.hotbarOrder';
 let hotbarOrder = loadHotbarOrder();
 
@@ -2351,7 +2360,7 @@ function startGame(save = null) {
   player.items = { vodka: 0, stew: 1, bandage: 2 };
   player.resources = {
     bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0, toad_eye: 0, toad_leg: 0, toad_liver: 0,
-    nonferrous: 0, blueprint: 0, tech_spirit: 0, plasma_cell: 0, kvako_charge: 0
+    nonferrous: 0, blueprint: 0, tech_spirit: 0, plasma_cell: 0, kvako_charge: 0, electronics: 0
   };
   player.unlockedWeapons = {
     bat: true,
@@ -2359,12 +2368,19 @@ function startGame(save = null) {
     drill: false,
     shotgun: false,
     plasma: false,
-    laser: false
+    laser: false,
+    launcher: false,
+    arc: false,
+    emp: false
   };
   player.ammo = {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
-    shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 }
+    shotgun: { clip: 2, maxClip: 2, reserve: 8, reloadTime: 110 },
+    launcher: { clip: 0, maxClip: 1, reserve: 0, reloadTime: 90 }
   };
+  player.empGrenades = 0;
+  player.arcCharge = 0;
+  player.empT = 0;
   player.reloadingWeapon = null;
   player.reloadTimer = 0;
   player.reloadMaxTimer = 0;
@@ -2405,6 +2421,8 @@ function startGame(save = null) {
   }
   if (window.Settlers) window.Settlers.loadState(save ? save.settlers : undefined);
   if (window.Quests) window.Quests.loadState(save ? save.quests : undefined);
+  // Мастерская Толика: новый забег — с чистого листа (сохранённую загружает Menu.applyRun до патронов)
+  if (window.Workshop && !save) window.Workshop.loadState(undefined);
   // В Промзоне купола Михалыча нет — после загрузки Василий у пролома
   if (currentLocation !== 'city') placePlayerAtBreach();
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
@@ -2798,6 +2816,31 @@ const SHOP_ARSENAL_ITEMS = [
     zone_ru: '🃏 Трофей Межпространственного Долбильщика',
     zone_en: '🃏 Interdimensional Pounder\'s trophy',
     cost: {}
+  },
+  // Сделано в мастерской Толика (src/workshop.js): здесь — только взять с собой или оставить
+  {
+    id: 'launcher', type: 'weapon', weaponKey: 'launcher', cardOnly: true,
+    img: 'assets/sprites/weapons/weapon_launcher.png?v=1',
+    name_ru: 'Самопальный гранатомёт', name_en: 'Homemade grenade launcher',
+    desc_ru: 'Навесом в точку прицела, взрыв пробивает броню и задевает тебя рядом. Гранаты — у Толика.',
+    desc_en: 'Lobs to the crosshair, the blast pierces armor and hits you if close. Grenades — from Tolik.',
+    zone_ru: '🔧 Мастерская Толика', zone_en: '🔧 Tolik\'s workshop', cost: {}
+  },
+  {
+    id: 'arc', type: 'weapon', weaponKey: 'arc', cardOnly: true,
+    img: 'assets/sprites/weapons/weapon_arc.png?v=1',
+    name_ru: 'Сварочный разрядник', name_en: 'Welding arc discharger',
+    desc_ru: 'Дуга бьёт ближайшую жабу впереди и перескакивает ещё на две. Питание — плазменные ячейки.',
+    desc_en: 'The arc hits the nearest toad ahead and jumps to two more. Runs on plasma cells.',
+    zone_ru: '🔧 Мастерская Толика', zone_en: '🔧 Tolik\'s workshop', cost: {}
+  },
+  {
+    id: 'emp', type: 'weapon', weaponKey: 'emp', cardOnly: true,
+    img: 'assets/sprites/weapons/weapon_emp.png?v=1',
+    name_ru: 'ЭМИ-граната', name_en: 'EMP grenade',
+    desc_ru: 'Самоделка из плат НИИ. Глушит всю электронику вокруг на минуту — и твою тоже.',
+    desc_en: 'Homemade from research-institute boards. Jams all electronics around for a minute — yours too.',
+    zone_ru: '🔧 Мастерская Толика', zone_en: '🔧 Tolik\'s workshop', cost: {}
   }
 ];
 
@@ -2852,7 +2895,8 @@ const RES_DISPLAY = {
   blueprint: { img: 'assets/sprites/loot/loot_blueprint.png?v=1', color: '#60a5fa' },
   tech_spirit: { img: 'assets/sprites/loot/loot_tech_spirit.png?v=1', color: '#cbd5e1' },
   plasma_cell: { img: 'assets/sprites/loot/loot_plasma_cell.png?v=1', color: '#67e8f9' },
-  kvako_charge: { img: 'assets/sprites/loot/loot_kvako_charge.png?v=1', color: '#a3e635' }
+  kvako_charge: { img: 'assets/sprites/loot/loot_kvako_charge.png?v=1', color: '#a3e635' },
+  electronics: { img: 'assets/sprites/loot/loot_electronics.png?v=1', color: '#7dd3fc' }
 };
 
 function formatCostHTML(cost) {
@@ -3267,7 +3311,7 @@ window.setEquipped = function(w, on) {
 };
 
 window.switchWeapon = function(weaponKey) {
-  const allWeapons = ['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser'];
+  const allWeapons = [...HOTBAR_WEAPONS];
   if (!allWeapons.includes(weaponKey)) return;
 
   if (!player.unlockedWeapons[weaponKey]) {
@@ -3295,7 +3339,10 @@ window.switchWeapon = function(weaponKey) {
     drill: currentLang === 'ru' ? 'УДАРНАЯ ДРЕЛЬ ИЭ-1035' : 'IMPACT DRILL',
     shotgun: currentLang === 'ru' ? 'ДЕДОВСКИЙ ОБРЕЗ 12К' : 'SAWED-OFF SHOTGUN',
     plasma: currentLang === 'ru' ? 'ТРОФЕЙНЫЙ ПЛАЗМАГАН' : 'TROPHY PLASMA GUN',
-    laser: currentLang === 'ru' ? 'ЛАЗЕРНЫЙ БЛАСТЕР' : 'LASER BLASTER'
+    laser: currentLang === 'ru' ? 'ЛАЗЕРНЫЙ БЛАСТЕР' : 'LASER BLASTER',
+    launcher: currentLang === 'ru' ? 'САМОПАЛЬНЫЙ ГРАНАТОМЁТ' : 'HOMEMADE GRENADE LAUNCHER',
+    arc: currentLang === 'ru' ? 'СВАРОЧНЫЙ РАЗРЯДНИК' : 'WELDING ARC',
+    emp: currentLang === 'ru' ? 'ЭМИ-ГРАНАТА' : 'EMP GRENADE'
   };
   addFloatingText(player.x, player.y - 35, `${names[weaponKey]}`, '#38bdf8');
   createParticles(player.x, player.y, '#38bdf8', 8);
@@ -3328,7 +3375,7 @@ function startReload() {
     rechargeLaser();
     return;
   }
-  if (wKey !== 'makarov' && wKey !== 'shotgun') return;
+  if (wKey !== 'makarov' && wKey !== 'shotgun' && wKey !== 'launcher') return;
   if (player.reloadingWeapon) return;
 
   const ammoState = player.ammo[wKey];
@@ -3365,6 +3412,10 @@ const WEAPONS = {
   plasma: { dmg: b => b + 24, cooldown: 10, pen: 0.8 },
   // Лазерный бластер (карта Долбильщика): луч бьёт сразу, тиков много, урон за тик средний; range — длина луча
   laser: { dmg: b => b * 0.22 + 3, cooldown: 5, pen: 0.6, range: 560 },
+  // Мастерская Толика (src/workshop.js): гранатомёт — урон взрыва в середине; разрядник — урон дуги за тик,
+  // range — до первой жабы, chain — на сколько ещё перескакивает, chainR — как далеко
+  launcher: { dmg: b => b * 1.5 + 54, cooldown: 30, pen: 1.0 },
+  arc: { dmg: b => b * 0.3 + 4, cooldown: 6, pen: 0.6, range: 150, chain: 2, chainR: 120 },
   chain: { pen: 1.0 },  // цепная молния перка «Аккумулятор от КАМАЗа»
   shock: { pen: 0.5 },  // ударная волна переката перка «Рука-перфоратор»
   thrown: { pen: 1.0 }  // предмет, брошенный громилой (бьёт и по своим)
@@ -3379,15 +3430,31 @@ const BACKSTAB_MULT = 1.25;
 // Множитель урона дробины по пройденному ею пути (WEAPONS.shotgun.falloff)
 function shotgunFalloff(d) {
   const F = WEAPONS.shotgun.falloff;
+  // Чок мастерской: дробь слабеет позже (250 → 330 px)
+  const k = upg('sg_choke') ? 1.32 : 1;
+  const full = F.full * k, far = F.far * k;
   if (d <= F.near) return F.closeMult;
-  if (d <= F.full) return F.closeMult + (1 - F.closeMult) * (d - F.near) / (F.full - F.near);
-  if (d >= F.far) return F.farMult;
-  return 1 + (F.farMult - 1) * (d - F.full) / (F.far - F.full);
+  if (d <= full) return F.closeMult + (1 - F.closeMult) * (d - F.near) / (full - F.near);
+  if (d >= far) return F.farMult;
+  return 1 + (F.farMult - 1) * (d - full) / (far - full);
+}
+
+// --- Улучшения мастерской Толика (src/workshop.js): урон +20% и лучшее пробитие ---
+function upg(id) {
+  return !!(window.Workshop && window.Workshop.has(id));
+}
+const UPG_DMG = { bat: 'bat_nails', makarov: 'pm_bore', drill: 'drill_bit', plasma: 'pl_overdrive' };
+const UPG_PEN = { makarov: ['pm_bore', 0.4], drill: ['drill_bit', 0.85] };
+function weaponDmg(key) {
+  return WEAPONS[key].dmg(player.baseDamage) * (UPG_DMG[key] && upg(UPG_DMG[key]) ? 1.2 : 1);
+}
+function weaponPen(weapon) {
+  if (UPG_PEN[weapon] && upg(UPG_PEN[weapon][0])) return UPG_PEN[weapon][1];
+  return (WEAPONS[weapon] && WEAPONS[weapon].pen !== undefined) ? WEAPONS[weapon].pen : 0.5;
 }
 
 function armorFactor(armor, weapon) {
-  const pen = (WEAPONS[weapon] && WEAPONS[weapon].pen !== undefined) ? WEAPONS[weapon].pen : 0.5;
-  return 1 - armor * (1 - pen);
+  return 1 - armor * (1 - weaponPen(weapon));
 }
 
 // Единственное место, где враг получает урон. fromX/fromY — откуда пришёл удар.
@@ -3970,11 +4037,24 @@ function shootPlayerWeapon() {
     };
   }
 
+  // Мастерская Толика: гранатомёт, разрядник, ЭМИ-граната; после ЭМИ плазма, лазер и разрядник молчат
+  if (window.Workshop) {
+    if (window.Workshop.jammed(wKey)) {
+      shootCooldown = 30;
+      return;
+    }
+    if (wKey === 'launcher' || wKey === 'arc' || wKey === 'emp') {
+      shootCooldown = window.Workshop.fire(wKey, muzzle);
+      updateHUD(true);
+      return;
+    }
+  }
+
   // =========================================================================
   // [4] БИТА С ГВОЗДЯМИ (Рукопашное оружие, старт игры, тратит 18 выносливости)
   // =========================================================================
   if (wKey === 'bat') {
-    const batStamCost = 18 * stamMult;
+    const batStamCost = 18 * stamMult * (upg('bat_tape') ? 0.7 : 1);
     const isExhausted = player.stamina < batStamCost;
 
     if (isExhausted) {
@@ -4014,7 +4094,7 @@ function shootPlayerWeapon() {
 
         if (angleDiff < 1.18) {
           hitAny = true;
-          let dmg = WEAPONS.bat.dmg(player.baseDamage) * (player.isDrunk ? 1.8 : 1.0);
+          let dmg = weaponDmg('bat') * (player.isDrunk ? 1.8 : 1.0);
           if (isExhausted) dmg *= 0.45;
           const isCrit = !isExhausted && (Math.random() < player.critChance);
           if (isCrit) dmg *= player.critMult;
@@ -4074,7 +4154,7 @@ function shootPlayerWeapon() {
     const angle = player.angle + (Math.random() - 0.5) * spread;
     const speed = 25;
     const isCrit = Math.random() < (player.critChance + 0.05);
-    let dmg = WEAPONS.makarov.dmg(player.baseDamage) * (player.isDrunk ? 1.6 : 1.0) * (isCrit ? player.critMult : 1.0);
+    let dmg = weaponDmg('makarov') * (player.isDrunk ? 1.6 : 1.0) * (isCrit ? player.critMult : 1.0);
 
     cameraKickX -= Math.cos(angle) * 2.1;
     cameraKickY -= Math.sin(angle) * 2.1;
@@ -4128,7 +4208,7 @@ function shootPlayerWeapon() {
   // [6] УДАРНАЯ ДРЕЛЬ ИЭ-1035 (Контактный бур, тратит 4.5 выносливости за тик)
   // =========================================================================
   if (wKey === 'drill') {
-    const drillStamCost = 4.5 * stamMult;
+    const drillStamCost = 4.5 * stamMult * (upg('drill_coil') ? 0.65 : 1);
     if (player.stamina < drillStamCost) {
       shootCooldown = 18;
       SoundFX.emptyClick();
@@ -4169,7 +4249,7 @@ function shootPlayerWeapon() {
         angleDiff = Math.abs(angleDiff);
 
         if (angleDiff < 1.05) {
-          const dmg = WEAPONS.drill.dmg(player.baseDamage) * (player.isDrunk ? 1.8 : 1.0);
+          const dmg = weaponDmg('drill') * (player.isDrunk ? 1.8 : 1.0);
           const hit = damageEnemy(e, dmg, 'drill', player.x, player.y);
           e.hitFlash = 5;
           drillHit = true;
@@ -4218,7 +4298,7 @@ function shootPlayerWeapon() {
       window.threeCharacter.triggerRecoil(0.7);
     }
 
-    player.plasmaHeat = Math.min(100, player.plasmaHeat + 16);
+    player.plasmaHeat = Math.min(100, player.plasmaHeat + (upg('pl_radiator') ? 11 : 16));
     if (player.plasmaHeat >= 100) {
       player.plasmaOverheated = true;
       player.plasmaOverheatTimer = 180; // 3.0 сек аварийного охлаждения
@@ -4227,7 +4307,7 @@ function shootPlayerWeapon() {
       addFloatingText(player.x, player.y - 42, currentLang === 'ru' ? '🔥 ПЕРЕГРЕВ ПЛАЗМЫ (3 СЕК)!' : '🔥 PLASMA OVERHEAT (3s)!', '#ef4444');
     }
 
-    let dmg = WEAPONS.plasma.dmg(player.baseDamage) * (player.isDrunk ? 1.5 : 1.0);
+    let dmg = weaponDmg('plasma') * (player.isDrunk ? 1.5 : 1.0);
     let isCrit = Math.random() < player.critChance;
     if (isCrit) dmg *= player.critMult;
 
@@ -4982,6 +5062,13 @@ function updateStormtrooper(e, distToPlayer, angle, eSpeed) {
   e.sinceShot++;
   const cos = Math.cos(angle), sin = Math.sin(angle);
 
+  // ЭМИ (src/workshop.js): автомат заглох — опущен, жаба пятится от Василия
+  if (e.empT > 0) {
+    e.gunPose = 'rest';
+    if (distToPlayer < ST_RANGE_MIN + 40) slideMove(e, -cos * eSpeed * 0.5, -sin * eSpeed * 0.5, e.radius, true);
+    return;
+  }
+
   if (e.overheat > 0) {
     // Остывает: автомат опущен, пар из радиаторов, от Василия пятится
     e.gunPose = 'rest';
@@ -5256,6 +5343,11 @@ function updateRockets() {
 }
 
 function rocketExplode(r) {
+  // Граната и ЭМИ-граната Василия (src/workshop.js)
+  if (r.player) {
+    if (window.Workshop) window.Workshop.explode(r);
+    return;
+  }
   const x = r.tx, y = r.ty;
   spawnShockwave(x, y, RK_BLAST_R + 18, '#fb923c', 22);
   spawnDirectionalSparks(x, y - 6, -Math.PI / 2, Math.PI * 2, 14, '#fde047', 4, 11, 14);
@@ -5320,7 +5412,9 @@ function drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
     if (!R || !R.targets) continue;
     for (let j = R.shots; j < R.targets.length; j++) mark(R.targets[j].x, R.targets[j].y, 0);
   }
-  for (let i = 0; i < rockets.length; i++) mark(rockets[i].tx, rockets[i].ty, Math.min(1, rockets[i].t / rockets[i].T));
+  for (let i = 0; i < rockets.length; i++) {
+    if (!rockets[i].player) mark(rockets[i].tx, rockets[i].ty, Math.min(1, rockets[i].t / rockets[i].T));
+  }
 }
 
 // Ракеты в полёте и вспышки взрывов — поверх фигур
@@ -5328,6 +5422,10 @@ function drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
   for (let i = 0; i < rockets.length; i++) {
     const r = rockets[i];
     if (r.x < viewMinX || r.x > viewMaxX || r.y < viewMinY - 300 || r.y > viewMaxY) continue;
+    if (r.player) {
+      if (window.Workshop) window.Workshop.drawProjectile(ctx, r);
+      continue;
+    }
     ctx.save();
     ctx.globalAlpha = 0.3;
     ctx.fillStyle = '#000';
@@ -6585,7 +6683,7 @@ function updateHUD(forceWeaponRefresh = false) {
   }
 
   // Отображаем в хотбаре ТОЛЬКО купленное/открытое оружие (без спойлера всего арсенала на старте!)
-  const allW = ['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'laser'];
+  const allW = [...HOTBAR_WEAPONS];
   allW.forEach(w => {
     const slotEl = document.getElementById(`slot-w-${w}`);
     if (!slotEl) return;
@@ -6597,7 +6695,11 @@ function updateHUD(forceWeaponRefresh = false) {
     slotEl.classList.toggle('active', player.currentWeapon === w);
 
     if (w === 'drill') {
-      setHudText(document.getElementById('sub-w-drill'), '-4.5 ВЫН');
+      setHudText(document.getElementById('sub-w-drill'), upg('drill_coil') ? '-2.9 ВЫН' : '-4.5 ВЫН');
+    } else if (w === 'launcher' || w === 'arc' || w === 'emp') {
+      // Мастерская Толика: гранаты, заряд и ячейки, сколько ЭМИ-гранат
+      if (window.Workshop) setHudText(document.getElementById(`ammo-w-${w}`), window.Workshop.slotText(w));
+      slotEl.classList.toggle('overheated', w === 'arc' && player.empT > 0);
     } else if (w === 'makarov' || w === 'shotgun') {
       const ammoEl = document.getElementById(`ammo-w-${w}`);
       const wrapEl = document.getElementById(`wrap-w-${w}`);
@@ -6620,8 +6722,11 @@ function updateHUD(forceWeaponRefresh = false) {
       const ammoEl = document.getElementById('ammo-w-plasma');
       const wrapEl = document.getElementById('wrap-w-plasma');
       const barEl = document.getElementById('bar-w-plasma');
-      slotEl.classList.toggle('overheated', !!player.plasmaOverheated);
-      if (player.plasmaOverheated) {
+      slotEl.classList.toggle('overheated', !!player.plasmaOverheated || player.empT > 0);
+      if (player.empT > 0) {
+        setHudText(ammoEl, `ЭМИ ${Math.ceil(player.empT / 60)}`);
+        setHudStyle(ammoEl, 'color', '#7dd3fc');
+      } else if (player.plasmaOverheated) {
         setHudText(ammoEl, 'КЛИН!');
         setHudStyle(ammoEl, 'color', '#ef4444');
       } else {
@@ -6644,7 +6749,8 @@ function updateHUD(forceWeaponRefresh = false) {
       const pct = charging
         ? Math.round((1 - player.laserRecharge / CARD_EFFECTS.laserRecharge) * 100)
         : Math.round(player.laserCharge / CARD_EFFECTS.laserCharge * 100);
-      setHudText(ammoEl, charging ? `🔋${Math.ceil(player.laserRecharge / 60)}с` : `${pct}%`);
+      setHudText(ammoEl, player.empT > 0 ? `ЭМИ ${Math.ceil(player.empT / 60)}` : (charging ? `🔋${Math.ceil(player.laserRecharge / 60)}с` : `${pct}%`));
+      slotEl.classList.toggle('overheated', player.empT > 0);
       setHudStyle(ammoEl, 'color', charging ? '#facc15' : '#fca5a5');
       if (barEl) setHudStyle(barEl, 'width', `${pct}%`);
     }
@@ -6724,7 +6830,8 @@ const PZ_LOOT_NAMES = {
   blueprint: ['ЧЕРТЁЖ', 'BLUEPRINT', '#60a5fa'],
   tech_spirit: ['ТЕХСПИРТ', 'TECH ALCOHOL', '#cbd5e1'],
   plasma_cell: ['ПЛАЗМЕННАЯ ЯЧЕЙКА', 'PLASMA CELL', '#67e8f9'],
-  kvako_charge: ['КВАКО-ЗАРЯД', 'KVAKO CHARGE', '#a3e635']
+  kvako_charge: ['КВАКО-ЗАРЯД', 'KVAKO CHARGE', '#a3e635'],
+  electronics: ['ПРОДВИНУТАЯ ЭЛЕКТРОНИКА', 'ADVANCED ELECTRONICS', '#7dd3fc']
 };
 
 // Лут района Промзоны с убитой жабы (pzLoot района): громилы роняют вдвое чаще
@@ -9042,6 +9149,7 @@ function update() {
   updateRockets();
   updateFireGoo();
   if (window.Safes) window.Safes.update();
+  if (window.Workshop) window.Workshop.update();
   if (window.Defense) window.Defense.update();
   if (window.Settlers) window.Settlers.update();
   if (window.Quests) window.Quests.update();
@@ -9178,7 +9286,7 @@ function update() {
           e.angle = angle;
         }
 
-        e.shootCooldown--;
+        if (!(e.empT > 0)) e.shootCooldown--; // ЭМИ (src/workshop.js): лазерный прицел молчит
         if (e.shootCooldown <= 0) {
           e.shootCooldown = e.tier >= 3 ? 92 : 105;
           const muzX = e.x + Math.cos(angle) * 26;
@@ -9731,7 +9839,7 @@ function render() {
     }
 
     // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела
-    if (e.type === 'sniper' && e.isAggroed && e.shootCooldown > 0 && e.shootCooldown < 32) {
+    if (e.type === 'sniper' && e.isAggroed && !(e.empT > 0) && e.shootCooldown > 0 && e.shootCooldown < 32) {
       const aimA = e.angle || 0;
       const sx = e.x + Math.cos(aimA) * 24;
       const sy = e.y + Math.sin(aimA) * 24 - 8;
@@ -9774,6 +9882,7 @@ function render() {
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   if (window.Defense) window.Defense.drawShots(ctx);
+  if (window.Workshop) window.Workshop.drawEffects(ctx); // дуги разрядника, кольцо ЭМИ
   if (window.Settlers) window.Settlers.drawShots(ctx);
   enemies.forEach(e => {
     if (e.type !== 'pounder') return;

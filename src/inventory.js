@@ -94,6 +94,14 @@ window.CharacterPanel = (function () {
     if (player.unlockedWeapons.shotgun) {
       ammo.push(cell('assets/sprites/loot/ammo_12g.png', L('Патроны 12 калибра', '12-gauge shells'), `${sg.clip} + ${sg.reserve}`));
     }
+    // Мастерская Толика (src/workshop.js)
+    if (player.unlockedWeapons.launcher) {
+      const gl = player.ammo.launcher;
+      ammo.push(cell('assets/sprites/weapons/weapon_launcher.png?v=1', L('Гранаты', 'Grenades'), `${gl.clip} + ${gl.reserve}`));
+    }
+    if (player.empGrenades > 0) {
+      ammo.push(cell('assets/sprites/weapons/weapon_emp.png?v=1', L('ЭМИ-гранаты', 'EMP grenades'), player.empGrenades));
+    }
     // Оружие: с собой или оставлено у Михалыча
     const weapons = SHOP_ARSENAL_ITEMS.filter(it => it.type === 'weapon' && player.unlockedWeapons[it.weaponKey])
       .map(it => cell(it.img, L(it.name_ru, it.name_en),

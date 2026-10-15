@@ -362,6 +362,7 @@ class EnvironmentRenderer {
       { key: 'loot_tech_spirit', path: 'assets/sprites/loot/loot_tech_spirit.png?v=1', type: 'loot' },
       { key: 'loot_plasma_cell', path: 'assets/sprites/loot/loot_plasma_cell.png?v=1', type: 'loot' },
       { key: 'loot_kvako_charge', path: 'assets/sprites/loot/loot_kvako_charge.png?v=1', type: 'loot' },
+      { key: 'loot_electronics', path: 'assets/sprites/loot/loot_electronics.png?v=1', type: 'loot' },
       { key: 'loot_ammo_9x18', path: 'assets/sprites/loot/ammo_9x18.png?v=1026', type: 'loot' },
       { key: 'loot_ammo_12g', path: 'assets/sprites/loot/ammo_12g.png?v=1026', type: 'loot' }
     ];
@@ -2300,7 +2301,8 @@ class EnvironmentRenderer {
     // Лут Промзоны — ровное свечение своего цвета
     const PZ_GLOW = {
       nonferrous: 'rgba(251, 146, 60, 0.34)', blueprint: 'rgba(96, 165, 250, 0.36)', tech_spirit: 'rgba(203, 213, 225, 0.32)',
-      plasma_cell: 'rgba(103, 232, 249, 0.42)', kvako_charge: 'rgba(163, 230, 53, 0.42)'
+      plasma_cell: 'rgba(103, 232, 249, 0.42)', kvako_charge: 'rgba(163, 230, 53, 0.42)',
+      electronics: 'rgba(125, 211, 252, 0.45)'
     };
     if (PZ_GLOW[l.type]) glowColor = PZ_GLOW[l.type];
     const big = isTrophy || !!PZ_GLOW[l.type] || l.type === 'alien_core' || l.type === 'mil_parts';
