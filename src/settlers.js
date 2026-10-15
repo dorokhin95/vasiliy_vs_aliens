@@ -35,7 +35,7 @@ window.Settlers = (function () {
   const SPOTS = {
     stepanych: { at: postSpot(66, 300), post: true },
     zina: { at: postSpot(114, 300), post: true },
-    tolik: { at: [WORKSHOP.x + 72, WORKSHOP.y + 10], angle: Math.PI },
+    tolik: { at: [WORKSHOP.x + 58, WORKSHOP.y + 4], angle: Math.PI },
     lena: { at: [CANTEEN.x + 60, CANTEEN.y + 8], angle: Math.PI, pose: 'heal' },
     seryoga: { at: ROUTE[0], walker: true }
   };
@@ -202,7 +202,7 @@ window.Settlers = (function () {
   }
 
   // Сварка у Толика: вспышки по несколько секунд, искры с верстака
-  const weldPoint = () => ({ x: WORKSHOP.x + 30, y: WORKSHOP.y - 30 });
+  const weldPoint = () => ({ x: WORKSHOP.x + 20, y: WORKSHOP.y - 44 });   // заготовка на верстаке
   function updateWelding() {
     weldT = (weldT + 1) % 360;
     const tolik = settlers.find(s => s.def.id === 'tolik');
@@ -273,10 +273,32 @@ window.Settlers = (function () {
     ctx.restore();
   }
 
-  // Верстак: столешница из досок, тиски, железки; рядом баллоны и ящики
+  // Мастерская: модели (src/three_props.js CITY_MODELS, tools/build_workshop_props_blender.py) — ширина
+  // на карте, px (~42 px на метр, как люди), и сдвиг середины пятна от WORKSHOP; пока модели не загрузились —
+  // рисовка кодом
+  const WS_MODELS = {
+    prop_workbench: { w: 84, dx: 0, dy: -10 },
+    prop_gas_cylinders: { w: 36, dx: -64, dy: -4 },
+    prop_crate_stack: { w: 58, dx: 96, dy: -30 }
+  };
+  function drawWsModel(ctx, model) {
+    const m = WS_MODELS[model];
+    const f = modelFrame(model, WORKSHOP.x + m.dx, WORKSHOP.y + m.dy, m.w);
+    if (!f) return false;
+    shade(ctx, WORKSHOP.x + m.dx, WORKSHOP.y + m.dy + 4, m.w * 0.55, m.w * 0.13);
+    ctx.drawImage(f.img, f.x, f.y, f.w, f.h);
+    return true;
+  }
+
+  // Верстак: модель или столешница из досок, тиски, железки кодом; сварочная вспышка — поверх
   function drawWorkbench(ctx) {
     const x = WORKSHOP.x, y = WORKSHOP.y;
     ctx.save();
+    if (drawWsModel(ctx, 'prop_workbench')) {
+      drawWeldFlash(ctx);
+      ctx.restore();
+      return;
+    }
     shade(ctx, x, y + 4, 62, 14);
     ctx.strokeStyle = '#1c1710';
     ctx.lineWidth = 2;
@@ -324,17 +346,22 @@ window.Settlers = (function () {
     ctx.stroke();
     ctx.fillStyle = '#334155';
     ctx.fillRect(x - 25, y - 36, 8, 8);
-    // Сварочная вспышка: белое пятно и голубой ореол на всё вокруг
-    if (welding() && settlers.some(s => s.def.id === 'tolik' && s.talkT === 0)) {
-      const p = weldPoint(), k = 0.6 + Math.random() * 0.4;
-      ctx.globalCompositeOperation = 'lighter';
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 90);
-      g.addColorStop(0, `rgba(219, 234, 254, ${0.75 * k})`);
-      g.addColorStop(0.2, `rgba(147, 197, 253, ${0.3 * k})`);
-      g.addColorStop(1, 'rgba(147, 197, 253, 0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(p.x - 90, p.y - 90, 180, 180);
-    }
+    drawWeldFlash(ctx);
+    ctx.restore();
+  }
+
+  // Сварочная вспышка: белое пятно и голубой ореол на всё вокруг
+  function drawWeldFlash(ctx) {
+    if (!welding() || !settlers.some(s => s.def.id === 'tolik' && s.talkT === 0)) return;
+    const p = weldPoint(), k = 0.6 + Math.random() * 0.4;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 90);
+    g.addColorStop(0, `rgba(219, 234, 254, ${0.75 * k})`);
+    g.addColorStop(0.2, `rgba(147, 197, 253, ${0.3 * k})`);
+    g.addColorStop(1, 'rgba(147, 197, 253, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(p.x - 90, p.y - 90, 180, 180);
     ctx.restore();
   }
 
@@ -342,6 +369,10 @@ window.Settlers = (function () {
   function drawCylinders(ctx) {
     const x = WORKSHOP.x - 78, y = WORKSHOP.y + 2;
     ctx.save();
+    if (drawWsModel(ctx, 'prop_gas_cylinders')) {
+      ctx.restore();
+      return;
+    }
     shade(ctx, x + 10, y + 2, 26, 7);
     [[0, '#1d4ed8'], [20, '#b91c1c']].forEach(([dx, c]) => {
       ctx.fillStyle = c;
@@ -359,12 +390,16 @@ window.Settlers = (function () {
     ctx.restore();
   }
 
-  // Ящики с барахлом за верстаком — военторговские, как в баррикаде обороны
+  // Ящики с барахлом за верстаком: модель, пока не загрузилась — военторговские, как в баррикаде обороны
   function drawCrates(ctx) {
+    ctx.save();
+    const done = drawWsModel(ctx, 'prop_crate_stack');
+    ctx.restore();
+    if (done) return;
     const tp = window.threeProps;
     const f = tp && tp.isLoaded.military_crate && tp.getFrameCanvas('military_crate', 2);
     if (!f) return;
-    const x = WORKSHOP.x - 40, y = WORKSHOP.y - 62;
+    const x = WORKSHOP.x + 72, y = WORKSHOP.y - 30;
     ctx.save();
     shade(ctx, x + 24, y + 4, 50, 13);
     ctx.drawImage(f, x - 30, y - 52, 68, 68);
@@ -373,7 +408,7 @@ window.Settlers = (function () {
     ctx.restore();
   }
 
-  // Модели кухни (src/three_props.js CANTEEN_MODELS): кадр, если уже готов
+  // Модели кухни и мастерской (src/three_props.js CITY_MODELS): кадр, если уже готов
   const KITCHEN_PX = 84, TABLE_PX = 66;
   // Котёл в модели: край и дно — доли высоты модели над пятном, ring — середина кольца камней (выше середины
   // пятна: ноги треноги стоят шире кольца), ширина котла — доля ширины пятна (по кадру)
@@ -538,7 +573,7 @@ window.Settlers = (function () {
   // Что стоит на местах — вперемешку с фигурами, по глубине: [y — где касается земли, рисовалка]
   function props() {
     return [
-      [WORKSHOP.y, drawWorkbench], [WORKSHOP.y + 2, drawCylinders], [WORKSHOP.y - 62, drawCrates],
+      [WORKSHOP.y, drawWorkbench], [WORKSHOP.y + 2, drawCylinders], [WORKSHOP.y - 30, drawCrates],
       [WORKSHOP.y - 70, ctx => drawSign(ctx, WORKSHOP.x + 70, WORKSHOP.y - 70, L('МАСТЕРСКАЯ', 'WORKSHOP'))],
       [CANTEEN.y, drawKitchen], [CANTEEN.y - 16, drawBowls],
       [CANTEEN.y - 70, ctx => drawSign(ctx, CANTEEN.x + 66, CANTEEN.y - 74, L('СТОЛОВАЯ', 'CANTEEN'))],
@@ -679,7 +714,7 @@ window.Settlers = (function () {
       addObstacle({ x, y, rx: 44, ry: 16, rot: Math.atan2(Math.cos(a) * GROUND_SQUASH, -Math.sin(a)) });
     });
     [
-      [WORKSHOP.x, WORKSHOP.y - 18, 56, 22], [WORKSHOP.x - 68, WORKSHOP.y - 2, 22, 10], [WORKSHOP.x - 10, WORKSHOP.y - 66, 52, 18],
+      [WORKSHOP.x, WORKSHOP.y - 14, 44, 16], [WORKSHOP.x - 64, WORKSHOP.y - 4, 18, 9], [WORKSHOP.x + 96, WORKSHOP.y - 32, 30, 12],
       [CANTEEN.x, CANTEEN.y, 38, 22], [CANTEEN.x - 82, CANTEEN.y - 18, 28, 12]
     ].forEach(([x, y, rx, ry]) => addObstacle({ x, y, rx, ry, rot: 0 }));
     ['stepanych', 'zina', 'tolik', 'lena'].forEach(id => {

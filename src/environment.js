@@ -84,6 +84,10 @@ const PZ_MODELS = {
   // Столовая Лены в городе (src/settlers.js): котёл на треноге над костром, стол из ящиков с посудой
   prop_field_kitchen: [1.6, 1.6, 1.7],
   prop_kitchen_table: [1.4, 0.8, 0.9],
+  // Мастерская Толика (src/settlers.js): собраны кодом в Blender (tools/build_workshop_props_blender.py)
+  prop_workbench: [2.0, 1.06, 1.52],
+  prop_gas_cylinders: [0.84, 0.81, 1.6],
+  prop_crate_stack: [1.35, 0.6, 1.14],
   container_boxcar: [14, 3.2, 4.9],
   container_gondola: [14, 3.2, 3.4],
   container_tankcar: [12, 2.9, 4.0],
@@ -104,7 +108,8 @@ const PZ_COLOR = {
   prop_cable_reel: 1, prop_gantry_crane: 1, prop_locomotive: 1, prop_pipe_rack: 1, prop_pipe_stack: 1,
   // Баррикады из Rodin светлее земли и ящиков рядом
   prop_sandbag_wall: 0.6, prop_pallet_barricade: 0.68,
-  prop_field_kitchen: 0.75, prop_kitchen_table: 0.62
+  prop_field_kitchen: 0.75, prop_kitchen_table: 0.62,
+  prop_workbench: 0.85, prop_gas_cylinders: 0.85, prop_crate_stack: 0.85
 };
 // Тайники Промзоны: тип → модель и длина на карте, px (машины города ~40 px/м, вагоны чуть ужаты)
 const PZ_CONTAINERS = {

@@ -107,6 +107,7 @@ vasiliy_vs_aliens/
 │   ├── build_environment_models_blender.py
 │   ├── generate_environment_assets.py
 │   ├── extrude_concept_blender.py   # Модель плоского предмета из концепта сбоку (когда Rodin недоступен)
+│   ├── build_workshop_props_blender.py  # Мастерская Толика: верстак, баллоны, ящики — кодом, с запечёнными материалами
 │   └── generate_building_sprites.py
 │
 ├── docs/                        # Скриншоты и документация (LORE.md — лор, BALANCE.md — экономика, INTRO_COMIC.md — комикс и промты, PERFORMANCE.md — производительность и пайплайн 3D)

@@ -14,9 +14,9 @@
 
 // Баррикады — в обеих локациях (loadBarricades)
 const BARRICADE_MODELS = ['prop_sandbag_wall', 'prop_pallet_barricade'];
-// Полевая кухня и стол столовой Лены (src/settlers.js) — тоже грузятся сразу, смотрят прямо (кадр 0)
-const CANTEEN_MODELS = ['prop_field_kitchen', 'prop_kitchen_table'];
-const ALWAYS_PZ_MODELS = [...BARRICADE_MODELS, ...CANTEEN_MODELS];
+// Столовая Лены и мастерская Толика в городе (src/settlers.js) — тоже грузятся сразу, смотрят прямо (кадр 0)
+const CITY_MODELS = ['prop_field_kitchen', 'prop_kitchen_table', 'prop_workbench', 'prop_gas_cylinders', 'prop_crate_stack'];
+const ALWAYS_PZ_MODELS = [...BARRICADE_MODELS, ...CITY_MODELS];
 
 class ThreePropsManager {
   constructor() {
@@ -216,7 +216,7 @@ class ThreePropsManager {
       BARRICADE_MODELS.filter(key => this.isLoaded[key]).forEach(key => {
         for (let dir = 0; dir < this.numDirections; dir++) tasks.push(() => this.getFrameCanvas(key, dir));
       });
-      CANTEEN_MODELS.filter(key => this.isLoaded[key]).forEach(key => tasks.push(() => this.getFrameCanvas(key, 0)));
+      CITY_MODELS.filter(key => this.isLoaded[key]).forEach(key => tasks.push(() => this.getFrameCanvas(key, 0)));
       runIdleTasks(tasks);
     });
   }
