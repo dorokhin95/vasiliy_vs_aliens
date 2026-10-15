@@ -271,6 +271,8 @@ window.Menu = (() => {
       visited: Array.from(locationsVisited),
       // Оборона у пролома в Промзоне: 'done' — выжившие ушли; иначе после загрузки начнётся сначала
       defense: window.Defense ? window.Defense.saveState() : undefined,
+      // Спасённые в городе: видел ли Василий их на местах (приветствие — один раз)
+      settlers: window.Settlers ? window.Settlers.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),

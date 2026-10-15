@@ -889,7 +889,7 @@ const LANGS = {
     controls_aim: "ЛКМ — Удар / Стрельба | R — Перезарядка",
     controls_roll: "ПРОБЕЛ — Перекат (-25 выносливости)",
     controls_interact: "E — Обыскать тайник / Лавка Михалыча | ESC — Пауза и настройки",
-    controls_items: "1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Ближнее ↔ дальнее | Колесо — следующее оружие",
+    controls_items: "1–8 — Слоты хотбара (порядок меняется перетаскиванием) | Q — Смена оружия в жёлтых ячейках 4 и 5 | Колесо — следующее оружие",
     equip_btn: "Экипировать",
     unequip_btn: "Снять",
     equipped_tag: "С СОБОЙ",
@@ -972,7 +972,7 @@ const LANGS = {
     controls_aim: "LMB — Attack / Shoot | R — Reload",
     controls_roll: "SPACE — Dodge Roll (-25 Stamina)",
     controls_interact: "E — Scavenge / Shop | ESC — Pause & settings",
-    controls_items: "1–8 — Hotbar slots (drag to reorder) | Q — Melee ↔ ranged | Wheel — next weapon",
+    controls_items: "1–8 — Hotbar slots (drag to reorder) | Q — Swap weapons in yellow slots 4 and 5 | Wheel — next weapon",
     equip_btn: "Equip",
     unequip_btn: "Unequip",
     equipped_tag: "CARRIED",
@@ -2399,6 +2399,7 @@ function startGame(save = null) {
     window.Defense.loadState(save ? save.defense : undefined, locationsVisited.has('promzona'));
     window.Defense.onEnter();
   }
+  if (window.Settlers) window.Settlers.loadState(save ? save.settlers : undefined);
   // В Промзоне купола Михалыча нет — после загрузки Василий у пролома
   if (currentLocation !== 'city') placePlayerAtBreach();
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
@@ -2432,9 +2433,10 @@ const Loading = {
     const er = window.environmentRenderer, tp = window.threeProps, te = window.threeEnemies;
     const ch = window.threeCharacter;
     const boss = currentLocation === 'promzona' ? window.threePounder : window.threeBoss;
-    // Выжившие у пролома — пока оборона не пройдена (src/three_survivors.js)
+    // Выжившие: у пролома в Промзоне — пока оборона не пройдена, в городе — после (src/three_survivors.js)
     const ts = window.threeSurvivors;
-    const survivors = !!ts && currentLocation === 'promzona' && !!window.Defense && window.Defense.stage !== 'done';
+    const rescued = !!window.Defense && window.Defense.stage === 'done';
+    const survivors = !!ts && (currentLocation === 'promzona' ? !rescued : rescued);
     if (survivors) ts.load();
     const checks = [
       !!(er && er.loaded),
@@ -2512,6 +2514,7 @@ function handleInteract() {
   else if (nearbyInteractable.type === 'breach') {
     if (levelCleared) breakFence();
   }
+  else if (nearbyInteractable.type === 'settler') window.Settlers.talk(nearbyInteractable.target);
   else if (nearbyInteractable.type === 'container') {
     const c = nearbyInteractable.target;
     if (window.Safes && window.Safes.isSafe(c)) window.Safes.open(c);
@@ -6389,6 +6392,8 @@ function buildObstacles() {
   addObstacle({ rect: true, x1: safeZone.shopX - 100, y1: safeZone.shopY - 80, x2: safeZone.shopX + 100, y2: safeZone.shopY + 45 });
   // Баррикада обороны у пролома в Промзоне (src/defense.js)
   if (window.Defense) window.Defense.addObstacles();
+  // Пост, мастерская и столовая спасённых в городе (src/settlers.js)
+  if (window.Settlers) window.Settlers.addObstacles();
 
   const env = window.environmentRenderer;
   if (!env) return;
@@ -8846,6 +8851,8 @@ function update() {
     nearbyInteractable = { type: 'shop' };
   } else if (fenceBreach.state === 'cracked' && Math.abs(player.x - fenceBreach.x) < 90 && player.y < 150) {
     nearbyInteractable = { type: 'breach' };
+  } else if (window.Settlers && window.Settlers.nearest()) {
+    nearbyInteractable = { type: 'settler', target: window.Settlers.nearest() };
   } else {
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
@@ -8860,7 +8867,8 @@ function update() {
   const safeTarget = nearbyInteractable && nearbyInteractable.type === 'container' && window.Safes &&
     window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
   const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
-  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}` : '';
+  const settlerPrompt = nearbyInteractable && nearbyInteractable.type === 'settler' ? window.Settlers.prompt(nearbyInteractable.target) : '';
+  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}_${settlerPrompt}` : '';
   if (_lastPromptKey !== nextPromptKey) {
     _lastPromptKey = nextPromptKey;
     const promptEl = document.getElementById('interact-prompt');
@@ -8869,7 +8877,7 @@ function update() {
       const type = nearbyInteractable.type;
       promptEl.innerText = type === 'shop' ? t('prompt_shop')
         : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
-        : safePrompt || t('prompt_search');
+        : settlerPrompt || safePrompt || t('prompt_search');
     } else {
       promptEl.style.display = 'none';
     }
@@ -8988,6 +8996,7 @@ function update() {
   updateFireGoo();
   if (window.Safes) window.Safes.update();
   if (window.Defense) window.Defense.update();
+  if (window.Settlers) window.Settlers.update();
   updatePounderRings();
   updateShockwaves();
   updateShieldShards();
@@ -9539,6 +9548,7 @@ function collectActorShadows(minX, maxX, minY, maxY) {
     if (sp) list.push({ img: sp.frame, x: sp.x, y: sp.y, w: sp.w, h: sp.h });
   }
   if (window.Defense) window.Defense.addShadows(list);
+  if (window.Settlers) window.Settlers.addShadows(list);
   return list;
 }
 
@@ -9572,6 +9582,7 @@ function render() {
 
   if (window.environmentRenderer) {
     if (window.Defense) window.Defense.addActors(actors);
+    if (window.Settlers) window.Settlers.addActors(actors);
     window.environmentRenderer.shadowActors = collectActorShadows(viewMinX, viewMaxX, viewMinY, viewMaxY);
     window.environmentRenderer.planDeferredContainers(actors, containers, camera, viewW, viewH);
     window.environmentRenderer.draw(ctx, camera, viewW, viewH, WORLD_WIDTH, WORLD_HEIGHT, roads, buildings, containers, safeZone);
@@ -9634,6 +9645,7 @@ function render() {
   drawBreachGround(ctx);
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
   if (window.Defense) window.Defense.drawGround(ctx); // баррикада у пролома — низкая, под фигурами
+  if (window.Settlers) window.Settlers.drawGround(ctx); // мешки поста у пролома в городе
   drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // куда упадут ракеты
   drawFirePools(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // горючая жижа Василия
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
@@ -9646,8 +9658,9 @@ function render() {
   const fumeOn = player.hasPerk('fume_aura');
   if (fumeOn) drawFumeAura(ctx); // облако перегара стелется по земле, под фигурами
 
-  // 6.9. Выжившие обороны у пролома (src/defense.js)
+  // 6.9. Выжившие обороны у пролома (src/defense.js); спасённые в городе — те, что за Василием (src/settlers.js)
   if (window.Defense) window.Defense.drawActors(ctx);
+  if (window.Settlers) window.Settlers.drawActors(ctx, false);
 
   // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
   for (let i = 0; i < enemies.length; i++) {
@@ -9711,6 +9724,7 @@ function render() {
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   if (window.Defense) window.Defense.drawShots(ctx);
+  if (window.Settlers) window.Settlers.drawShots(ctx);
   enemies.forEach(e => {
     if (e.type !== 'pounder') return;
     drawPounderBolt(ctx, e);
@@ -9856,6 +9870,7 @@ function render() {
   }
 
   SpriteRenderer.drawVasiliy(ctx, player);
+  if (window.Settlers) window.Settlers.drawActors(ctx, true); // спасённые и их места перед Василием
   drawDazeStars(ctx);
   if (pounderRef) drawPounderArena(ctx, pounderRef, true); // ближняя половина барьера — перед фигурами
 
@@ -9870,6 +9885,8 @@ function render() {
 
   // 9.5. Направленные дульные вспышки поверх среза ствола
   drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
+  // 9.6. Реплика спасённого облачком над головой (src/settlers.js)
+  if (window.Settlers) window.Settlers.drawBubble(ctx);
 
   // 10. Частицы (искры, пороховой дым, брызги) и текст — только в пределах экрана
   for (let i = 0; i < particles.length; i++) {

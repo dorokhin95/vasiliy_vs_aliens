@@ -200,7 +200,7 @@ class ThreeSurvivorManager {
     add('lena', 'idle', all, 1);
     add('lena', 'walk', south, 6);
     add('seryoga', 'lie', [0], 1);
-    add('seryoga', 'limp', south, 6);
+    add('seryoga', 'limp', all, 6);           // в городе бродит во все стороны
     runIdleTasks(tasks);
   }
 }

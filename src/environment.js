@@ -852,6 +852,8 @@ class EnvironmentRenderer {
       this.isInShopPlaza(x, y) || (this.location === 'city' && Math.hypot(x - MAP.CENTER, y - MAP.CENTER) < 430) ||
       // Площадка обороны у пролома (src/defense.js)
       (this.location === 'promzona' && window.Defense && window.Defense.inArea(x, y)) ||
+      // Пост, мастерская и столовая спасённых в городе (src/settlers.js)
+      (this.location === 'city' && window.Settlers && window.Settlers.inArea(x, y)) ||
       // Площадка логова Долбильщика (POUNDER_HOME в game.js)
       (this.location === 'promzona' && typeof POUNDER_HOME !== 'undefined' &&
         Math.hypot(x - POUNDER_HOME.x, y - POUNDER_HOME.y) < POUNDER_LAIR_R + 90) ||

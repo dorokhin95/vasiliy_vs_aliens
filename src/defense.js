@@ -594,6 +594,7 @@ window.Defense = (function () {
   // Площадка обороны: деревья туда не ставятся (environment.scatterGreenery)
   const inArea = (x, y) => Math.hypot(x - C.x, (y - C.y) / GROUND_SQUASH) < R + 120;
 
+  // SURVIVORS и drawPiece — и для города после спасения (src/settlers.js)
   return { saveState, loadState, onWorld, onEnter, update, drawGround, drawActors, drawShots, addActors, addShadows, addObstacles,
-    isDefenseToad, inArea, get stage() { return stage; } };
+    isDefenseToad, inArea, SURVIVORS, drawPiece, get stage() { return stage; } };
 })();
