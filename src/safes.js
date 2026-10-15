@@ -145,7 +145,7 @@ window.Safes = (function () {
     // Журнал Лены, журнал караула Зины (src/quests.js)
     if (window.Quests) window.Quests.onSearched(c);
     createParticles(c.x, c.y - 20, '#fde047', 16);
-    SoundFX.batSwing(true);
+    SoundFX.containerOpen(c); // ригели, скрип тяжёлой двери (src/sounds.js)
     if (window.Menu) window.Menu.requestSave();
     updateHUD(true);
   }

@@ -274,7 +274,7 @@ window.Defense = (function () {
       });
     }
     const vol = enemySoundVolume(s.x, s.y);
-    if (vol > 0.3) (w.flash === 'shotgun' ? SoundFX.shotgun : SoundFX.makarov).call(SoundFX);
+    (w.flash === 'shotgun' ? SoundFX.shotgun : SoundFX.makarov).call(SoundFX, vol * 0.8, SoundFX.pan(s.x));
   }
 
   function walkTo(s, tx, ty, speed) {
@@ -612,5 +612,5 @@ window.Defense = (function () {
 
   // SURVIVORS и drawPiece — и для города после спасения (src/settlers.js)
   return { saveState, loadState, onWorld, onEnter, update, drawGround, drawActors, drawShots, addActors, addShadows, addObstacles,
-    isDefenseToad, inArea, SURVIVORS, drawPiece, get stage() { return stage; } };
+    isDefenseToad, inArea, SURVIVORS, drawPiece, get stage() { return stage; }, get actors() { return survivors; } };
 })();

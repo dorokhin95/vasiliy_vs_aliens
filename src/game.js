@@ -2589,6 +2589,7 @@ const rollRange = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 function scavengeContainer(c) {
   if (c.searched) return;
   c.searched = true;
+  SoundFX.containerOpen(c); // у каждого тайника свой звук (src/sounds.js)
 
   const dist = getDistrictAt(c.x, c.y);
   const bMult = (dist.bottleMult || 1.0) * STASH_YIELD;
@@ -3336,7 +3337,7 @@ function startReload() {
   player.reloadingWeapon = wKey;
   player.reloadMaxTimer = ammoState.reloadTime;
   player.reloadTimer = ammoState.reloadTime;
-  SoundFX.reload();
+  SoundFX.reloadStart(wKey);
   addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? 'ПЕРЕЗАРЯДКА [R]...' : 'RELOADING [R]...', '#facc15');
   updateHUD(true);
 }
@@ -3986,6 +3987,7 @@ function shootPlayerWeapon() {
 
     const batReach = 84;
     let hitAny = false;
+    let hitKind = null;
 
     muzzleFlashes.push({
       x: player.x,
@@ -4014,6 +4016,9 @@ function shootPlayerWeapon() {
 
           const hit = damageEnemy(e, dmg, 'bat', player.x, player.y);
           e.hitFlash = 6;
+          // Звук удара: по броне (наплечники, золотая кожа, щит) звенит, по жабе — шлепок
+          if (hit.armored || hit.shielded || hit.invuln || e.type === 'boss' || e.type === 'pounder') hitKind = 'armor';
+          else if (!hitKind) hitKind = 'flesh';
 
           // Отбрасывание жабы шипованной битой (чтобы можно было держать дистанцию в стартовой зоне!)
           const kb = (e.type === 'boss' || e.type === 'pounder') ? 0 : (isExhausted ? 7 : (e.type === 'brute' ? 8 : 20));
@@ -4031,7 +4036,7 @@ function shootPlayerWeapon() {
       }
     });
 
-    SoundFX.batSwing(hitAny);
+    SoundFX.batSwing(hitAny ? hitKind || 'flesh' : false);
     if (hitAny) {
       cameraKickX += Math.cos(player.angle) * 3.2;
       cameraKickY += Math.sin(player.angle) * 3.2;
@@ -4147,6 +4152,7 @@ function shootPlayerWeapon() {
 
     spawnDirectionalSparks(muzzle.x, muzzle.y, player.angle, 1.35, 14, '#fbbf24', 5, 13, 13);
 
+    let drillHit = false;
     enemies.forEach(e => {
       const dist = Math.hypot(e.x - player.x, e.y - (player.y - 20));
       if (dist < drillReach + e.radius) {
@@ -4159,12 +4165,14 @@ function shootPlayerWeapon() {
           const dmg = WEAPONS.drill.dmg(player.baseDamage) * (player.isDrunk ? 1.8 : 1.0);
           const hit = damageEnemy(e, dmg, 'drill', player.x, player.y);
           e.hitFlash = 5;
+          drillHit = true;
           spawnDirectionalSparks(e.x, e.y - 8, toEnemyAngle, 1.1, 10, '#f97316', 5, 12, 12);
           createParticles(e.x, e.y, '#22c55e', 6);
           addFloatingText(e.x, e.y - 20, damageLabel(hit, `-${Math.round(hit.dealt)} БУР`), '#eab308');
         }
       }
     });
+    if (drillHit) SoundFX.drillHit();
     updateHUD();
     return;
   }
@@ -5436,7 +5444,7 @@ function performDash() {
 function rechargeLaser() {
   if (player.laserRecharge > 0 || player.laserCharge >= CARD_EFFECTS.laserCharge) return;
   player.laserRecharge = CARD_EFFECTS.laserRecharge;
-  SoundFX.reload();
+  SoundFX.laserRecharge();
   addFloatingText(player.x, player.y - 36, currentLang === 'ru' ? '🔋 НАКОПИТЕЛЬ ЗАРЯЖАЕТСЯ (5 С)' : '🔋 RECHARGING CELL (5s)', '#facc15');
 }
 
@@ -6175,7 +6183,7 @@ function updateBruteThrow(e, distToPlayer, eSpeed) {
     st.t = 0;
     st.ox = o.x;
     st.oy = o.y;
-    SoundFX.reload();
+    SoundFX.liftProp(st.kind, enemySoundVolume(o.x, o.y), SoundFX.pan(o.x));
     return true;
   }
   // Подъём: подхватывает предмет у груди и шагами поднимает над головой, доворачиваясь к Василию.
@@ -6299,7 +6307,8 @@ function landThrowable(f) {
   spawnGunpowderSmoke(x, y, -Math.PI / 2, 4 + Math.round(def.weight * 3));
   cameraKickX += (Math.random() - 0.5) * 10 * def.weight;
   cameraKickY += (Math.random() - 0.5) * 10 * def.weight;
-  SoundFX.batSwing(true);
+  // Урна, бак, ящик, машина, бочка — у каждого свой звук падения (src/sounds.js)
+  SoundFX.impact(f.kind, Math.max(0.3, enemySoundVolume(x, y)), SoundFX.pan(x));
 }
 
 // Красные круги на земле там, куда упадёт брошенное — рисуются под фигурами
@@ -8738,9 +8747,9 @@ function update() {
       const loadCount = Math.min(needed, aState.reserve);
       aState.clip += loadCount;
       aState.reserve -= loadCount;
+      SoundFX.reloadEnd(player.reloadingWeapon);
       player.reloadingWeapon = null;
       player.reloadTimer = 0;
-      SoundFX.reload();
       addFloatingText(player.x, player.y - 34, `${aState.clip}/${aState.reserve} ГОТОВО!`, '#4ade80');
     }
   }
@@ -9027,6 +9036,7 @@ function update() {
   if (window.Defense) window.Defense.update();
   if (window.Settlers) window.Settlers.update();
   if (window.Quests) window.Quests.update();
+  SoundFX.updateSteps(); // шаги Василия, жаб и выживших (src/sounds.js)
   updatePounderRings();
   updateShockwaves();
   updateShieldShards();

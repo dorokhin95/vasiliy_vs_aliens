@@ -147,7 +147,7 @@ window.Settlers = (function () {
       e.hitFlash = 5;
       addFloatingText(e.x, e.y - 24, `-${Math.round(r.dealt)}`, '#fde68a');
     }
-    if (enemySoundVolume(s.x, s.y) > 0.3) (w.flash === 'shotgun' ? SoundFX.shotgun : SoundFX.makarov).call(SoundFX);
+    (w.flash === 'shotgun' ? SoundFX.shotgun : SoundFX.makarov).call(SoundFX, enemySoundVolume(s.x, s.y) * 0.8, SoundFX.pan(s.x));
   }
 
   function updateSettler(s) {
