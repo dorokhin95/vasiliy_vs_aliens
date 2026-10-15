@@ -29,7 +29,8 @@ const UPGRADE_TREES = {
         statMods: {},
         locks: ["shaman_carpet"]
       },
-      // Новый ряд — открывается вместе с Промзоной (promzona: true), для сейфов (src/safes.js)
+      // Новый ряд — открывается вместе с Промзоной (promzona: true), в цене обязательно её лут.
+      // Как работают — src/perks_pz.js и src/safes.js
       stethoscope: {
         id: "stethoscope",
         promzona: true,
@@ -37,7 +38,18 @@ const UPGRADE_TREES = {
         name_en: "Stethoscope",
         desc_ru: "Инженер слышит механизм: сейф сразу выдаёт одну цифру кода",
         desc_en: "An engineer hears the mechanism: a safe gives away one digit of its code",
-        cost: { bottles: 16, scrap: 24, mil_parts: 2, toad_eye: 2 },
+        cost: { bottles: 16, scrap: 24, nonferrous: 3, toad_eye: 2 },
+        statMods: {},
+        locks: []
+      },
+      fire_goo: {
+        id: "fire_goo",
+        promzona: true,
+        name_ru: "Горючая жижа",
+        name_en: "Fire Goo",
+        desc_ru: "ПКМ: плевок горючей жижей на 3 м — лужа горит 5 с и поджигает жаб (8 урона/с, 4 с). Перезарядка 12 с, F — сменить способность",
+        desc_en: "RMB: spit fire goo 3 m ahead — the pool burns for 5 s and sets toads on fire (8 dmg/s for 4 s). 12 s cooldown, F switches abilities",
+        cost: { scrap: 20, nonferrous: 4, tech_spirit: 3, toad_eye: 2 },
         statMods: {},
         locks: []
       },
@@ -88,6 +100,28 @@ const UPGRADE_TREES = {
         cost: { bottles: 22, scrap: 30, mil_parts: 3, alien_core: 3, toad_eye: 4, toad_leg: 3 },
         statMods: { bonusMaxStamina: 35 },
         locks: ["laser_eye"]
+      },
+      sludge_skin: {
+        id: "sludge_skin",
+        promzona: true,
+        name_ru: "Шламовая кожа",
+        name_en: "Sludge Skin",
+        desc_ru: "Броня 60 поверх здоровья: в ближнем бою гасит 80% урона, кислоту и взрывы — 50%, плазму, лазер и разряды — 20%. Восстанавливается сама и быстро — в шламе",
+        desc_en: "60 armor on top of health: absorbs 80% of melee damage, 50% of acid and blasts, 20% of plasma, lasers and shocks. Regenerates, fast in sludge",
+        cost: { bottles: 15, nonferrous: 3, alien_core: 2, toad_liver: 4 },
+        statMods: {},
+        locks: []
+      },
+      frog_legs: {
+        id: "frog_legs",
+        promzona: true,
+        name_ru: "Жабьи ноги",
+        name_en: "Frog Legs",
+        desc_ru: "Перекат на 35% длиннее",
+        desc_en: "Roll covers 35% more ground",
+        cost: { scrap: 15, kvako_charge: 2, toad_leg: 5 },
+        statMods: {},
+        locks: []
       }
     }
   },
@@ -125,6 +159,28 @@ const UPGRADE_TREES = {
         desc_en: "+20 base damage to all weapons",
         cost: { bottles: 28, scrap: 35, mil_parts: 3, alien_core: 3, toad_eye: 3, toad_liver: 2, toad_leg: 2 },
         statMods: { damage: 20 },
+        locks: []
+      },
+      charmed_spirit: {
+        id: "charmed_spirit",
+        promzona: true,
+        name_ru: "Заговорённый спирт",
+        name_en: "Charmed Spirit",
+        desc_ru: "Опьянение длится 15 с вместо 10, а рука твёрдая — разброс как у трезвого. С Аурой перегара облако у пьяного шире на 40%",
+        desc_en: "Drunkenness lasts 15 s instead of 10 and the hand stays steady — sober accuracy. With the Hangover Aura the cloud is 40% wider while drunk",
+        cost: { bottles: 25, tech_spirit: 4, toad_liver: 3 },
+        statMods: {},
+        locks: []
+      },
+      lucky_charm: {
+        id: "lucky_charm",
+        promzona: true,
+        name_ru: "Малый оберег удачи",
+        name_en: "Small Lucky Charm",
+        desc_ru: "3% шанс увернуться от любой атаки",
+        desc_en: "3% chance to dodge any attack",
+        cost: { bottles: 18, nonferrous: 2, kvako_charge: 1, toad_eye: 3 },
+        statMods: {},
         locks: []
       }
     }
@@ -842,6 +898,7 @@ const LANGS = {
     unarmed: "✊ НЕЧЕМ БИТЬ — ВОЗЬМИ ОРУЖИЕ У МИХАЛЫЧА",
     hp: "ЗДОРОВЬЕ",
     stamina: "ВЫНОСЛИВ.",
+    armor: "БРОНЯ",
     vodka: "Водка",
     stew: "Тушенка",
     bandage: "Бинты",
@@ -924,6 +981,7 @@ const LANGS = {
     unarmed: "✊ NOTHING TO FIGHT WITH — TAKE A WEAPON AT MIKHALYCH",
     hp: "HEALTH",
     stamina: "STAMINA",
+    armor: "ARMOR",
     vodka: "Vodka",
     stew: "Stew",
     bandage: "Bandages",
@@ -995,6 +1053,7 @@ function t(key) { return LANGS[currentLang][key] || key; }
 function updateUILanguage() {
   document.getElementById('lbl-hp').innerText = t('hp');
   document.getElementById('lbl-stamina').innerText = t('stamina');
+  document.getElementById('lbl-armor').innerText = t('armor');
   document.getElementById('lbl-vodka').innerText = t('vodka');
   document.getElementById('lbl-stew').innerText = t('stew');
   document.getElementById('lbl-bandage').innerText = t('bandage');
@@ -1453,6 +1512,7 @@ function generateWorld() {
   bullets = [];
   enemyBullets = [];
   rockets = [];
+  resetFireGoo();
   rocketBlasts = [];
   pounderRings = [];
   if (window.Defense) window.Defense.onWorld();
@@ -2128,6 +2188,7 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') performRoll();
     if (e.code === 'KeyR') startReload();
     if (e.code === 'KeyQ') cycleWeapon();
+    if (e.code === 'KeyF') cycleRmbAbility();
     // Цифры 1–9 — видимые слоты хотбара по порядку (порядок игрок меняет перетаскиванием)
     const digit = /^Digit[1-9]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
     if (digit) {
@@ -2144,8 +2205,8 @@ window.addEventListener('mousemove', (e) => {
 });
 window.addEventListener('mousedown', (e) => {
   if (e.button === 0) mouseDown = true;
-  // ПКМ — способность карты Долбильщика (рывок или гиперрегенерация)
-  else if (e.button === 2 && gameState === 'PLAYING') useCardAbility();
+  // ПКМ — выбранная способность: карта Долбильщика или горючая жижа (src/perks_pz.js), F — сменить
+  else if (e.button === 2 && gameState === 'PLAYING') useRmbAbility();
 });
 // Системное меню браузера по ПКМ в игре не нужно нигде (ПКМ — способность), кроме полей ввода (код сохранения)
 window.addEventListener('contextmenu', (e) => {
@@ -2309,6 +2370,10 @@ function startGame(save = null) {
   player.laserCharge = CARD_EFFECTS.laserCharge;
   player.laserRecharge = 0;
   player.abilityCd = 0;
+  player.gooCd = 0;
+  player.rmbAbility = null;
+  player.slimeArmor = 0;
+  player.hurtFrame = 0;
   player.regenLeft = 0;
   player.isDashing = false;
   player.currentWeapon = 'bat';
@@ -3060,6 +3125,8 @@ function buyPerk(perk) {
   }
   if (perk.statMods.critChance) player.critChance += perk.statMods.critChance;
   if (perk.statMods.critMult) player.critMult = perk.statMods.critMult;
+  if (perk.id === 'sludge_skin') player.slimeArmor = slimeArmorMax();
+  if (perk.id === 'fire_goo') player.rmbAbility = 'fire_goo';
 
   addFloatingText(player.x, player.y - 35, `${perk.name_ru.toUpperCase()}`, '#38bdf8');
   createParticles(player.x, player.y, '#38bdf8', 20);
@@ -3086,7 +3153,7 @@ window.useItem = function(itemType) {
   player.itemCooldown = CONSUMABLE_COOLDOWN;
   if (itemType === 'vodka') {
     player.isDrunk = true;
-    player.drunkTimer = 600;
+    player.drunkTimer = player.hasPerk('charmed_spirit') ? 900 : 600;
     addFloatingText(player.x, player.y - 30, t('status_drunk'), '#f59e0b');
     createParticles(player.x, player.y, '#f59e0b', 14);
   } else if (itemType === 'stew') {
@@ -3977,7 +4044,7 @@ function shootPlayerWeapon() {
       window.threeCharacter.triggerRecoil(0.65);
     }
 
-    const spread = player.isDrunk ? 0.14 : 0.035;
+    const spread = drunkAim() ? 0.14 : 0.035;
     const angle = player.angle + (Math.random() - 0.5) * spread;
     const speed = 25;
     const isCrit = Math.random() < (player.critChance + 0.05);
@@ -4135,7 +4202,7 @@ function shootPlayerWeapon() {
     let isCrit = Math.random() < player.critChance;
     if (isCrit) dmg *= player.critMult;
 
-    const angle = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.16 : 0.025);
+    const angle = player.angle + (Math.random() - 0.5) * (drunkAim() ? 0.16 : 0.025);
     const speed = 22;
 
     cameraKickX -= Math.cos(angle) * 1.8;
@@ -4215,7 +4282,7 @@ function shootPlayerWeapon() {
   for (let p = 0; p < pellets; p++) {
     const conePos = (p / (pellets - 1)) - 0.5;
     const jitter = (Math.random() - 0.5) * 0.08;
-    const spreadSpan = player.isDrunk ? 0.40 : 0.24;
+    const spreadSpan = drunkAim() ? 0.40 : 0.24;
     const pelletAngle = player.angle + conePos * spreadSpan + jitter;
     const speed = 23 + Math.random() * 5.5;
     let isCrit = Math.random() < player.critChance;
@@ -5178,7 +5245,7 @@ function rocketExplode(r) {
   const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
   if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5)
       && !playerDodged()) {
-    player.hp -= r.dmg;
+    player.hp -= armorAbsorb(r.dmg, 'ranged');
     const a = Math.atan2(player.y - y, player.x - x);
     slideMove(player, Math.cos(a) * 18, Math.sin(a) * 18, player.radius);
     createParticles(player.x, player.y, '#ef4444', 10);
@@ -5362,7 +5429,7 @@ function rechargeLaser() {
 // Луч бьёт сразу: первая жаба на линии прицела в пределах range, стены зданий его останавливают
 function fireLaserBeam(muzzle) {
   const W = WEAPONS.laser;
-  const ang = player.angle + (Math.random() - 0.5) * (player.isDrunk ? 0.08 : 0.01);
+  const ang = player.angle + (Math.random() - 0.5) * (drunkAim() ? 0.08 : 0.01);
   const cx = Math.cos(ang), cy = Math.sin(ang);
   let len = W.range;
   for (let d = 16; d < W.range; d += 12) {
@@ -5405,9 +5472,11 @@ function fireLaserBeam(muzzle) {
 let cardOfferTimer = 0;
 
 // Уворот (карта «Ловкость»): удар, пуля, язык или брошенный предмет проходят мимо
+const LUCKY_CHARM_DODGE = 0.03;
 function playerDodged() {
   const agi = (player.cards && player.cards.agility) || 0;
-  if (agi > 0 && Math.random() < CARD_EFFECTS.agilityDodge * agi) {
+  const chance = CARD_EFFECTS.agilityDodge * agi + (player.hasPerk('lucky_charm') ? LUCKY_CHARM_DODGE : 0);
+  if (chance > 0 && Math.random() < chance) {
     addFloatingText(player.x - 26, player.y - 44, currentLang === 'ru' ? 'УВОРОТ!' : 'DODGE!', '#a5f3fc');
     return true;
   }
@@ -5654,6 +5723,14 @@ function drawBreachMarker() {
 // ровно на границе действия — по ним видно, докуда достаёт аура. Жабы в облаке хмелеют
 // (над головой кружат пузыри) и двигаются медленнее
 const FUME_AURA_RADIUS = 140;
+// Пьяная рука: разброс растёт, если не взят «Заговорённый спирт»
+function drunkAim() {
+  return player.isDrunk && !player.hasPerk('charmed_spirit');
+}
+// С «Заговорённым спиртом» облако у пьяного Василия шире
+function fumeAuraRadius() {
+  return player.isDrunk && player.hasPerk('charmed_spirit') ? FUME_AURA_RADIUS * 1.4 : FUME_AURA_RADIUS;
+}
 const FUME_AURA_SLOW = 0.55;
 const FUME_PUFFS = 18;
 let fumePuffSprite = null;
@@ -5684,7 +5761,7 @@ function getFumePuff() {
 function drawFumeAura(ctx) {
   const t = performance.now() / 1000;
   const cx = player.x, cy = player.y + 6;
-  const R = FUME_AURA_RADIUS;
+  const R = fumeAuraRadius();
   ctx.save();
   // Едва заметная дымка: гуще у Василия, к краю сходит на нет
   const haze = ctx.createRadialGradient(cx, cy, 8, cx, cy, R);
@@ -5867,7 +5944,7 @@ function updateGruntTongue(e, distToPlayer, angle, slowed) {
       L.hit = true;
       if (playerDodged()) return true;
       const dmg = Math.round(TONGUE_DAMAGE + (e.tier || 1) * 1.6);
-      player.hp -= dmg;
+      player.hp -= armorAbsorb(dmg, 'melee');
       addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
       createParticles(player.x, player.y - 14, '#f472b6', 8);
       const a = Math.atan2(e.y - player.y, e.x - player.x);
@@ -6187,7 +6264,7 @@ function landThrowable(f) {
 
   const hitR = def.radius + 26;
   if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR && !playerDodged()) {
-    player.hp -= def.dmg;
+    player.hp -= armorAbsorb(def.dmg, 'melee');
     const a = Math.atan2(player.y - y, player.x - x);
     slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
     createParticles(player.x, player.y, '#ef4444', 12);
@@ -6541,19 +6618,22 @@ function updateHUD(forceWeaponRefresh = false) {
     }
   });
 
-  // Способность на ПКМ (карта Долбильщика): значок и перезарядка
-  const ab = cardAbility();
+  // Способность на ПКМ (карта Долбильщика или горючая жижа): значок, перезарядка, сколько их на F
+  const ab = currentRmbAbility();
   const abEl = document.getElementById('rmb-ability');
   if (abEl) {
     setHudStyle(abEl, 'display', ab ? 'flex' : 'none');
     if (ab) {
-      const cd = player.abilityCd > 0 ? Math.ceil(player.abilityCd / 60) : 0;
-      setHudText(document.getElementById('rmb-ability-icon'), ab === 'dash' ? '💨' : '💚');
+      const cdFrames = rmbCooldown(ab);
+      const cd = cdFrames > 0 ? Math.ceil(cdFrames / 60) : 0;
+      setHudText(document.getElementById('rmb-ability-icon'), RMB_ABILITIES[ab].icon);
+      setHudText(document.getElementById('rmb-ability-more'), rmbAbilities().length > 1 ? 'F ⇄' : '');
       setHudText(document.getElementById('rmb-ability-cd'), cd ? `${cd}` : (currentLang === 'ru' ? 'ПКМ' : 'RMB'));
       abEl.classList.toggle('cooling', cd > 0);
       abEl.classList.toggle('active', player.regenLeft > 0 || player.isDashing);
     }
   }
+  updateArmorHud();
 }
 
 function createParticles(x, y, color, count = 6) {
@@ -6895,8 +6975,8 @@ function pounderSlamCenter(e, a) {
 }
 
 // Удар по Василию с учётом силы копии
-function pounderHit(e, damage) {
-  bossHitPlayer(e, Math.round(damage * e.dmgMult));
+function pounderHit(e, damage, kind = 'melee') {
+  bossHitPlayer(e, Math.round(damage * e.dmgMult), kind);
 }
 
 function onPounderStrike(e, a, def) {
@@ -6953,7 +7033,7 @@ function onPounderStrike(e, a, def) {
         a.drag = { fx: player.x, fy: player.y, tx: to.x, ty: to.y };
         player.isRolling = false;
         const dmg = Math.round(def.damage * e.dmgMult);
-        player.hp -= dmg;
+        player.hp -= armorAbsorb(dmg, 'energy');
         addFloatingText(player.x - 40, player.y - 80, currentLang === 'ru' ? `↯ Притянул! -${dmg}` : `↯ Hooked! -${dmg}`, '#e9d5ff');
         if (player.hp <= 0) gameOver();
       }
@@ -6993,7 +7073,7 @@ function updatePounderStrike(e, a, def) {
     if (!a.hit && along > -player.radius && along < front && across < def.width / 2 + player.radius * 0.5) {
       a.hit = true;   // кого фронт прошёл — того уже не ударит, даже если увернулся
       const hp0 = player.hp;
-      pounderHit(e, def.damage);
+      pounderHit(e, def.damage, 'energy');
       if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
     }
   } else if (a.key === 'leap') {
@@ -7063,7 +7143,7 @@ function updatePounderRings() {
     if (d > prev - def.ringWidth / 2 && d < ring.r + def.ringWidth / 2) {
       ring.hit = true;
       const hp0 = player.hp;
-      pounderHit(ring.owner, def.damage);
+      pounderHit(ring.owner, def.damage, 'energy');
       if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
     }
   }
@@ -7215,7 +7295,7 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   if (e.arena) updatePounderArena(e);
 
   let speed = e.speed * (e.phase >= 2 ? 1.2 : 1.0);
-  if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
+  if (hasFumeAura && dist < fumeAuraRadius()) speed *= FUME_AURA_SLOW;
 
   if (!e.isAggroed) {
     // Василий ушёл из логова: мерцание гаснет, возвращается домой и зализывает раны.
@@ -7824,10 +7904,11 @@ function spawnBoss() {
   enemies.push(bossRef);
 }
 
-function bossHitPlayer(e, damage) {
+// kind — для шламовой брони: молот, удары, захват — ближний бой; разряды Долбильщика — 'energy'
+function bossHitPlayer(e, damage, kind = 'melee') {
   if (player.isRolling) return; // перекат даёт неуязвимость
   if (playerDodged()) return;
-  player.hp -= damage;
+  player.hp -= armorAbsorb(damage, kind);
   const a = Math.atan2(player.y - e.y, player.x - e.x);
   const kx = player.x + Math.cos(a) * 26;
   const ky = player.y + Math.sin(a) * 26;
@@ -7913,7 +7994,7 @@ function updateBossStrike(e, a, def) {
   } else if (a.key === 'grab') {
     if (a.t === 1 && !player.isRolling && dist < def.range + player.radius && !playerDodged()) {
       // Схватил: урон и бросок на пару шагов, Василий оглушён
-      player.hp -= def.damage;
+      player.hp -= armorAbsorb(def.damage, 'melee');
       const ang = Math.atan2(dy, dx);
       player.stunTimer = 42;
       player.knockFrames = 18;
@@ -8042,7 +8123,7 @@ function updateBoss(e, playerInSafe, hasFumeAura) {
   }
 
   let speed = e.speed * (e.berserk ? 1.4 : (e.enraged ? 1.25 : 1.0));
-  if (hasFumeAura && dist < FUME_AURA_RADIUS) speed *= FUME_AURA_SLOW;
+  if (hasFumeAura && dist < fumeAuraRadius()) speed *= FUME_AURA_SLOW;
 
   if (!e.isAggroed) {
     // Игрок ушёл из логова: возвращаемся домой и зализываем раны
@@ -8591,6 +8672,7 @@ function update() {
   }
   // Био-лужа: кислота жжёт (перекат проскакивает без урона), скорость режется ниже
   player.inSlime = inBioPuddle(player.x, player.y + footDY(player));
+  updateSlimeArmor();
   if (player.inSlime && !player.isRolling) {
     player.hp -= BIO_PUDDLE_DPS / 60;
     player.slimeTick = (player.slimeTick || 0) + 1;
@@ -8687,11 +8769,14 @@ function update() {
       const step = CARD_EFFECTS.dashDist / CARD_EFFECTS.dashFrames / 5;
       for (let k = 0; k < 5; k++) slideMove(player, player.rollDx * step, player.rollDy * step, player.radius);
       createParticles(player.x, player.y - 30, '#a5f3fc', 2);
-    } else if (playerStuck) {
-      player.x += player.rollDx * 9;
-      player.y += player.rollDy * 9;
     } else {
-      slideMove(player, player.rollDx * 9, player.rollDy * 9, player.radius);
+      const v = player.hasPerk('frog_legs') ? 9 * 1.35 : 9;
+      if (playerStuck) {
+        player.x += player.rollDx * v;
+        player.y += player.rollDy * v;
+      } else {
+        slideMove(player, player.rollDx * v, player.rollDy * v, player.radius);
+      }
     }
 
     player.rollDuration--;
@@ -8900,6 +8985,7 @@ function update() {
 
   updateThrownProps();
   updateRockets();
+  updateFireGoo();
   if (window.Safes) window.Safes.update();
   if (window.Defense) window.Defense.update();
   updatePounderRings();
@@ -8968,7 +9054,7 @@ function update() {
     }
 
     let eSpeed = e.speed;
-    if (hasFumeAura && distToPlayer < FUME_AURA_RADIUS) {
+    if (hasFumeAura && distToPlayer < fumeAuraRadius()) {
       eSpeed *= FUME_AURA_SLOW;
     }
 
@@ -8994,12 +9080,12 @@ function update() {
         const facing = Math.abs(angleDelta(angle, e.angle)) < 1.3;
         if (facing && !e.throwState && distToPlayer < player.radius + e.radius && !player.isRolling) {
           const tierMult = 1 + (e.tier || 1) * 0.22;
-          player.hp -= 1.65 * tierMult;
+          player.hp -= armorAbsorb(1.65 * tierMult, 'melee');
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
         }
       } else if (e.type === 'grunt') {
-        if (!updateGruntTongue(e, distToPlayer, angle, hasFumeAura && distToPlayer < FUME_AURA_RADIUS)) {
+        if (!updateGruntTongue(e, distToPlayer, angle, hasFumeAura && distToPlayer < fumeAuraRadius())) {
           e.angle = angle;
           slideMove(e, Math.cos(angle) * eSpeed, Math.sin(angle) * eSpeed, e.radius, true);
         }
@@ -9008,7 +9094,7 @@ function update() {
           // Усиленный контактный урон по тирам зоны!
           const tierMult = 1 + (e.tier || 1) * 0.22;
           const dmg = 0.78 * tierMult;
-          player.hp -= dmg;
+          player.hp -= armorAbsorb(dmg, 'melee');
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
         }
@@ -9100,7 +9186,8 @@ function update() {
     }
     if (Math.hypot(eb.x - player.x, eb.y - player.y) < eb.radius + player.radius) {
       if (!player.isRolling && !playerDodged()) {
-        player.hp -= eb.damage;
+        // Плазма штурмовиков броню почти не замечает, кислота снайперов — наполовину
+        player.hp -= armorAbsorb(eb.damage, eb.kind === 'plasma' ? 'energy' : 'ranged');
         createParticles(player.x, player.y, '#10b981', 8);
         addFloatingText(player.x, player.y - 20, `-${eb.damage}`, '#ef4444');
         if (player.hp <= 0) gameOver();
@@ -9548,6 +9635,7 @@ function render() {
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
   if (window.Defense) window.Defense.drawGround(ctx); // баррикада у пролома — низкая, под фигурами
   drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // куда упадут ракеты
+  drawFirePools(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // горючая жижа Василия
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawShockwaves(ctx);
   if (bossRef) drawBossTelegraph(ctx, bossRef);
@@ -9566,15 +9654,17 @@ function render() {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
 
-    const tipsy = fumeOn && Math.hypot(e.x - player.x, e.y - player.y) < FUME_AURA_RADIUS;
+    const tipsy = fumeOn && Math.hypot(e.x - player.x, e.y - player.y) < fumeAuraRadius();
     if (e.type === 'boss') {
       drawBoss(ctx, e);
       if (tipsy) drawFumeTipsy(ctx, e);
+      drawBurning(ctx, e);
       continue;
     }
     if (e.type === 'pounder') {
       drawPounder(ctx, e);
       if (tipsy) drawFumeTipsy(ctx, e);
+      drawBurning(ctx, e);
       continue;
     }
 
@@ -9613,6 +9703,7 @@ function render() {
     if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
     if (e.overheat > 0 && !glowBehind) drawOverheatGlow(ctx, e);
     if (tipsy) drawFumeTipsy(ctx, e);
+    drawBurning(ctx, e); // горючая жижа (src/perks_pz.js)
   }
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);

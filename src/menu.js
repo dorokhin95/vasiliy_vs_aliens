@@ -289,7 +289,10 @@ window.Menu = (() => {
         perks: Array.from(player.unlockedPerks),
         blockedPerks: Array.from(player.blockedPerks),
         cards: Object.assign({}, player.cards),
-        pendingCards: !!player.pendingCards
+        pendingCards: !!player.pendingCards,
+        // Способности ряда Промзоны (src/perks_pz.js): шламовая броня и что выбрано на ПКМ
+        slimeArmor: round2(player.slimeArmor || 0),
+        rmbAbility: player.rmbAbility || null
       }
     };
   }
@@ -418,6 +421,8 @@ window.Menu = (() => {
       player.cards[k] = Math.floor(num(p.cards && p.cards[k], 0, 0, 9));
     }
     player.pendingCards = !!p.pendingCards;
+    player.slimeArmor = num(p.slimeArmor, slimeArmorMax(), 0, slimeArmorMax());
+    player.rmbAbility = typeof p.rmbAbility === 'string' ? p.rmbAbility : null;
 
     // Миры локаций. Формат 6 — по локациям: мир той, где Василий, восстанавливается сразу (generateWorld
     // уже построил её в startGame), другой ждёт перехода через пролом. Раньше был один мир — городской.

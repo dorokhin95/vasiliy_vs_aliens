@@ -85,6 +85,13 @@
       width: 100%;
       transition: width 0.08s linear;
     }
+    /* Шламовая броня (перк «Шламовая кожа», src/perks_pz.js) */
+    .armor-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #4d7c0f, #a3e635);
+      width: 100%;
+      transition: width 0.1s linear;
+    }
 
     /* Safe Zone Banner & District HUD Badge */
     .safe-zone-tag {
@@ -737,6 +744,7 @@
       pointer-events: none;
     }
     .rmb-ability .rmb-icon { font-size: 20px; }
+    .rmb-ability .rmb-more { color: #facc15; font-size: 11px; }
     .rmb-ability.cooling { opacity: 0.55; }
     .rmb-ability.active { border-color: #4ade80; box-shadow: 0 0 12px rgba(74, 222, 128, 0.5); }
 
@@ -1411,6 +1419,12 @@
           <div class="stamina-fill" id="stamina-bar"></div>
         </div>
       </div>
+      <div class="bar-container" id="armor-row" style="display: none;">
+        <span class="bar-label" id="lbl-armor">БРОНЯ</span>
+        <div class="bar-bg">
+          <div class="armor-fill" id="armor-bar"></div>
+        </div>
+      </div>
     </div>
 
     <!-- District HUD Badge -->
@@ -1536,7 +1550,7 @@
         <span class="slot-name" id="lbl-w-laser">Лазер</span>
       </div>
     </div>
-    <div class="rmb-ability" id="rmb-ability"><span class="rmb-icon" id="rmb-ability-icon">💨</span><span id="rmb-ability-cd">ПКМ</span></div>
+    <div class="rmb-ability" id="rmb-ability"><span class="rmb-icon" id="rmb-ability-icon">💨</span><span id="rmb-ability-cd">ПКМ</span><span class="rmb-more" id="rmb-ability-more"></span></div>
 
     <!-- Shop & Workbench Modal -->
     <div id="shop-modal" class="shop-modal">
@@ -1780,8 +1794,9 @@
   <script src="src/three_props.js?v=1133"></script>
   <script src="src/three_boss.js?v=1138"></script>
   <script src="src/three_survivors.js?v=1144"></script>
-  <script src="src/game.js?v=1144"></script>
-  <script src="src/menu.js?v=1142"></script>
+  <script src="src/perks_pz.js?v=1151"></script>
+  <script src="src/game.js?v=1149"></script>
+  <script src="src/menu.js?v=1145"></script>
   <script src="src/comic.js?v=1125"></script>
   <script src="src/cards.js?v=1126"></script>
   <script src="src/inventory.js?v=1137"></script>
