@@ -806,12 +806,16 @@ window.Menu = (() => {
       const list = $(id);
       if (!list) return;
       list.innerHTML = '';
+      // Пара «клавиша — что делает» — одной строкой, чтобы в две колонки (пауза) она не разрывалась
       tr('controls').forEach(([key, what]) => {
+        const row = document.createElement('div');
+        row.className = 'ctrl-row';
         const k = document.createElement('kbd');
         k.textContent = key;
         const d = document.createElement('span');
         d.textContent = what;
-        list.append(k, d);
+        row.append(k, d);
+        list.append(row);
       });
     });
     refreshMenu();
