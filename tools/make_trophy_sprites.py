@@ -9,7 +9,8 @@
   quest — предметы квестов (src/quests.js): blender_assets/perk_concepts/quest_items_concept.png,
              в assets/sprites/quest/;
   weapons_ws — стволы мастерской Толика (гранатомёт, разрядник, ЭМИ-граната) из их концептов для Rodin,
-             electronics — продвинутая электроника (лут сейфов).
+             electronics — продвинутая электроника (лут сейфов);
+  dishes — блюда столовой Лены и проба шлама (квест «Проба шлама»).
 
 Концепты — из того же чата Gemini, что и лут, тем же промтом: предметы в ряд на белом фоне.
 Лут висит над землёй как остальной 2D-лут
@@ -48,6 +49,11 @@ SETS = {
                    ('blender_assets/promzona_concepts/weapon_arc.png', ['weapon_arc'], 'assets/sprites/weapons', 160, 22),
                    ('blender_assets/promzona_concepts/weapon_emp.png', ['weapon_emp'], 'assets/sprites/weapons', 160)],
     'electronics': (PERKS + 'electronics_concept.png', ['loot_electronics']),
+    # Столовая Лены (src/canteen.js): блюда — assets/sprites/dishes/, проба шлама — значок квеста.
+    # None — предмет этого листа сохраняется другой частью набора
+    'dishes': [(PERKS + 'dishes1_concept.png', ['soup', 'tincture', 'jelly', 'compress'], 'assets/sprites/dishes'),
+               (PERKS + 'dishes2_concept.png', ['drops', 'ointment', 'borscht', None], 'assets/sprites/dishes'),
+               (PERKS + 'dishes2_concept.png', [None, None, None, 'quest_sludge_sample'], 'assets/sprites/quest')],
 }
 DST = 'assets/sprites/loot'
 MIN_PART = 6        # кусок меньше (пикселей маски в 1/4) — пыль, не прибавляется
@@ -189,6 +195,8 @@ def make_set(src, names, dst=DST, out=OUT, rot=0):
     masks = split_items(rgba, len(names))
     assert len(masks) == len(names), f'{src}: нашлось предметов: {len(masks)}'
     for name, mask in zip(names, masks):
+        if name is None:
+            continue
         part = rgba.copy()
         part.putalpha(ImageChops.darker(rgba.getchannel('A'), mask))
         part = part.crop(part.getchannel('A').point(lambda v: 255 if v > 20 else 0).getbbox())

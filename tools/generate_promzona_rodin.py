@@ -48,6 +48,9 @@ MODELS = {
     # Баррикады: мешки — у пролома в обороне и на посту в городе (src/defense.js drawPiece), поддоны — там же
     'prop_sandbag_wall':      ([3.0, 0.9, 1.0], 'low straight barricade wall of stacked burlap sandbags, brick pattern'),
     'prop_pallet_barricade':  ([3.0, 1.3, 1.3], 'makeshift barricade of weathered wooden pallets standing upright and leaning'),
+    # Столовая Лены в городе (src/settlers.js): котёл на треноге над костровищем, стол-ящик с мисками
+    'prop_field_kitchen':     ([1.6, 1.6, 1.7], 'black cast-iron cauldron hanging on a chain from a steel-pipe tripod over a ring of stones with unlit firewood'),
+    'prop_kitchen_table':     ([1.4, 0.8, 0.9], 'wooden ammo crates used as a kitchen table with enamel bowls, a ladle and bread'),
     # Оружие мастерской Толика в руках Василия (tools/finalize_weapons_blender.py): концепт сбоку, ствол вправо
     'weapon_launcher':        ([0.95, 0.12, 0.3], 'homemade single-shot grenade launcher: steel pipe barrel, spring, wooden rifle stock'),
     'weapon_arc':             ([0.8, 0.14, 0.3], 'homemade welding arc discharger gun with copper coil, cables and electrode tip'),

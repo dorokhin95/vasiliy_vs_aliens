@@ -373,9 +373,21 @@ window.Settlers = (function () {
     ctx.restore();
   }
 
-  // Полевая кухня: костёр в кольце камней, котёл на треноге, пар; рядом ящик с мисками
+  // Модели кухни (src/three_props.js CANTEEN_MODELS): кадр, если уже готов
+  const KITCHEN_PX = 84, TABLE_PX = 66;
+  // Котёл в модели: край и дно — доли высоты модели над пятном, ring — середина кольца камней (выше середины
+  // пятна: ноги треноги стоят шире кольца), ширина котла — доля ширины пятна (по кадру)
+  const KITCHEN_POT = { top: 0.47, bottom: 0.28, ring: 0.12, w: 0.25 };
+  function modelFrame(model, cx, cy, w) {
+    const tp = window.threeProps;
+    const img = tp && tp.isLoaded[model] && tp.getFrameCanvas(model, 0);
+    return img ? Object.assign(pzFrame(model, cx, cy, w), { img }) : null;
+  }
+
+  // Полевая кухня: модель — котёл на треноге над кольцом камней; огонь, отсвет, бульканье и пар — живые
   function drawKitchen(ctx) {
     const x = CANTEEN.x, y = CANTEEN.y, now = performance.now() / 1000;
+    const f = modelFrame('prop_field_kitchen', x, y, KITCHEN_PX);
     ctx.save();
     // Отсвет костра на земле
     ctx.globalCompositeOperation = 'lighter';
@@ -388,6 +400,55 @@ window.Settlers = (function () {
     ctx.ellipse(x, y - 4, 150, 150 * GROUND_SQUASH, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
+    // Где котёл: у модели — по её высоте над пятном, у запасной рисовки — как нарисовано
+    const potTop = f ? y - f.rise * KITCHEN_POT.top : y - 42, potBottom = f ? y - f.rise * KITCHEN_POT.bottom : y - 14;
+    const potW = f ? KITCHEN_PX * KITCHEN_POT.w : 24;
+    if (f) {
+      ctx.drawImage(f.img, f.x, f.y, f.w, f.h);
+      const ringY = y - f.rise * KITCHEN_POT.ring;
+      drawFlames(ctx, x, ringY, (ringY - potBottom) * 1.1, 0.7, now);
+    } else {
+      drawKitchenFallback(ctx, x, y, now);
+    }
+    // Варево побулькивает
+    for (let i = 0; i < 3; i++) {
+      const p = (now * 0.9 + i / 3) % 1;
+      ctx.fillStyle = `rgba(190, 160, 90, ${1 - p})`;
+      ctx.beginPath();
+      ctx.arc(x + (i - 1) * potW * 0.45, potTop + Math.sin(i * 2.1) * 1.5 - p * 3, 1.3 + p * 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Пар
+    for (let i = 0; i < 4; i++) {
+      const p = (now * 0.35 + i / 4) % 1;
+      ctx.fillStyle = `rgba(226, 232, 240, ${0.22 * (1 - p)})`;
+      ctx.beginPath();
+      ctx.arc(x + Math.sin(now + i * 1.9) * 10 + p * 14, potTop - 6 - p * 70, 6 + p * 14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Языки огня: три ряда (оранжевый, жёлтый, белый), высота h
+  function drawFlames(ctx, x, y, h, scale, now) {
+    [['#f97316', 18, 1], ['#facc15', 11, 0.7], ['#fef3c7', 5, 0.35]].forEach(([c, w0, hk], k) => {
+      const w = w0 * scale;
+      ctx.fillStyle = c;
+      for (let i = -1; i <= 1; i++) {
+        const hh = h * hk * (0.75 + 0.25 * Math.sin(now * (9 + i * 2 + k) + i * 1.7));
+        const fx = x + i * w * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(fx - w / 2, y);
+        ctx.quadraticCurveTo(fx - w * 0.35, y - hh * 0.6, fx + Math.sin(now * 6 + i) * 3 * scale, y - hh);
+        ctx.quadraticCurveTo(fx + w * 0.35, y - hh * 0.6, fx + w / 2, y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    });
+  }
+
+  // Пока модель не загрузилась: камни, поленья, огонь, тренога и котёл кодом
+  function drawKitchenFallback(ctx, x, y, now) {
     // Камни
     for (let i = 0; i < 10; i++) {
       const a = i / 10 * Math.PI * 2;
@@ -407,19 +468,7 @@ window.Settlers = (function () {
     ctx.rotate(0.5);
     ctx.fillRect(-16, -3, 32, 6);
     ctx.restore();
-    [['#f97316', 18, 34], ['#facc15', 11, 24], ['#fef3c7', 5, 12]].forEach(([c, w, h], k) => {
-      ctx.fillStyle = c;
-      for (let i = -1; i <= 1; i++) {
-        const hh = h * (0.75 + 0.25 * Math.sin(now * (9 + i * 2 + k) + i * 1.7));
-        const fx = x + i * w * 0.55;
-        ctx.beginPath();
-        ctx.moveTo(fx - w / 2, y);
-        ctx.quadraticCurveTo(fx - w * 0.35, y - hh * 0.6, fx + Math.sin(now * 6 + i) * 3, y - hh);
-        ctx.quadraticCurveTo(fx + w * 0.35, y - hh * 0.6, fx + w / 2, y);
-        ctx.closePath();
-        ctx.fill();
-      }
-    });
+    drawFlames(ctx, x, y, 34, 1, now);
     // Тренога и котёл
     ctx.strokeStyle = '#1f2937';
     ctx.lineWidth = 3;
@@ -447,7 +496,6 @@ window.Settlers = (function () {
     ctx.beginPath();
     ctx.ellipse(x, y - 17, 14, 3, 0, 0, Math.PI);
     ctx.fill();
-    // Варево: бурое, побулькивает
     ctx.fillStyle = '#6b4f1d';
     ctx.beginPath();
     ctx.ellipse(x, y - 42, 24, 7, 0, 0, Math.PI * 2);
@@ -455,28 +503,19 @@ window.Settlers = (function () {
     ctx.strokeStyle = '#374151';
     ctx.lineWidth = 2.5;
     ctx.stroke();
-    for (let i = 0; i < 3; i++) {
-      const p = (now * 0.9 + i / 3) % 1;
-      ctx.fillStyle = `rgba(190, 160, 90, ${1 - p})`;
-      ctx.beginPath();
-      ctx.arc(x - 12 + i * 11, y - 42 + Math.sin(i * 2.1) * 2, 1.5 + p * 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Пар
-    for (let i = 0; i < 4; i++) {
-      const p = (now * 0.35 + i / 4) % 1;
-      ctx.fillStyle = `rgba(226, 232, 240, ${0.22 * (1 - p)})`;
-      ctx.beginPath();
-      ctx.arc(x + Math.sin(now + i * 1.9) * 10 + p * 14, y - 48 - p * 70, 6 + p * 14, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.restore();
   }
 
-  // Ящик-стол с мисками и половником
+  // Стол из ящиков с мисками, хлебом и чайником (модель), пока не загрузилась — ящик с мисками
   function drawBowls(ctx) {
     const x = CANTEEN.x - 82, y = CANTEEN.y - 16;
     ctx.save();
+    const f = modelFrame('prop_kitchen_table', x, y, TABLE_PX);
+    if (f) {
+      shade(ctx, x, y + 3, TABLE_PX * 0.55, 9);
+      ctx.drawImage(f.img, f.x, f.y, f.w, f.h);
+      ctx.restore();
+      return;
+    }
     shade(ctx, x, y + 3, 30, 8);
     ctx.fillStyle = '#8b6b3e';
     ctx.strokeStyle = '#1c1710';

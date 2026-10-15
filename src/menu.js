@@ -250,7 +250,7 @@ window.Menu = (() => {
   let saveRequested = false;
 
   const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED' || gameState === 'INVENTORY' ||
-    gameState === 'DIALOG' || gameState === 'WORKSHOP';
+    gameState === 'DIALOG' || gameState === 'WORKSHOP' || gameState === 'CANTEEN';
 
   // Бой — когда рядом есть враг, который гонится за Василием. Иначе можно было бы сохраниться
   // посреди драки и обновлением страницы сбежать к Михалычу со всем добытым в бою
@@ -267,6 +267,7 @@ window.Menu = (() => {
     const ammo = k => ({ clip: player.ammo[k].clip, reserve: player.ammo[k].reserve });
     // Мир той локации, где Василий, снимается сейчас; другой — каким он был, когда Василий оттуда ушёл
     const worlds = Object.assign({}, locationWorlds, { [currentLocation]: snapshotWorld() });
+    const cBonus = window.Canteen ? window.Canteen.bonus() : { hp: 0, crit: 0 };
     return {
       format: SAVE_FORMAT,
       savedAt: Date.now(),
@@ -280,14 +281,17 @@ window.Menu = (() => {
       quests: window.Quests ? window.Quests.saveState() : undefined,
       // Мастерская Толика: купленные улучшения, бесплатное потрачено, сколько ЭМИ-гранат сделано (src/workshop.js)
       workshop: window.Workshop ? window.Workshop.saveState() : undefined,
+      // Столовая Лены: сколько ещё действуют блюда (src/canteen.js)
+      canteen: window.Canteen ? window.Canteen.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),
-        maxHp: player.maxHp,
+        // Борщ и капли прибавляют на время — сохраняется без надбавки, при загрузке её вернёт Canteen.loadState
+        maxHp: player.maxHp - cBonus.hp,
         stamina: round2(player.stamina),
         maxStamina: player.maxStamina,
         baseDamage: player.baseDamage,
-        critChance: round2(player.critChance),
+        critChance: round2(player.critChance - cBonus.crit),
         critMult: player.critMult,
         items: Object.assign({}, player.items),
         resources: Object.assign({}, player.resources),
@@ -411,6 +415,11 @@ window.Menu = (() => {
     player.arcCharge = Math.floor(num(p.arcCharge, 0, 0, 99999));
     // Мастерская: магазин ПМ и перезарядка обреза зависят от улучшений — до патронов (clip не больше maxClip)
     if (window.Workshop) window.Workshop.loadState(s.workshop);
+    // Столовая: блюда, что ещё действуют; борщ прибавит к maxHp — здоровье с ним читается заново
+    if (window.Canteen) {
+      window.Canteen.loadState(s.canteen);
+      player.hp = num(p.hp, player.maxHp, 1, player.maxHp);
+    }
     ['makarov', 'shotgun', 'launcher'].forEach(k => {
       const a = p.ammo && p.ammo[k];
       if (!a) return;
@@ -837,6 +846,7 @@ window.Menu = (() => {
     else if (gameState === 'INVENTORY') window.CharacterPanel.close();
     else if (gameState === 'DIALOG') window.Dialog.close();
     else if (gameState === 'WORKSHOP') window.Workshop.close();
+    else if (gameState === 'CANTEEN') window.Canteen.close();
     else if (gameState === 'PLAYING') pause();
     else if (gameState === 'PAUSED') resume();
   }

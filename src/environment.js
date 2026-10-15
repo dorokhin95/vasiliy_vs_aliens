@@ -81,6 +81,9 @@ const PZ_MODELS = {
   // Баррикады (src/defense.js drawPiece): грузятся в обеих локациях — пост у пролома стоит и в городе
   prop_sandbag_wall: [3.0, 0.8, 1.0],
   prop_pallet_barricade: [3.0, 1.3, 1.3],
+  // Столовая Лены в городе (src/settlers.js): котёл на треноге над костром, стол из ящиков с посудой
+  prop_field_kitchen: [1.6, 1.6, 1.7],
+  prop_kitchen_table: [1.4, 0.8, 0.9],
   container_boxcar: [14, 3.2, 4.9],
   container_gondola: [14, 3.2, 3.4],
   container_tankcar: [12, 2.9, 4.0],
@@ -100,7 +103,8 @@ const PZ_COLOR = {
   building_mech_workshop: 1, building_oil_tank: 1, building_pump_station: 1, building_smokestack: 1, building_warehouse: 1,
   prop_cable_reel: 1, prop_gantry_crane: 1, prop_locomotive: 1, prop_pipe_rack: 1, prop_pipe_stack: 1,
   // Баррикады из Rodin светлее земли и ящиков рядом
-  prop_sandbag_wall: 0.6, prop_pallet_barricade: 0.68
+  prop_sandbag_wall: 0.6, prop_pallet_barricade: 0.68,
+  prop_field_kitchen: 0.75, prop_kitchen_table: 0.62
 };
 // Тайники Промзоны: тип → модель и длина на карте, px (машины города ~40 px/м, вагоны чуть ужаты)
 const PZ_CONTAINERS = {

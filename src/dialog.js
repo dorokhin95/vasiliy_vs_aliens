@@ -93,7 +93,7 @@ window.Dialog = (function () {
       role: ['Лаборантка · столовая', 'Lab assistant · canteen'],
       greet: [
         ['Василий! Цел? Дай посмотрю… Ладно, живой.', 'Vasiliy! In one piece? Let me look… Fine, you\'ll live.'],
-        ['Похлёбка ещё не готова. Но скоро.', 'The soup isn\'t ready yet. But soon.']
+        ['Котёл кипит. Проголодаешься — скажи.', 'The pot is boiling. Get hungry — just say.']
       ],
       about: [
         ['Я в заводской лаборатории работала. Анализы, пробы шлама, реактивы… Скучно было. Было.', 'I worked in the plant lab. Tests, sludge samples, reagents… It was boring. Was.'],
@@ -214,6 +214,8 @@ window.Dialog = (function () {
       const open = window.Quests && window.Quests.flag(c.place[0]);
       // Мастерская работает — тема открывает её окно (src/workshop.js)
       if (open && c.place[0] === 'workshop' && window.Workshop) list.push([`🔧 ${T(LABELS.workshop)}`, () => window.Workshop.open()]);
+      // Столовая — так же: окно блюд (src/canteen.js)
+      else if (open && c.place[0] === 'canteen' && window.Canteen) list.push([`🍲 ${T(LABELS.canteen)}`, () => window.Canteen.open()]);
       else list.push([T(LABELS[c.place[0]]), () => menu(T(c.place[open ? 2 : 1]))]);
     }
     list.push([T(LABELS.bye), close]);

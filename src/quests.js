@@ -6,6 +6,7 @@
 //     взят, — рядом выпадает предмет (подобрать — подойти). Тайник обыскан раньше, чем взят квест, — предмет
 //     ждёт на земле рядом. Над тайником с предметом — жёлтый «!».
 //   - Цель «принести» (bring: { ресурс: сколько }): квест готов к сдаче, когда у Василия столько есть; сдача забирает.
+//   - Цель «проба» (sample): постоять у первой лужи шлам-прудов Промзоны и нажать E (game.js handleInteract).
 //   - Награда: открыть мастерскую или столовую, патроны на посту при каждом возвращении, ящик припасов,
 //     бесплатное улучшение в мастерской, гранатомёт (src/workshop.js).
 //   - Над головой выжившего: «!» — есть новый квест, «?» — можно сдать. Журнал — вкладка окна инвентаря (J),
@@ -79,6 +80,35 @@ window.Quests = (function () {
       done: ['Он! Все пробы на месте… Теперь я смогу готовить. Столовая открывается — ну, почти.', 'That\'s it! All the samples are here… Now I can cook. The canteen is opening — well, almost.']
     },
     {
+      id: 'lena_broth', giver: 'lena', reward: 'recipesBroth',
+      title: ['Наваристый бульон', 'A hearty broth'],
+      item: ['Лапки и печень', 'Legs and liver'],
+      where: ['Принести Лене 5 жабьих лапок и 3 печени', 'Bring Lena 5 toad legs and 3 livers'],
+      bring: { toad_leg: 5, toad_liver: 3 },
+      offer: [
+        ['Журнал на месте — значит, и рецепты. Только из чего варить? Тушёнка кончается, а люди есть хотят.', 'The log is back — so are the recipes. But what do I cook with? The stew is running out, and people need to eat.'],
+        ['Принеси жабьих лапок штук пять и три печени. Сварю похлёбку и настойку поставлю. Жабье, конечно, но… питательно.', 'Bring me five toad legs and three livers. I\'ll make soup and set a tincture. Toad, sure, but… nourishing.']
+      ],
+      accepted: ['Лапки — с пехоты, печень — со стрелков и громил. Свежее неси, ладно?', 'Legs from the grunts, livers from the gunners and brutes. Fresh ones, okay?'],
+      progress: ['Пять лапок и три печени. Котёл ждёт.', 'Five legs and three livers. The pot is waiting.'],
+      turnIn: ['Вот лапки и печень', 'Here are the legs and livers'],
+      done: ['Вот это бульон будет! Похлёбку и настойку теперь варю — заходи в столовую.', 'Now that\'ll be a broth! I can make the soup and the tincture now — drop by the canteen.']
+    },
+    {
+      id: 'lena_sludge', giver: 'lena', reward: 'recipeOintment', sample: true, icon: 'quest_sludge_sample',
+      title: ['Проба шлама', 'A sludge sample'],
+      item: ['Проба шлама', 'Sludge sample'],
+      where: ['Шлам-пруды на западе Промзоны: набрать пробу у лужи (E)', 'Sludge ponds in the west of the Promzona: take a sample at a puddle (E)'],
+      offer: [
+        ['Шлам этот жжёт, как кислота, а жабы в нём купаются. Значит, его можно обратить — мазь сделать.', 'That sludge burns like acid, yet the toads bathe in it. So it can be turned around — made into an ointment.'],
+        ['Набери мне пробу на шлам-прудах, на западе завода. Вот пробирка. Только в луже долго не стой.', 'Take a sample for me at the sludge ponds in the west of the plant. Here\'s a test tube. Just don\'t stand in the puddle too long.']
+      ],
+      accepted: ['Набрал — и сразу назад. И не нюхай!', 'Fill it and come straight back. And don\'t sniff it!'],
+      progress: ['Проба шлама с прудов. Без неё мазь не сварю.', 'A sludge sample from the ponds. No ointment without it.'],
+      turnIn: ['Вот проба', 'Here\'s the sample'],
+      done: ['Светится… Отлично. Мазь будет — шлам перестанет жечь. Заходи, сварю.', 'It glows… Perfect. You\'ll get an ointment — the sludge won\'t burn anymore. Drop by, I\'ll cook it.']
+    },
+    {
       id: 'stepanych_tags', giver: 'stepanych', reward: 'postAmmo', icon: 'quest_shift_tag',
       title: ['Пропавшая смена', 'The lost shift'],
       item: ['Жетон смены', 'Shift tag'],
@@ -132,11 +162,11 @@ window.Quests = (function () {
   const isActive = q => state[q.id] && state[q.id].s === 'active';
   const isDone = q => state[q.id] && state[q.id].s === 'done';
   const gotCount = q => (state[q.id] ? state[q.id].got.filter(Boolean).length : 0);
-  const isReady = q => isActive(q) && (q.bring ? canAffordCost(q.bring) : gotCount(q) >= q.find.n);
+  const isReady = q => isActive(q) && (q.bring ? canAffordCost(q.bring) : gotCount(q) >= (q.find ? q.find.n : 1));
   // Сколько собрано: «2/3» у поиска, «12/30» у «принести»; пусто, если предмет один
   function progressText(q) {
     if (q.bring) return Object.keys(q.bring).map(k => `${Math.min(player.resources[k] || 0, q.bring[k])}/${q.bring[k]}`).join(', ');
-    return q.find.n > 1 ? `${gotCount(q)}/${q.find.n}` : '';
+    return q.find && q.find.n > 1 ? `${gotCount(q)}/${q.find.n}` : '';
   }
   const suffix = (q, a, b = '') => {
     const p = progressText(q);
@@ -177,7 +207,7 @@ window.Quests = (function () {
   }
 
   function accept(q, ui) {
-    state[q.id] = { s: 'active', got: Array(q.find ? q.find.n : 0).fill(false) };
+    state[q.id] = { s: 'active', got: Array(q.find ? q.find.n : q.sample ? 1 : 0).fill(false) };
     prepared = false;
     showToast(L('НОВОЕ ЗАДАНИЕ', 'NEW QUEST'), `${T(q.title)} — ${T(q.where)}`);
     SoundFX.reload();
@@ -301,6 +331,28 @@ window.Quests = (function () {
     ICONS[q.id].src = iconSrc(q);
   });
 
+  // --- Проба шлама: первая лужа шлам-прудов (раскладка луж постоянная), E рядом ---
+  const SAMPLE_R = 90;
+  const sampleQuest = () => QUESTS.find(q => q.sample && isActive(q) && !state[q.id].got[0]) || null;
+  const sampleSpot = () => (currentLocation === 'promzona' && bioPuddles.length ? bioPuddles[0] : null);
+  function nearSample() {
+    const q = sampleQuest(), p = sampleSpot();
+    return !!(q && p && Math.hypot(player.x - p.x, (player.y - p.y) / GROUND_SQUASH) < SAMPLE_R);
+  }
+  const samplePrompt = () => L('[E] Набрать пробу шлама', '[E] Take a sludge sample');
+  function takeSample() {
+    const q = sampleQuest();
+    if (!q || !nearSample()) return;
+    state[q.id].got[0] = true;
+    const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
+    const name = giver ? L(giver.name[0], giver.name[1]) : '';
+    addFloatingText(player.x - 50, player.y - 50, `+ ${T(q.item)}`, '#a3e635');
+    showToast(T(q.title), L(`Проба набрана. Отнеси — ${name}, Новохмуринск`, `Sample taken. Take it to ${name} in Novokhmurinsk`));
+    createParticles(player.x, player.y - 10, '#a3e635', 14);
+    SoundFX.reload();
+    if (window.Menu) window.Menu.requestSave();
+  }
+
   // --- Отрисовка ---
   // Предмет на земле: светится и подпрыгивает; над тайником с предметом — «!»
   function drawWorld(ctx) {
@@ -351,6 +403,9 @@ window.Quests = (function () {
         drawBang(ctx, c.x, c.y - 70 + Math.sin(now * 3 + k) * 4, '!');
       });
     });
+    // Лужа, где набрать пробу шлама
+    const sp = sampleQuest() ? sampleSpot() : null;
+    if (sp) drawBang(ctx, sp.x, sp.y - 60 + Math.sin(performance.now() / 1000 * 3) * 4, '!');
   }
 
   function drawLabel(ctx, x, y, text) {
@@ -420,7 +475,7 @@ window.Quests = (function () {
   function journal() {
     return QUESTS.filter(q => state[q.id]).map(q => {
       const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
-      const ready = q.bring ? L('Собрано — отнести в Новохмуринск', 'Collected — take it back to Novokhmurinsk')
+      const ready = q.bring || q.sample ? L('Собрано — отнести в Новохмуринск', 'Collected — take it back to Novokhmurinsk')
         : L('Найдено — отнести в Новохмуринск', 'Found — take it back to Novokhmurinsk');
       return {
         icon: iconSrc(q),
@@ -431,5 +486,6 @@ window.Quests = (function () {
     });
   }
 
-  return { saveState, loadState, flag, marker, topic, onWorld, onSearched, update, drawWorld, drawOverlay, drawBang, journal };
+  return { saveState, loadState, flag, marker, topic, onWorld, onSearched, update, drawWorld, drawOverlay, drawBang, journal,
+    nearSample, samplePrompt, takeSample, sampleSpot: () => (sampleQuest() ? sampleSpot() : null) };
 })();

@@ -1,4 +1,5 @@
-// Окно «Инвентарь / Персонаж / Задания»: I — что у Василия с собой (только то, что есть), C — его
+// Окно «Инвентарь / Персонаж / Задания»: I — что у Василия с собой (только то, что есть) и что лежит в ячейках
+// хотбара 1–3 (припас перетаскивается в ячейку или ставится наведением и клавишей 1–3), C — его
 // характеристики, перки, карты и прогресс локации, J — журнал квестов спасённых (src/quests.js). Пока окно открыто, мир стоит (gameState 'INVENTORY'); ESC или та же
 // клавиша закрывают. Скрипты обычные, без модулей: player, currentLang, t и таблицы — из game.js.
 window.CharacterPanel = (function () {
@@ -14,11 +15,9 @@ window.CharacterPanel = (function () {
     ['mil_parts', 'Оружейные детали', 'Weapon parts'],
     ['alien_core', 'Квако-ядра', 'Alien cores']
   ];
-  const SUPPLIES = [
-    ['vodka', 'assets/sprites/loot/loot_vodka.png?v=1026'],
-    ['stew', 'assets/sprites/loot/loot_stew.png?v=1026'],
-    ['bandage', 'assets/sprites/loot/loot_bandage.png?v=1026']
-  ];
+  // Припасы: водка, тушёнка, бинт и блюда столовой Лены (src/canteen.js); картинка и имя — itemInfo (game.js)
+  const SUPPLIES = () => ['vodka', 'stew', 'bandage', ...(window.Canteen ? window.Canteen.DISHES.map(d => d.id) : [])];
+  let hoverSupply = null;   // припас под курсором: клавиша 1–3 кладёт его в ячейку
 
   // TROPHY_NAMES написаны капсом для всплывающих надписей — в списке обычным регистром
   const capitalize = s => s.charAt(0) + s.slice(1).toLowerCase();
@@ -75,6 +74,54 @@ window.CharacterPanel = (function () {
     return s;
   }
 
+  // --- Ячейки хотбара 1–3 (game.js consumableSlots, setConsumableSlot) ---
+  // Перетаскивание: припас -> ячейка; ячейка -> другая (меняются); ячейка -> мимо ячеек (пустеет)
+  function dragFrom(el, value) {
+    el.draggable = true;
+    el.querySelector('img').draggable = false;
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', value);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', () => el.classList.remove('dragging'));
+  }
+
+  function supplyCell(k) {
+    const info = itemInfo(k);
+    const d = cell(info.img, info.name, player.items[k]);
+    d.title = info.title;
+    d.classList.add('inv-supply');
+    dragFrom(d, k);
+    d.addEventListener('mouseenter', () => { hoverSupply = k; });
+    d.addEventListener('mouseleave', () => { if (hoverSupply === k) hoverSupply = null; });
+    return d;
+  }
+
+  function slotCell(i) {
+    const id = consumableSlots[i], info = itemInfo(id);
+    const d = cell(info ? info.img : '', info ? info.name : L('пусто', 'empty'), id ? (player.items[id] || 0) : '');
+    d.classList.add('inv-slot');
+    if (!info) d.querySelector('img').style.visibility = 'hidden';
+    if (info) d.title = info.title;
+    const key = document.createElement('span');
+    key.className = 'inv-slot-key';
+    key.textContent = `[${i + 1}]`;
+    d.prepend(key);
+    if (id) dragFrom(d, `slot:${i}`);
+    d.addEventListener('dragover', e => { e.preventDefault(); d.classList.add('drag-over'); });
+    d.addEventListener('dragleave', () => d.classList.remove('drag-over'));
+    d.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const v = e.dataTransfer.getData('text/plain');
+      if (v.startsWith('slot:')) window.setConsumableSlot(i, consumableSlots[Number(v.slice(5))]);
+      else if (v in player.items) window.setConsumableSlot(i, v);
+      render();
+    });
+    return d;
+  }
+
   function renderInventory(body) {
     const r = player.resources;
     const res = RESOURCES.filter(([k]) => r[k] > 0)
@@ -83,8 +130,7 @@ window.CharacterPanel = (function () {
       .map(k => cell(RES_DISPLAY[k].img, capitalize(L(table[k][0], table[k][1])), r[k], table[k][2]));
     const trophies = named(TROPHY_NAMES);
     const pzLoot = named(PZ_LOOT_NAMES);
-    const supplies = SUPPLIES.filter(([k]) => player.items[k] > 0)
-      .map(([k, img]) => cell(img, t(k), player.items[k]));
+    const supplies = SUPPLIES().filter(k => player.items[k] > 0).map(supplyCell);
     const ammo = [];
     const pm = player.ammo.makarov, sg = player.ammo.shotgun;
     // Патроны — только к купленному оружию: стартовый запас без ствола не нужен
@@ -107,6 +153,9 @@ window.CharacterPanel = (function () {
       .map(it => cell(it.img, L(it.name_ru, it.name_en),
         player.equipped[it.weaponKey] ? L('с собой', 'carried') : L('у Михалыча', 'at Mikhalych'),
         player.equipped[it.weaponKey] ? '#4ade80' : '#94a3b8'));
+    hoverSupply = null;
+    body.append(section(L('Ячейки хотбара 1–3 — перетащи сюда припас (или наведи на него и нажми 1–3)',
+      'Hotbar slots 1–3 — drag a supply here (or hover it and press 1–3)'), [0, 1, 2].map(slotCell)));
     const parts = [
       section(L('Оружие', 'Weapons'), weapons),
       section(L('Патроны (в обойме + запас)', 'Ammo (clip + reserve)'), ammo),
@@ -231,6 +280,23 @@ window.CharacterPanel = (function () {
   $('char-close').addEventListener('click', close);
   $('hud-btn-inventory').addEventListener('click', () => toggle('inventory'));
   $('hud-btn-stats').addEventListener('click', () => toggle('stats'));
+  // Ячейку утащили мимо ячеек — она пустеет
+  $('char-body').addEventListener('dragover', e => e.preventDefault());
+  $('char-body').addEventListener('drop', e => {
+    e.preventDefault();
+    const v = e.dataTransfer.getData('text/plain');
+    if (!v.startsWith('slot:')) return;
+    window.setConsumableSlot(Number(v.slice(5)), null);
+    render();
+  });
+  // Наведи на припас и нажми 1–3 — он в этой ячейке
+  window.addEventListener('keydown', e => {
+    if (!isOpen() || tab !== 'inventory' || !hoverSupply) return;
+    const n = /^Digit[1-3]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
+    if (!n) return;
+    window.setConsumableSlot(n - 1, hoverSupply);
+    render();
+  });
   // Клик по затемнению вокруг окна закрывает его
   $('char-panel').addEventListener('mousedown', e => { if (e.target.id === 'char-panel') close(); });
 

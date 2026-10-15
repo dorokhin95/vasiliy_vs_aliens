@@ -14,6 +14,9 @@
 
 // Баррикады — в обеих локациях (loadBarricades)
 const BARRICADE_MODELS = ['prop_sandbag_wall', 'prop_pallet_barricade'];
+// Полевая кухня и стол столовой Лены (src/settlers.js) — тоже грузятся сразу, смотрят прямо (кадр 0)
+const CANTEEN_MODELS = ['prop_field_kitchen', 'prop_kitchen_table'];
+const ALWAYS_PZ_MODELS = [...BARRICADE_MODELS, ...CANTEEN_MODELS];
 
 class ThreePropsManager {
   constructor() {
@@ -200,7 +203,7 @@ class ThreePropsManager {
    * Стоят вдоль дуги — нужны все 16 направлений
    */
   loadBarricades() {
-    const configs = BARRICADE_MODELS.map(key => {
+    const configs = ALWAYS_PZ_MODELS.map(key => {
       this.models[key] = null;
       this.isLoaded[key] = false;
       this.roots[key] = new THREE.Group();
@@ -213,6 +216,7 @@ class ThreePropsManager {
       BARRICADE_MODELS.filter(key => this.isLoaded[key]).forEach(key => {
         for (let dir = 0; dir < this.numDirections; dir++) tasks.push(() => this.getFrameCanvas(key, dir));
       });
+      CANTEEN_MODELS.filter(key => this.isLoaded[key]).forEach(key => tasks.push(() => this.getFrameCanvas(key, 0)));
       runIdleTasks(tasks);
     });
   }
@@ -237,14 +241,14 @@ class ThreePropsManager {
       this.scene.add(this.roots[key]);
       configs.push({ key, file: `assets/models/${key}.glb`, targetSpan: pzSpan(key.replace(/_open$/, '')), colorScale: PZ_COLOR[key] || 0.86, frameSize });
     };
-    Object.keys(PZ_MODELS).filter(key => !BARRICADE_MODELS.includes(key)).forEach(key => {
+    Object.keys(PZ_MODELS).filter(key => !ALWAYS_PZ_MODELS.includes(key)).forEach(key => {
       // Цеха рисуются до ~1500 px, вагоны и декор — до ~500
       add(key, key.startsWith('building_') ? 1024 : 512);
       if (key.startsWith('container_') || key.startsWith('safe_')) add(key + '_open', 512);
     });
     this.loadConfigs(configs, () => {
       const frames = [];
-      Object.keys(PZ_MODELS).filter(key => !BARRICADE_MODELS.includes(key)).forEach(key => {
+      Object.keys(PZ_MODELS).filter(key => !ALWAYS_PZ_MODELS.includes(key)).forEach(key => {
         frames.push([key, 0]);
         if (key.startsWith('container_')) frames.push([key, 8], [key + '_open', 0], [key + '_open', 8]);
         if (key.startsWith('safe_')) frames.push([key + '_open', 0]);

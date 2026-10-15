@@ -1054,9 +1054,7 @@ function updateUILanguage() {
   document.getElementById('lbl-hp').innerText = t('hp');
   document.getElementById('lbl-stamina').innerText = t('stamina');
   document.getElementById('lbl-armor').innerText = t('armor');
-  document.getElementById('lbl-vodka').innerText = t('vodka');
-  document.getElementById('lbl-stew').innerText = t('stew');
-  document.getElementById('lbl-bandage').innerText = t('bandage');
+  if (typeof refreshConsumableSlots === 'function') refreshConsumableSlots();
   const lblBat = document.getElementById('lbl-w-bat');
   if (lblBat) lblBat.innerText = currentLang === 'ru' ? 'Бита' : 'Spiked Bat';
   const lblMakarov = document.getElementById('lbl-w-makarov');
@@ -1202,8 +1200,12 @@ const player = {
   items: {
     vodka: 0,
     stew: 1,
-    bandage: 2
+    bandage: 2,
+    // Столовая Лены (src/canteen.js)
+    soup: 0, tincture: 0, jelly: 0, compress: 0, drops: 0, ointment: 0, borscht: 0
   },
+  buffs: {},            // блюда столовой, что действуют сейчас: кадры (src/canteen.js)
+  healRate: 0,          // с какой скоростью лечит наложенное (студень — быстрее бинта)
   resources: {
     bottles: 0,
     scrap: 0,
@@ -2236,7 +2238,9 @@ window.addEventListener('wheel', (e) => {
 }, { passive: true });
 
 // --- ХОТБАР: слоты перетаскиваются мышью, клавиши 1–8 идут по видимому порядку, порядок сохраняется ---
-const HOTBAR_DEFAULT_ORDER = ['vodka', 'stew', 'bandage', 'bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser'];
+// Ячейки 1–3 (c0, c1, c2) — расходники, какой в какой — выбирает игрок (consumableSlots); оружие — с 4-й
+const HOTBAR_CONSUMABLES = ['c0', 'c1', 'c2'];
+const HOTBAR_DEFAULT_ORDER = ['c0', 'c1', 'c2', 'bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser'];
 const HOTBAR_WEAPONS = new Set(['bat', 'makarov', 'drill', 'shotgun', 'plasma', 'launcher', 'arc', 'emp', 'laser']);
 const HOTBAR_STORAGE_KEY = 'vasiliy.hotbarOrder';
 let hotbarOrder = loadHotbarOrder();
@@ -2245,13 +2249,76 @@ function loadHotbarOrder() {
   try {
     const saved = JSON.parse(localStorage.getItem(HOTBAR_STORAGE_KEY));
     if (Array.isArray(saved)) {
-      // Порядок игрока, а слоты, которых тогда ещё не было (лазер), — в конец
+      // Порядок игрока, а слоты, которых тогда ещё не было (лазер), — в конец. Старый порядок (водка, тушёнка,
+      // бинт отдельными ячейками) — без них: на их месте ячейки расходников
       const known = saved.filter(id => HOTBAR_DEFAULT_ORDER.includes(id));
       const order = [...new Set(known), ...HOTBAR_DEFAULT_ORDER.filter(id => !known.includes(id))];
-      if (order.length === HOTBAR_DEFAULT_ORDER.length) return order;
+      if (order.length === HOTBAR_DEFAULT_ORDER.length) return consumablesFirst(order);
     }
   } catch (e) { /* хранилище недоступно — порядок по умолчанию */ }
   return HOTBAR_DEFAULT_ORDER.slice();
+}
+
+// Ячейки расходников всегда первые три (между собой — в порядке игрока)
+function consumablesFirst(order) {
+  return [...order.filter(id => HOTBAR_CONSUMABLES.includes(id)), ...order.filter(id => !HOTBAR_CONSUMABLES.includes(id))];
+}
+
+// Что лежит в ячейках расходников: id предмета (player.items) или null. Выбор — в окне инвентаря (src/inventory.js)
+const CONSUMABLE_SLOTS_KEY = 'vasiliy.consumableSlots';
+const BASE_ITEMS = {
+  vodka: { img: 'assets/sprites/loot/loot_vodka.png?v=1026' },
+  stew: { img: 'assets/sprites/loot/loot_stew.png?v=1026' },
+  bandage: { img: 'assets/sprites/loot/loot_bandage.png?v=1026' }
+};
+// var: updateUILanguage может позвать refreshConsumableSlots раньше этой строки
+var consumableSlots = loadConsumableSlots();
+
+function loadConsumableSlots() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONSUMABLE_SLOTS_KEY));
+    if (Array.isArray(saved) && saved.length === 3) return saved.map(id => (typeof id === 'string' ? id : null));
+  } catch (e) { /* по умолчанию */ }
+  return ['vodka', 'stew', 'bandage'];
+}
+
+// Картинка, короткое имя и подсказка расходника: свои — у водки, тушёнки, бинта, блюда — из src/canteen.js
+function itemInfo(id) {
+  if (!id) return null;
+  if (BASE_ITEMS[id]) return { img: BASE_ITEMS[id].img, name: t(id), title: t(id) };
+  return window.Canteen ? window.Canteen.info(id) : null;
+}
+
+// Поставить расходник в ячейку i (0–2); если он уже в другой — ячейки меняются местами. null — убрать
+window.setConsumableSlot = function(i, id) {
+  if (i < 0 || i > 2) return;
+  id = id || null;
+  const j = id ? consumableSlots.indexOf(id) : -1;
+  if (j >= 0 && j !== i) consumableSlots[j] = consumableSlots[i];
+  consumableSlots[i] = id;
+  try { localStorage.setItem(CONSUMABLE_SLOTS_KEY, JSON.stringify(consumableSlots)); } catch (e) { /* не критично */ }
+  refreshConsumableSlots();
+};
+
+// Картинка, подпись и счётчик в ячейках расходников
+function refreshConsumableSlots() {
+  if (!consumableSlots) return;
+  HOTBAR_CONSUMABLES.forEach((slotId, i) => {
+    const el = document.querySelector(`.hotbar-slot[data-slot="${slotId}"]`);
+    if (!el) return;
+    const id = consumableSlots[i], info = itemInfo(id);
+    const img = el.querySelector('.slot-img'), name = el.querySelector('.slot-name'), count = el.querySelector('.slot-count');
+    const n = id ? (player.items[id] || 0) : 0;
+    const key = `${currentLang}|${id}|${n}`;
+    if (el._slotKey === key) return;
+    el._slotKey = key;
+    img.style.visibility = info ? 'visible' : 'hidden';
+    if (info && img.getAttribute('src') !== info.img) img.src = info.img;
+    name.textContent = info ? info.name : '—';
+    count.textContent = id ? n : '';
+    el.title = info ? info.title : '';
+    el.classList.toggle('empty', !id || n <= 0);
+  });
 }
 
 function saveHotbarOrder() {
@@ -2268,7 +2335,10 @@ function visibleHotbarSlots() {
 
 function activateHotbarSlot(id) {
   if (HOTBAR_WEAPONS.has(id)) window.switchWeapon(id);
-  else window.useItem(id);
+  else if (HOTBAR_CONSUMABLES.includes(id)) {
+    const item = consumableSlots[HOTBAR_CONSUMABLES.indexOf(id)];
+    if (item) window.useItem(item);
+  }
 }
 
 // Расставляет слоты в DOM по hotbarOrder и подписывает клавиши [1]..[N] у видимых
@@ -2321,7 +2391,7 @@ function initHotbarDrag() {
     drag = null;
     slot.classList.remove('dragging');
     if (moved) {
-      hotbarOrder = [...bar.querySelectorAll('.hotbar-slot')].map(s => s.dataset.slot);
+      hotbarOrder = consumablesFirst([...bar.querySelectorAll('.hotbar-slot')].map(s => s.dataset.slot));
       saveHotbarOrder();
       applyHotbarOrder();
     } else if (e.type === 'pointerup') {
@@ -2357,7 +2427,9 @@ function startGame(save = null) {
   player.cards = { speed: 0, agility: 0, vitality: 0, laser: 0, dash: 0, regen: 0 };
   player.pendingCards = false;
   cardOfferTimer = 0;
-  player.items = { vodka: 0, stew: 1, bandage: 2 };
+  player.items = { vodka: 0, stew: 1, bandage: 2, soup: 0, tincture: 0, jelly: 0, compress: 0, drops: 0, ointment: 0, borscht: 0 };
+  player.buffs = {};
+  player.healRate = 0;
   player.resources = {
     bottles: 0, scrap: 0, mil_parts: 0, alien_core: 0, toad_eye: 0, toad_leg: 0, toad_liver: 0,
     nonferrous: 0, blueprint: 0, tech_spirit: 0, plasma_cell: 0, kvako_charge: 0, electronics: 0
@@ -2540,6 +2612,7 @@ function handleInteract() {
     if (levelCleared) breakFence();
   }
   else if (nearbyInteractable.type === 'settler') window.Settlers.talk(nearbyInteractable.target);
+  else if (nearbyInteractable.type === 'sample') window.Quests.takeSample();
   else if (nearbyInteractable.type === 'container') {
     const c = nearbyInteractable.target;
     if (window.Safes && window.Safes.isSafe(c)) window.Safes.open(c);
@@ -3224,6 +3297,8 @@ window.useItem = function(itemType) {
     player.stamina = Math.min(player.maxStamina, player.stamina + 65);
     addFloatingText(player.x, player.y - 30, "+65 ВЫНОСЛИВ.", '#38bdf8');
     createParticles(player.x, player.y, '#38bdf8', 10);
+  } else if (window.Canteen && window.Canteen.isDish(itemType)) {
+    window.Canteen.use(itemType);
   } else if (itemType === 'bandage') {
     // Лечение идёт в update(), BANDAGE_HEAL за BANDAGE_HEAL_FRAMES; карта «Живучесть» — больше
     player.healLeft += BANDAGE_HEAL * (1 + CARD_EFFECTS.vitalityBandage * (player.cards.vitality || 0));
@@ -5856,7 +5931,8 @@ function drawBreachMarker() {
 const FUME_AURA_RADIUS = 140;
 // Пьяная рука: разброс растёт, если не взят «Заговорённый спирт»
 function drunkAim() {
-  return player.isDrunk && !player.hasPerk('charmed_spirit');
+  // Настойка на печени (src/canteen.js) — рука твёрдая, как с «Заговорённым спиртом»
+  return player.isDrunk && !player.hasPerk('charmed_spirit') && !(window.Canteen && window.Canteen.steady());
 }
 // С «Заговорённым спиртом» облако у пьяного Василия шире
 function fumeAuraRadius() {
@@ -6585,18 +6661,7 @@ function updateHUD(forceWeaponRefresh = false) {
     document.getElementById('stamina-bar').style.width = `${stamPct}%`;
   }
 
-  if (_hudCache.vodka !== player.items.vodka) {
-    _hudCache.vodka = player.items.vodka;
-    document.getElementById('count-vodka').innerText = player.items.vodka;
-  }
-  if (_hudCache.stew !== player.items.stew) {
-    _hudCache.stew = player.items.stew;
-    document.getElementById('count-stew').innerText = player.items.stew;
-  }
-  if (_hudCache.bandage !== player.items.bandage) {
-    _hudCache.bandage = player.items.bandage;
-    document.getElementById('count-bandage').innerText = player.items.bandage;
-  }
+  refreshConsumableSlots(); // ячейки 1–3: что в них и сколько
   const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).length;
   // Босс своей локации: Мясник в городе, Долбильщик в Промзоне
   const bossAlive = currentLocation === 'promzona' ? !!pounderRef : !!bossRef;
@@ -8836,7 +8901,8 @@ function update() {
   // Био-лужа: кислота жжёт (перекат проскакивает без урона), скорость режется ниже
   player.inSlime = inBioPuddle(player.x, player.y + footDY(player));
   updateSlimeArmor();
-  if (player.inSlime && !player.isRolling) {
+  const sludgeProof = !!(window.Canteen && window.Canteen.sludgeProof()); // мазь, компресс (src/canteen.js)
+  if (player.inSlime && !player.isRolling && !sludgeProof) {
     player.hp -= BIO_PUDDLE_DPS / 60;
     player.slimeTick = (player.slimeTick || 0) + 1;
     if (player.slimeTick % 10 === 0) createParticles(player.x, player.y + 24, '#84cc16', 2);
@@ -8846,9 +8912,10 @@ function update() {
   if (player.itemCooldown > 0) player.itemCooldown--;
   if (player.unarmedHintCd > 0) player.unarmedHintCd--;
   if (player.healLeft > 0) {
-    const h = Math.min(player.healLeft, BANDAGE_HEAL / BANDAGE_HEAL_FRAMES);
+    const h = Math.min(player.healLeft, Math.max(player.healRate || 0, BANDAGE_HEAL / BANDAGE_HEAL_FRAMES));
     player.healLeft -= h;
     player.hp = Math.min(player.maxHp, player.hp + h);
+    if (player.healLeft <= 0) player.healRate = 0;
   }
 
   // Восстановление выносливости (медленнее, чтобы в бою на битах нужно было следить за дыханием и пить тушёнку!)
@@ -8906,7 +8973,7 @@ function update() {
 
   let currentSpeed = player.speed;
   if (player.hasPerk('slime_skin')) currentSpeed *= 1.22;
-  if (player.inSlime) currentSpeed *= BIO_PUDDLE_SLOW;
+  if (player.inSlime && !(window.Canteen && window.Canteen.sludgeProof())) currentSpeed *= BIO_PUDDLE_SLOW;
   if (player.dazeTimer > 0) {
     player.dazeTimer--;
     currentSpeed *= player.dazeMult;
@@ -9011,6 +9078,8 @@ function update() {
     nearbyInteractable = { type: 'breach' };
   } else if (window.Settlers && window.Settlers.nearest()) {
     nearbyInteractable = { type: 'settler', target: window.Settlers.nearest() };
+  } else if (window.Quests && window.Quests.nearSample()) {
+    nearbyInteractable = { type: 'sample' }; // квест Лены «Проба шлама» (src/quests.js)
   } else {
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
@@ -9035,6 +9104,7 @@ function update() {
       const type = nearbyInteractable.type;
       promptEl.innerText = type === 'shop' ? t('prompt_shop')
         : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
+        : type === 'sample' ? window.Quests.samplePrompt()
         : settlerPrompt || safePrompt || t('prompt_search');
     } else {
       promptEl.style.display = 'none';
@@ -9154,6 +9224,7 @@ function update() {
   updateFireGoo();
   if (window.Safes) window.Safes.update();
   if (window.Workshop) window.Workshop.update();
+  if (window.Canteen) window.Canteen.update();
   if (window.Defense) window.Defense.update();
   if (window.Settlers) window.Settlers.update();
   if (window.Quests) window.Quests.update();
