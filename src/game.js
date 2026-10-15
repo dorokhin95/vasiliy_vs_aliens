@@ -3079,7 +3079,11 @@ function renderUpgradeTrees() {
       costEl.className = 'perk-cost';
       costEl.innerHTML = formatCostHTML(perk.cost);
 
-      card.appendChild(nameEl);
+      const head = document.createElement('div');
+      head.className = 'perk-head';
+      head.appendChild(perkIconImg(perk.id, 'perk-icon'));
+      head.appendChild(nameEl);
+      card.appendChild(head);
       card.appendChild(descEl);
       card.appendChild(costEl);
 
@@ -6639,7 +6643,7 @@ function updateHUD(forceWeaponRefresh = false) {
     if (ab) {
       const cdFrames = rmbCooldown(ab);
       const cd = cdFrames > 0 ? Math.ceil(cdFrames / 60) : 0;
-      setHudText(document.getElementById('rmb-ability-icon'), RMB_ABILITIES[ab].icon);
+      setRmbIcon(document.getElementById('rmb-ability-icon'), ab);
       setHudText(document.getElementById('rmb-ability-more'), rmbAbilities().length > 1 ? 'F ⇄' : '');
       setHudText(document.getElementById('rmb-ability-cd'), cd ? `${cd}` : (currentLang === 'ru' ? 'ПКМ' : 'RMB'));
       abEl.classList.toggle('cooling', cd > 0);
@@ -7287,7 +7291,10 @@ function updatePounder(e, playerInSafe, hasFumeAura) {
   const dx = player.x - e.x, dy = player.y - e.y;
   const dist = Math.hypot(dx, dy);
   const playerInLair = Math.hypot(player.x - POUNDER_HOME.x, player.y - POUNDER_HOME.y) < POUNDER_LEASH;
-  if (!e.isAggroed && dist < e.aggroRadius && !playerInSafe) e.isAggroed = true;
+  if (!e.isAggroed && dist < e.aggroRadius && !playerInSafe) {
+    e.isAggroed = true;
+    if (!e.isClone && !e.isMini) introducePounder();
+  }
   if (e.isAggroed && !e.isClone && e.hp < e.maxHp * POUNDER_PULL_AT && !e.engaged) {
     e.engaged = true;
     raisePounderArena(e);
@@ -7412,6 +7419,20 @@ function summonPounderSnipers(e) {
 }
 
 // Барьер встаёт вокруг места боя — посередине между Долбильщиком и Василием (оба внутри)
+// Кадр представления (src/comic.js, набор pounder): один раз, когда Долбильщик впервые заметил Василия.
+// Пока кадр не загрузился (или его нет) — бой без представления, флаг не ставится
+const pounderIntroImg = new Image();
+pounderIntroImg.src = 'assets/comic/pounder_intro.webp';
+function introducePounder() {
+  if (!window.Comic || window.Comic.seen('pounder') || gameState !== 'PLAYING') return;
+  if (!pounderIntroImg.complete || !pounderIntroImg.naturalWidth) return;
+  gameState = 'TRANSIT';
+  window.Comic.play(() => {
+    gameState = 'PLAYING';
+    autoScale.hold(2000);
+  }, 'pounder');
+}
+
 function raisePounderArena(e) {
   e.arena = { x: (e.x + player.x) / 2, y: (e.y + player.y) / 2, r: POUNDER_ARENA_R, t: 0, hitCd: 0 };
   addFloatingText(player.x - 70, player.y - 90, currentLang === 'ru' ? '⛔ Барьер — не уйти!' : '⛔ Barrier — no way out!', '#c084fc');

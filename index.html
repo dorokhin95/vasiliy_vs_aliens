@@ -366,6 +366,8 @@
       border-bottom: 1px solid #1e293b;
     }
     .stat-row b { color: #f8fafc; }
+    .stat-row .perk-mini { width: 20px; height: 20px; vertical-align: middle; margin-right: 5px; }
+    .stat-row .quest-mini { width: 28px; height: 28px; vertical-align: middle; margin-right: 6px; }
     .stat-row.perk-row b { color: #94a3b8; font-weight: 400; text-align: right; }
     .char-section-grid { display: flex; flex-direction: column; }
     .char-close { align-self: center; }
@@ -397,6 +399,25 @@
       font-family: Consolas, monospace;
       color: #e2e8f0;
     }
+    /* Фон — дверь сейфа своего типа (tools/make_safe_ui.py) под тёмной вуалью */
+    .safe-panel[data-door] { background-size: cover, cover; background-position: center, center; }
+    .safe-panel[data-door="safe_cabinet"] {
+      background-image: linear-gradient(rgba(12, 15, 20, 0.62), rgba(12, 15, 20, 0.8)), url(assets/sprites/safe/door_cabinet.webp);
+    }
+    .safe-panel[data-door="safe_fireproof"] {
+      background-image: linear-gradient(rgba(12, 15, 20, 0.55), rgba(12, 15, 20, 0.78)), url(assets/sprites/safe/door_fireproof.webp);
+    }
+    .safe-panel[data-door="safe_vault"] {
+      background-image: linear-gradient(rgba(12, 15, 20, 0.45), rgba(12, 15, 20, 0.75)), url(assets/sprites/safe/door_vault.webp);
+    }
+    /* Лимб с меткой сверху: поворачивается к набранной цифре (src/safes.js, turnDial) */
+    .safe-dial-wrap { position: relative; width: 92px; height: 92px; margin: 0 auto; }
+    .safe-dial { width: 92px; height: 92px; display: block; transition: transform 0.28s ease-out; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.6)); }
+    .safe-dial-wrap::after {
+      content: ''; position: absolute; top: -5px; left: 50%; transform: translateX(-50%);
+      border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 10px solid #ef4444;
+      filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.8));
+    }
     .safe-head { display: flex; justify-content: space-between; align-items: center; }
     .safe-title { font-weight: 800; font-size: 14px; color: #fde68a; font-family: "Segoe UI", sans-serif; }
     .safe-close { background: none; border: none; color: #94a3b8; font-size: 16px; cursor: pointer; }
@@ -412,10 +433,11 @@
       font-size: 20px; font-weight: 700; color: #fef3c7;
     }
     .safe-row.current .safe-digit { border-color: #fbbf24; }
-    .safe-lamp { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #1f2937; border: 1px solid #374151; }
+    /* Лампочки — картинки (tools/make_safe_ui.py), по краю у горящих — ещё свечение */
+    .safe-lamp { width: 15px; height: 15px; border-radius: 50%; display: inline-block; background: center / contain no-repeat url(assets/sprites/safe/lamp_off.png); }
     .safe-lamp.none { visibility: hidden; }
-    .safe-lamp.green { background: #22c55e; box-shadow: 0 0 6px #22c55e; border-color: #86efac; }
-    .safe-lamp.yellow { background: #eab308; box-shadow: 0 0 6px #eab308; border-color: #fde047; }
+    .safe-lamp.green { background-image: url(assets/sprites/safe/lamp_green.png); box-shadow: 0 0 6px rgba(34, 197, 94, 0.7); }
+    .safe-lamp.yellow { background-image: url(assets/sprites/safe/lamp_yellow.png); box-shadow: 0 0 6px rgba(234, 179, 8, 0.7); }
     .safe-legend { font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: center; }
     .safe-keypad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
     .safe-key {
@@ -785,7 +807,8 @@
       z-index: 10;
       pointer-events: none;
     }
-    .rmb-ability .rmb-icon { font-size: 20px; }
+    .rmb-ability .rmb-icon { font-size: 20px; display: flex; }
+    .rmb-ability .rmb-icon img { width: 28px; height: 28px; }
     .rmb-ability .rmb-more { color: #facc15; font-size: 11px; }
     .rmb-ability.cooling { opacity: 0.55; }
     .rmb-ability.active { border-color: #4ade80; box-shadow: 0 0 12px rgba(74, 222, 128, 0.5); }
@@ -1046,6 +1069,8 @@
       border-color: #ef4444;
       background: rgba(239, 68, 68, 0.05);
     }
+    .perk-head { display: flex; align-items: center; gap: 8px; }
+    .perk-icon { width: 44px; height: 44px; flex: none; }
     .perk-name {
       font-size: 13px;
       font-weight: bold;
@@ -1717,6 +1742,7 @@
         <div class="safe-title" id="safe-title"></div>
         <button class="safe-close" id="safe-close" title="ESC / E">✕</button>
       </div>
+      <div class="safe-dial-wrap"><img class="safe-dial" id="safe-dial" src="assets/sprites/safe/dial.png" alt=""></div>
       <div class="safe-attempts" id="safe-attempts"></div>
       <div class="safe-hint" id="safe-hint"></div>
       <div class="safe-rows" id="safe-rows"></div>
@@ -1847,23 +1873,23 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
   <script src="src/shadows.js?v=1135"></script>
-  <script src="src/environment.js?v=1153"></script>
+  <script src="src/environment.js?v=1162"></script>
   <script src="src/three_character.js?v=1125"></script>
   <script src="src/three_enemies.js?v=1134"></script>
-  <script src="src/three_props.js?v=1133"></script>
+  <script src="src/three_props.js?v=1160"></script>
   <script src="src/three_boss.js?v=1138"></script>
   <script src="src/three_survivors.js?v=1153"></script>
-  <script src="src/perks_pz.js?v=1158"></script>
-  <script src="src/game.js?v=1158"></script>
+  <script src="src/perks_pz.js?v=1160"></script>
+  <script src="src/game.js?v=1160"></script>
   <script src="src/menu.js?v=1157"></script>
-  <script src="src/comic.js?v=1125"></script>
+  <script src="src/comic.js?v=1160"></script>
   <script src="src/cards.js?v=1126"></script>
-  <script src="src/inventory.js?v=1157"></script>
-  <script src="src/safes.js?v=1157"></script>
-  <script src="src/defense.js?v=1153"></script>
-  <script src="src/settlers.js?v=1157"></script>
+  <script src="src/inventory.js?v=1160"></script>
+  <script src="src/safes.js?v=1160"></script>
+  <script src="src/defense.js?v=1161"></script>
+  <script src="src/settlers.js?v=1160"></script>
   <script src="src/dialog.js?v=1157"></script>
-  <script src="src/quests.js?v=1158"></script>
+  <script src="src/quests.js?v=1160"></script>
   <script src="src/practice.js?v=1141"></script>
 </body>
 </html>

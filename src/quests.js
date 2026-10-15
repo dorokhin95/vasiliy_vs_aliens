@@ -17,7 +17,7 @@ window.Quests = (function () {
 
   const QUESTS = [
     {
-      id: 'tolik_rig', giver: 'tolik', reward: 'workshop', guard: true,
+      id: 'tolik_rig', giver: 'tolik', reward: 'workshop', guard: true, icon: 'quest_welding_rig',
       title: ['Сварочный аппарат', 'The welding rig'],
       item: ['Сварочный аппарат', 'Welding rig'],
       where: ['Механические цеха, кузов ЗИЛа', 'Machine shops, the ZIL truck bed'],
@@ -32,7 +32,7 @@ window.Quests = (function () {
       done: ['Живой! И аппарат живой! Дай мне его настроить — и мастерская заработает.', 'You\'re alive! And so is the rig! Let me set it up — and the workshop will be open.']
     },
     {
-      id: 'lena_log', giver: 'lena', reward: 'canteen',
+      id: 'lena_log', giver: 'lena', reward: 'canteen', icon: 'quest_sample_log',
       title: ['Лабораторный журнал', 'The lab log'],
       item: ['Журнал проб', 'Sample log'],
       where: ['Заводоуправление, несгораемый шкаф', 'Plant administration, the fireproof cabinet'],
@@ -47,7 +47,7 @@ window.Quests = (function () {
       done: ['Он! Все пробы на месте… Теперь я смогу готовить. Столовая открывается — ну, почти.', 'That\'s it! All the samples are here… Now I can cook. The canteen is opening — well, almost.']
     },
     {
-      id: 'stepanych_tags', giver: 'stepanych', reward: 'postAmmo',
+      id: 'stepanych_tags', giver: 'stepanych', reward: 'postAmmo', icon: 'quest_shift_tag',
       title: ['Пропавшая смена', 'The lost shift'],
       item: ['Жетон смены', 'Shift tag'],
       where: ['Литейный цех, бочки и кузов', 'Foundry, barrels and a truck bed'],
@@ -62,7 +62,7 @@ window.Quests = (function () {
       done: ['…Петров. Гуляев. Сашка Мохов… Спасибо. Пусть хоть имена останутся. Возвращаться будешь — заходи на пост, патронов отсыплю. Каждый раз.', '…Petrov. Gulyaev. Sashka Mokhov… Thank you. At least their names remain. Whenever you come back, drop by the post — I\'ll give you ammo. Every time.']
     },
     {
-      id: 'zina_armory', giver: 'zina', reward: 'armory',
+      id: 'zina_armory', giver: 'zina', reward: 'armory', icon: 'quest_guard_log',
       title: ['Оружейка ВОХР', 'The guard armory'],
       item: ['Журнал караула', 'Guard log'],
       where: ['Заводоуправление, кассовый сейф', 'Plant administration, the vault'],
@@ -251,6 +251,14 @@ window.Quests = (function () {
     updateTracker();
   }
 
+  // Значки предметов (icon): assets/sprites/quest/ (tools/make_trophy_sprites.py quest) — на земле и в журнале
+  const iconSrc = q => `assets/sprites/quest/${q.icon}.png?v=1`;
+  const ICONS = {};
+  QUESTS.forEach(q => {
+    ICONS[q.id] = new Image();
+    ICONS[q.id].src = iconSrc(q);
+  });
+
   // --- Отрисовка ---
   // Предмет на земле: светится и подпрыгивает; над тайником с предметом — «!»
   function drawWorld(ctx) {
@@ -268,6 +276,13 @@ window.Quests = (function () {
       ctx.ellipse(p.x, p.y, 40, 40 * GROUND_SQUASH, 0, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
+      const icon = ICONS[p.q.id];
+      if (icon && icon.complete && icon.naturalWidth) {
+        ctx.drawImage(icon, p.x - 21, p.y - 44 + bob, 42, 42);
+        drawLabel(ctx, p.x, p.y - 48 + bob, T(p.q.item));
+        return;
+      }
+      // Пока значок не загрузился — ящичек
       ctx.save();
       ctx.fillStyle = '#f59e0b';
       ctx.strokeStyle = '#451a03';
@@ -366,6 +381,7 @@ window.Quests = (function () {
       const giver = window.Defense.SURVIVORS.find(s => s.id === q.giver);
       const n = q.find.n > 1 ? ` — ${gotCount(q)} / ${q.find.n}` : '';
       return {
+        icon: iconSrc(q),
         title: T(q.title), giver: giver ? L(giver.name[0], giver.name[1]) : '',
         text: isDone(q) ? T(q.done) : isReady(q) ? L('Найдено — отнести в Новохмуринск', 'Found — take it back to Novokhmurinsk') : `${T(q.where)}${n}`,
         state: isDone(q) ? 'done' : isReady(q) ? 'ready' : 'active'

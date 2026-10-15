@@ -59,8 +59,21 @@ window.Safes = (function () {
     cur = c;
     input = [];
     lastHp = player.hp;
+    $('safe-panel').dataset.door = c.type;   // фон — дверь этого типа (assets/sprites/safe/, index.html)
+    turnDial(0);
     render();
     $('safe-panel').style.display = 'flex';
+  }
+
+  // Лимб (assets/sprites/safe/dial.png: 0 — сверху, цифры по часовой через 36°) поворачивается к набранной
+  // цифре кратчайшим путём; spin — полный оборот при вводе кода
+  let dialAngle = 0;
+  function turnDial(d, spin = 0) {
+    let target = -d * 36;
+    target += Math.round((dialAngle - target) / 360) * 360;
+    dialAngle = target + spin;
+    const el = $('safe-dial');
+    if (el) el.style.transform = `rotate(${dialAngle}deg)`;
   }
 
   function close() {
@@ -73,6 +86,7 @@ window.Safes = (function () {
   function press(d) {
     if (!cur || input.length >= SAFE_TYPES[cur.type].digits) return;
     input.push(d);
+    turnDial(d);
     SoundFX.emptyClick();
     render();
   }
@@ -91,6 +105,7 @@ window.Safes = (function () {
     const lamps = input.map((d, i) => (d === s.code[i] ? 'green' : s.code.includes(d) ? 'yellow' : 'off'));
     s.guesses.push({ digits: input.slice(), lamps });
     input = [];
+    turnDial(0, 360);
     if (lamps.every(l => l === 'green')) {
       crack(cur);
       return;

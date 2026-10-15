@@ -18,9 +18,12 @@ window.Defense = (function () {
   const R = 300;
   // [угол, градусы (0 — восток, 270 — север), что стоит]; через 15°, пропуски на 225° и 315° — проходы
   const PIECES = [
-    [180, 'bags'], [195, 'crates'], [210, 'bags'], [240, 'bags'], [255, 'barrels'], [270, 'bags'], [285, 'crates'],
-    [300, 'bags'], [330, 'bags'], [345, 'barrels'], [360, 'bags']
+    [180, 'bags'], [195, 'crates'], [210, 'pallets'], [240, 'bags'], [255, 'barrels'], [270, 'bags'], [285, 'crates'],
+    [300, 'bags'], [330, 'pallets'], [345, 'barrels'], [360, 'bags']
   ];
+  // Мешки и поддоны — 3D-модели стенок (PZ_MODELS), поворачиваются вдоль дуги; пока не загрузились — мешки кодом
+  const WALL_MODEL = { bags: 'prop_sandbag_wall', pallets: 'prop_pallet_barricade' };
+  const WALL_PX = 100;             // длина стенки на экране
   const pieceAt = ([deg, kind]) => {
     const a = deg * Math.PI / 180;
     // Касательная к дуге на экране — так лежат мешки
@@ -378,14 +381,27 @@ window.Defense = (function () {
     ctx.fill();
   }
 
+  // Кадр стенки вдоль дуги: tan — касательная на экране, на земле угол другой (экран сжат по y на GROUND_SQUASH).
+  // Поворот модели — против касательной на земле: так фасад смотрит в центр дуги
+  function wallDir(tp, tan) {
+    const g = Math.atan2(Math.sin(tan) / GROUND_SQUASH, Math.cos(tan));
+    const n = tp.numDirections;
+    return ((Math.round(-g / (Math.PI * 2) * n) % n) + n) % n;
+  }
+
   function drawPiece(ctx, p) {
     const tp = window.threeProps;
+    const wall = WALL_MODEL[p.kind];
     ctx.save();
     ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
     ctx.beginPath();
     ctx.ellipse(p.x, p.y + 6, 50, 15, 0, 0, Math.PI * 2);
     ctx.fill();
-    if (p.kind === 'bags') {
+    const f = wall && tp && tp.isLoaded[wall] && tp.getFrameCanvas(wall, wallDir(tp, p.tan));
+    if (f) {
+      const fr = pzFrame(wall, p.x, p.y, WALL_PX);
+      ctx.drawImage(f, fr.x, fr.y, fr.w, fr.h);
+    } else if (wall) {
       // Три ряда мешков вдоль дуги, верхний — вразбежку
       ctx.translate(p.x, p.y);
       const ca = Math.cos(p.tan), sa = Math.sin(p.tan);
@@ -584,7 +600,7 @@ window.Defense = (function () {
   function addObstacles() {
     if (currentLocation !== 'promzona') return;
     PIECES.map(pieceAt).forEach(p => {
-      addObstacle({ x: p.x, y: p.y, rx: p.kind === 'bags' ? 46 : 42, ry: 16, rot: p.kind === 'bags' ? p.tan : 0 });
+      addObstacle({ x: p.x, y: p.y, rx: WALL_MODEL[p.kind] ? 46 : 42, ry: 16, rot: WALL_MODEL[p.kind] ? p.tan : 0 });
     });
   }
 

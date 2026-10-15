@@ -1,6 +1,7 @@
 // Василий против пришельцев — комиксы во весь экран с подписью (RU/EN), плавная смена и лёгкий наезд камеры.
 // intro — предыстория, 12 кадров: перед самым первым забегом (флаг vasiliy.introSeen) и по кнопке
 // «Предыстория» в меню. promzona — переход во вторую локацию, 8 кадров: при первом шаге в пролом (src/game.js).
+// pounder — один кадр: Долбильщик впервые заметил Василия (src/game.js, introducePounder; флаг vasiliy.pounderIntroSeen).
 // Управление: клик / пробел / Enter / → — дальше, ← — назад, ESC или кнопка — пропустить.
 // Раскадровка и промты: предыстория — docs/INTRO_COMIC.md, переход — docs/LEVEL2_PROMZONA.md, раздел 6.
 
@@ -111,9 +112,19 @@ window.Comic = (() => {
   ];
   // seenKey — флаг «уже смотрел» в localStorage. У перехода его нет: он показывается при первом входе
   // в Промзону, а это помнит сохранение (locationsVisited)
+  // Кадр представления босса Промзоны: когда Долбильщик впервые замечает Василия (src/game.js, introducePounder)
+  const POUNDER = [
+    {
+      img: 'assets/comic/pounder_intro.webp',
+      // Это Коля, начальник караула ВОХР (docs/LEVEL2_PROMZONA.md, «Разговоры и квесты»): имя называет Зина, не кадр
+      ru: 'Межпространственный Долбильщик. Когда-то — начальник караула ВОХР. Он первым пошёл к градирням на фиолетовый свет.',
+      en: 'The Interdimensional Pounder. Once the head of the plant guard. He was the first to walk toward the purple light at the cooling towers.'
+    }
+  ];
   const SETS = {
     intro: { frames: INTRO, seenKey: 'vasiliy.introSeen' },
-    promzona: { frames: PROMZONA, seenKey: null }
+    promzona: { frames: PROMZONA, seenKey: null },
+    pounder: { frames: POUNDER, seenKey: 'vasiliy.pounderIntroSeen' }
   };
 
   const $ = id => document.getElementById(id);

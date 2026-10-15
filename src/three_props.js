@@ -12,6 +12,9 @@
  * - Uses offscreen directional pose caching (16 angles over 360°) for locked 60 FPS
  */
 
+// Баррикады — в обеих локациях (loadBarricades)
+const BARRICADE_MODELS = ['prop_sandbag_wall', 'prop_pallet_barricade'];
+
 class ThreePropsManager {
   constructor() {
     this.models = {
@@ -188,6 +191,30 @@ class ThreePropsManager {
     ];
 
     this.loadConfigs(configs, () => this.schedulePrewarm());
+    this.loadBarricades();
+  }
+
+  /**
+   * Баррикады из мешков и поддонов (PZ_MODELS, tools/finalize_promzona_blender.py): у пролома в обороне
+   * и на посту в городе после спасения (src/defense.js drawPiece) — поэтому грузятся сразу, в обеих локациях.
+   * Стоят вдоль дуги — нужны все 16 направлений
+   */
+  loadBarricades() {
+    const configs = BARRICADE_MODELS.map(key => {
+      this.models[key] = null;
+      this.isLoaded[key] = false;
+      this.roots[key] = new THREE.Group();
+      this.roots[key].visible = false;
+      this.scene.add(this.roots[key]);
+      return { key, file: `assets/models/${key}.glb`, targetSpan: pzSpan(key), colorScale: PZ_COLOR[key] || 0.86 };
+    });
+    this.loadConfigs(configs, () => {
+      const tasks = [];
+      BARRICADE_MODELS.filter(key => this.isLoaded[key]).forEach(key => {
+        for (let dir = 0; dir < this.numDirections; dir++) tasks.push(() => this.getFrameCanvas(key, dir));
+      });
+      runIdleTasks(tasks);
+    });
   }
 
   /**
@@ -210,14 +237,14 @@ class ThreePropsManager {
       this.scene.add(this.roots[key]);
       configs.push({ key, file: `assets/models/${key}.glb`, targetSpan: pzSpan(key.replace(/_open$/, '')), colorScale: PZ_COLOR[key] || 0.86, frameSize });
     };
-    Object.keys(PZ_MODELS).forEach(key => {
+    Object.keys(PZ_MODELS).filter(key => !BARRICADE_MODELS.includes(key)).forEach(key => {
       // Цеха рисуются до ~1500 px, вагоны и декор — до ~500
       add(key, key.startsWith('building_') ? 1024 : 512);
       if (key.startsWith('container_') || key.startsWith('safe_')) add(key + '_open', 512);
     });
     this.loadConfigs(configs, () => {
       const frames = [];
-      Object.keys(PZ_MODELS).forEach(key => {
+      Object.keys(PZ_MODELS).filter(key => !BARRICADE_MODELS.includes(key)).forEach(key => {
         frames.push([key, 0]);
         if (key.startsWith('container_')) frames.push([key, 8], [key + '_open', 0], [key + '_open', 8]);
         if (key.startsWith('safe_')) frames.push([key + '_open', 0]);

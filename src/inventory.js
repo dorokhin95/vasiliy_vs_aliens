@@ -152,6 +152,7 @@ window.CharacterPanel = (function () {
         if (!player.hasPerk(pk.id)) return;
         const row = statRow(L(pk.name_ru, pk.name_en), '');
         row.querySelector('span').style.color = tree.color;
+        row.querySelector('span').prepend(perkIconImg(pk.id, 'perk-mini'));
         row.querySelector('b').textContent = L(pk.desc_ru, pk.desc_en);
         row.classList.add('perk-row');
         perks.push(row);
@@ -179,6 +180,14 @@ window.CharacterPanel = (function () {
       const d = statRow(`${q.title} · ${q.giver}`, q.text);
       d.classList.add('perk-row');
       d.querySelector('span').style.color = q.state === 'done' ? '#64748b' : q.state === 'ready' ? '#4ade80' : '#fbbf24';
+      if (q.icon) {
+        const img = document.createElement('img');
+        img.className = 'quest-mini';
+        img.src = q.icon;
+        img.alt = '';
+        img.onerror = () => img.remove();
+        d.querySelector('span').prepend(img);
+      }
       return d;
     };
     const active = section(L('Взятые', 'Active'), list.filter(q => q.state !== 'done').map(row), true);

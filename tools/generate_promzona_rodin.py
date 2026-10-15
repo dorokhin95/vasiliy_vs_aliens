@@ -45,6 +45,9 @@ MODELS = {
     'prop_pipe_rack':         ([12, 3.4, 6], 'open see-through steel pipe rack: thin lattice support legs, pipes on top, empty space under the pipes, no walls, no panels, no fill between the legs'),
     'prop_pipe_stack':        ([8, 7, 4], 'stack of large rusty steel pipes on wooden sleepers'),
     'prop_cable_reel':        ([2.2, 1.4, 2.2], 'large wooden cable reel with black cable'),
+    # Баррикады: мешки — у пролома в обороне и на посту в городе (src/defense.js drawPiece), поддоны — там же
+    'prop_sandbag_wall':      ([3.0, 0.9, 1.0], 'low straight barricade wall of stacked burlap sandbags, brick pattern'),
+    'prop_pallet_barricade':  ([3.0, 1.3, 1.3], 'makeshift barricade of weathered wooden pallets standing upright and leaning'),
     # Выжившие (docs/LEVEL2_PROMZONA.md, раздел 5): полный рост, A-поза, оружие отведено от тела — иначе Rodin
     # вплавляет его в ноги. Скелет и анимации — tools/build_promzona_survivors_blender.py
     'survivor_stepanych': ([0.95, 0.5, 1.78], 'full body game character, old Soviet foreman in a quilted jacket and flat cap holding a double-barreled hunting shotgun pointing down, A-pose'),

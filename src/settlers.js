@@ -546,7 +546,9 @@ window.Settlers = (function () {
     POST_BAGS.map(deg => {
       const [x, y] = postSpot(deg, POST_R);
       const a = deg * Math.PI / 180;
-      return { x, y, kind: deg === 44 || deg === 136 ? 'crates' : 'bags', tan: Math.atan2(Math.cos(a) * GROUND_SQUASH, -Math.sin(a)) };
+      // По краям — поддоны, между ними мешки и ящики (те же модели, что у пролома в Промзоне)
+      const kind = deg === 44 || deg === 136 ? 'crates' : deg === 28 || deg === 152 ? 'pallets' : 'bags';
+      return { x, y, kind, tan: Math.atan2(Math.cos(a) * GROUND_SQUASH, -Math.sin(a)) };
     }).sort((a, b) => a.y - b.y).forEach(p => window.Defense.drawPiece(ctx, p));
   }
 

@@ -799,12 +799,45 @@ function resetFireGoo() {
   fireFx = [];
 }
 
+// --- ЗНАЧКИ ПЕРКОВ И СПОСОБНОСТЕЙ: assets/sprites/perks/<id>.png (tools/make_trophy_sprites.py perks_*).
+// Здесь, а не в game.js: этот файл грузится раньше, а значки нужны лавке, окну персонажа и хотбару
+function perkIconSrc(id) {
+  return `assets/sprites/perks/${id}.png?v=1`;
+}
+
+// <img> значка; если картинки нет — пропадает, остаётся текст
+function perkIconImg(id, cls) {
+  const img = document.createElement('img');
+  img.className = cls;
+  img.src = perkIconSrc(id);
+  img.alt = '';
+  img.onerror = () => img.remove();
+  return img;
+}
+
 // --- СПОСОБНОСТИ НА ПКМ: карта Долбильщика (рывок или гиперрегенерация) и горючая жижа. F листает ---
+// img — значок assets/sprites/perks/<img>.png; icon — эмодзи, пока картинка не загрузилась (и во всплывающем тексте)
 const RMB_ABILITIES = {
-  dash: { icon: '💨', ru: 'РЫВОК', en: 'DASH' },
-  regen: { icon: '💚', ru: 'ГИПЕРРЕГЕНЕРАЦИЯ', en: 'HYPER-REGENERATION' },
-  fire_goo: { icon: '🔥', ru: 'ГОРЮЧАЯ ЖИЖА', en: 'FIRE GOO' }
+  dash: { icon: '💨', img: 'ability_dash', ru: 'РЫВОК', en: 'DASH' },
+  regen: { icon: '💚', img: 'ability_regen', ru: 'ГИПЕРРЕГЕНЕРАЦИЯ', en: 'HYPER-REGENERATION' },
+  fire_goo: { icon: '🔥', img: 'fire_goo', ru: 'ГОРЮЧАЯ ЖИЖА', en: 'FIRE GOO' }
 };
+const RMB_ICON_IMG = {};
+Object.keys(RMB_ABILITIES).forEach(k => {
+  RMB_ICON_IMG[k] = new Image();
+  RMB_ICON_IMG[k].src = perkIconSrc(RMB_ABILITIES[k].img);
+});
+
+// Значок у хотбара: картинка, а пока её нет — эмодзи. Меняется, только когда сменилась способность
+function setRmbIcon(el, ab) {
+  const img = RMB_ICON_IMG[ab];
+  const ready = !!(img && img.complete && img.naturalWidth);
+  const key = (ready ? 'img:' : 'txt:') + ab;
+  if (!el || el._rmbKey === key) return;
+  el._rmbKey = key;
+  el.textContent = ready ? '' : RMB_ABILITIES[ab].icon;
+  if (ready) el.appendChild(img.cloneNode());
+}
 
 function rmbAbilities() {
   const list = [];

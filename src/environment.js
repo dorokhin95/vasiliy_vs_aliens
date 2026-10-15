@@ -78,6 +78,9 @@ const PZ_MODELS = {
   prop_pipe_rack: [12, 1.2, 5.1],
   prop_pipe_stack: [8.3, 9.1, 2.8],
   prop_cable_reel: [2.6, 2.6, 2.2],
+  // Баррикады (src/defense.js drawPiece): грузятся в обеих локациях — пост у пролома стоит и в городе
+  prop_sandbag_wall: [3.0, 0.8, 1.0],
+  prop_pallet_barricade: [3.0, 1.3, 1.3],
   container_boxcar: [14, 3.2, 4.9],
   container_gondola: [14, 3.2, 3.4],
   container_tankcar: [12, 2.9, 4.0],
@@ -95,7 +98,9 @@ const PZ_MODELS = {
 const PZ_COLOR = {
   building_admin: 1, building_checkpoint: 1, building_cooling_tower: 1, building_foundry: 1, building_gasholder: 1,
   building_mech_workshop: 1, building_oil_tank: 1, building_pump_station: 1, building_smokestack: 1, building_warehouse: 1,
-  prop_cable_reel: 1, prop_gantry_crane: 1, prop_locomotive: 1, prop_pipe_rack: 1, prop_pipe_stack: 1
+  prop_cable_reel: 1, prop_gantry_crane: 1, prop_locomotive: 1, prop_pipe_rack: 1, prop_pipe_stack: 1,
+  // Баррикады из Rodin светлее земли и ящиков рядом
+  prop_sandbag_wall: 0.6, prop_pallet_barricade: 0.68
 };
 // Тайники Промзоны: тип → модель и длина на карте, px (машины города ~40 px/м, вагоны чуть ужаты)
 const PZ_CONTAINERS = {
@@ -238,15 +243,43 @@ class EnvironmentRenderer {
       : Math.abs(x - r.pos) < pad && y > r.from - pad && y < r.to + pad);
   }
 
-  // Колея: насыпь из щебня, шпалы, два рельса. Рисуется поверх дорог (переезды)
+  // Колея: насыпь из щебня, шпалы, два рельса. Рисуется поверх дорог (переезды). Текстура — полоса вдоль колеи
+  // (assets/textures/rails_strip.png, вдвое крупнее экрана), у вертикальной повёрнута; узор привязан к миру,
+  // поэтому куски земли стыкуются. Пока текстура не загрузилась — колея кодом
   drawRails(ctx, camera, screenW, screenH) {
     const GAUGE = 30, BED = 70, STEP = 24;
     const x0 = camera.x - 60, x1 = camera.x + screenW + 60, y0 = camera.y - 60, y1 = camera.y + screenH + 60;
+    const tex = this.textures['rails'];
+    let pat = null;
+    if (tex) {
+      // Узор — свой у каждого холста (куски земли)
+      if (!this.railPatterns) this.railPatterns = new WeakMap();
+      pat = this.railPatterns.get(ctx);
+      if (!pat) {
+        pat = ctx.createPattern(tex, 'repeat-x');
+        this.railPatterns.set(ctx, pat);
+      }
+    }
     ctx.save();
     this.rails.forEach(r => {
       const a = Math.max(r.from, r.horizontal ? x0 : y0), b = Math.min(r.to, r.horizontal ? x1 : y1);
       if (b <= a) return;
       if (r.horizontal ? (r.pos + BED < y0 || r.pos - BED > y1) : (r.pos + BED < x0 || r.pos - BED > x1)) return;
+      if (pat) {
+        const k = BED / tex.height;
+        ctx.save();
+        if (r.horizontal) {
+          ctx.translate(0, r.pos - BED / 2);
+        } else {
+          ctx.translate(r.pos + BED / 2, 0);
+          ctx.rotate(Math.PI / 2);
+        }
+        ctx.scale(k, k);
+        ctx.fillStyle = pat;
+        ctx.fillRect(a / k, 0, (b - a) / k, tex.height);
+        ctx.restore();
+        return;
+      }
       const rect = (along, across, len, wid) => (r.horizontal
         ? ctx.fillRect(along, r.pos + across, len, wid)
         : ctx.fillRect(r.pos + across, along, wid, len));
@@ -278,6 +311,8 @@ class EnvironmentRenderer {
       { key: 'asphalt', path: 'assets/textures/asphalt_road.png?v=1025', type: 'pattern' },
       { key: 'ground', path: 'assets/textures/ground_terrain.png?v=1025', type: 'pattern' },
       { key: 'sidewalk', path: 'assets/textures/sidewalk_tiles.png?v=1025', type: 'pattern' },
+      // Колея Промзоны сверху — бесшовная полоса (tools/make_rails_texture.py)
+      { key: 'rails', path: 'assets/textures/rails_strip.png?v=1', type: 'pattern' },
 
       // Пропсы дорог и дворов
       { key: 'manhole', path: 'assets/sprites/props/manhole_cover.png?v=1011', type: 'prop' },
