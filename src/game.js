@@ -5018,6 +5018,10 @@ function drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
 // Позы оружия — e.gunPose ('aim' | 'fire' | 'rest' | null), их рисует three_enemies.js; дуло — gunMuzzle
 
 // Где дуло на карте сейчас. Пока модель грузится — примерно у правого бедра
+// Снайпер: за столько кадров до выстрела вскидывает винтовку; столько кадров держит отдачу
+const SN_AIM = 40;
+const SN_KICK = 6;
+
 function gunMuzzle(e) {
   const m = window.threeEnemies && window.threeEnemies.getMuzzle(e);
   if (m) return { x: e.x + m.x, y: e.y + m.y, behind: m.behind };
@@ -9277,7 +9281,8 @@ function update() {
         if (distToPlayer > 320) {
           e.angle = angle;
         } else if (distToPlayer < 200) {
-          if (e.shootCooldown > 25) {
+          // Отходит спиной к Василию, пока не пора вскидывать винтовку
+          if (e.shootCooldown > SN_AIM) {
             e.angle = angle + Math.PI;
           } else {
             e.angle = angle;
@@ -9287,31 +9292,43 @@ function update() {
         }
 
         if (!(e.empT > 0)) e.shootCooldown--; // ЭМИ (src/workshop.js): лазерный прицел молчит
+        // Винтовку вскидывает за SN_AIM кадров до выстрела (тогда же — лазерный прицел), после — отдача
+        if (e.fireKick > 0) {
+          e.fireKick--;
+          e.gunPose = 'fire';
+        } else {
+          e.gunPose = e.shootCooldown < SN_AIM ? 'aim' : null;
+        }
         if (e.shootCooldown <= 0) {
           e.shootCooldown = e.tier >= 3 ? 92 : 105;
-          const muzX = e.x + Math.cos(angle) * 26;
-          const muzY = e.y + Math.sin(angle) * 26 - 8;
+          e.angle = angle;
+          e.gunPose = 'aim';
+          // Пуля — из дула винтовки (кость Muzzle модели) в Василия
+          const m = gunMuzzle(e);
+          const shotA = Math.atan2(player.y - 12 - m.y, player.x - m.x);
           const ebSpeed = e.tier >= 3 ? 10.8 : 9.6;
           const shotDmg = e.tier >= 4 ? 38 : (e.tier === 3 ? 30 : 22);
           enemyBullets.push({
-            x: muzX,
-            y: muzY,
-            vx: Math.cos(angle) * ebSpeed,
-            vy: Math.sin(angle) * ebSpeed,
-            angle: angle,
+            x: m.x,
+            y: m.y,
+            vx: Math.cos(shotA) * ebSpeed,
+            vy: Math.sin(shotA) * ebSpeed,
+            angle: shotA,
             radius: 5,
             damage: shotDmg
           });
           muzzleFlashes.push({
-            x: muzX,
-            y: muzY,
-            angle: angle,
+            x: m.x,
+            y: m.y,
+            angle: shotA,
             type: 'sniper',
             life: 4,
             maxLife: 4,
             scale: 0.9
           });
-          spawnDirectionalSparks(muzX, muzY, angle, 0.45, 6, '#a3e635', 4, 9, 10);
+          spawnDirectionalSparks(m.x, m.y, shotA, 0.45, 6, '#a3e635', 4, 9, 10);
+          e.fireKick = SN_KICK;
+          e.gunPose = 'fire';
         }
       }
     } else {
@@ -9321,6 +9338,7 @@ function update() {
       e.squash = 0;
       e.slam = null;
       if (e.type === 'stormtrooper' || e.type === 'rocketeer') updateGunnerIdle(e);
+      if (e.type === 'sniper') e.gunPose = null; // не видит Василия — винтовка как при ходьбе
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -9838,11 +9856,10 @@ function render() {
       continue;
     }
 
-    // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела
+    // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела — из дула вскинутой винтовки
     if (e.type === 'sniper' && e.isAggroed && !(e.empT > 0) && e.shootCooldown > 0 && e.shootCooldown < 32) {
-      const aimA = e.angle || 0;
-      const sx = e.x + Math.cos(aimA) * 24;
-      const sy = e.y + Math.sin(aimA) * 24 - 8;
+      const m = gunMuzzle(e);
+      const sx = m.x, sy = m.y;
       ctx.save();
       ctx.strokeStyle = e.shootCooldown < 12 ? 'rgba(239, 68, 68, 0.75)' : 'rgba(239, 68, 68, 0.35)';
       ctx.lineWidth = e.shootCooldown < 12 ? 1.8 : 1.0;

@@ -27,6 +27,7 @@ import math
 import os
 import sys
 
+import bmesh
 import bpy
 from mathutils import Matrix, Quaternion, Vector
 
@@ -78,6 +79,30 @@ TOADS = {
         # и Rodin вплавил трубы в голову. Залп с бедра, корпус упирается назад; перезарядка — пусковая опущена
         'weapon': {'capsule': ((-0.68, 0.14, 0.60), (-0.68, -0.84, 0.55), 0.21),
                    'aim': (20, 3, -4), 'kick': 12, 'rest': ('Reload', (0, -40, 0))},
+    },
+    # Снайпер — новая модель вместо старой объёмной (tools/build_all_enemies_blender.py), концепт тот же. Винтовка
+    # по диагонали перед телом: приклад у правого плеча, дуло слева внизу. Держит двумя руками — кисть левой на
+    # цевье попадает в капсулу и ходит вместе с винтовкой; поэтому при ходьбе левая рука не качается (swing 0).
+    # Прицел — винтовка вскинута горизонтально вперёд; перезарядки нет
+    'toad_sniper': {
+        'name': 'Toad_Sniper',
+        'height': 1.85,
+        'tris': 7000,
+        'albedo': 0.75,
+        'nod': True,
+        'swing': 0,
+        'cloak': (1.12, -0.12),
+        'split_arms': 0.085,   # рука — ближе 8,5 см к кости (метры сырой модели)
+        'joints': {
+            'hip': 0.52, 'spine': 0.85, 'neck': 1.45, 'top': (0.0, -0.10, 1.90),
+            'leg': {'L': [(0.15, -0.04, 0.52), (0.15, -0.05, 0.28), (0.14, -0.02, 0.08)],
+                    'R': [(-0.15, -0.04, 0.52), (-0.15, -0.05, 0.28), (-0.14, -0.02, 0.08)]},
+            'arm': {'L': [(0.33, 0.0, 1.32), (0.38, -0.15, 1.02), (0.36, -0.38, 0.95)],
+                    'R': [(-0.33, 0.0, 1.32), (-0.38, -0.12, 1.05), (-0.12, -0.36, 1.10)]},
+        },
+        'weapon': {'capsule': ((-0.30, -0.37, 1.28), (0.86, -0.43, 0.75), 0.13), 'fill': (0.32, 0.9, 1.42, -0.12),
+                   'two_hand': (0.36, -0.40, 0.97),
+                   'aim': (40, 0, 6, 18), 'kick': 6},
     },
 }
 
@@ -201,6 +226,98 @@ def in_weapon(cfg, raw):
     return seg_dist(raw, Vector(a), Vector(b)) < r
 
 
+def vertex_colors(mesh):
+    """Цвет базовой текстуры под каждой вершиной (среднее по её углам граней): {индекс: (r, g, b)}."""
+    img = None
+    for m in mesh.data.materials:
+        for n in (m.node_tree.nodes if m and m.use_nodes else []):
+            # Базовый цвет, а не карта нормалей (она идёт в узел Normal Map)
+            if n.type == 'TEX_IMAGE' and n.image and not any(l.to_node.type == 'NORMAL_MAP' for l in n.outputs[0].links):
+                img = n.image
+    if not img:
+        return {}
+    w, h = img.size
+    px = img.pixels[:]
+    uv = mesh.data.uv_layers.active.data
+    acc = {}
+    for poly in mesh.data.polygons:
+        for li in poly.loop_indices:
+            u, v = uv[li].uv
+            x, y = min(w - 1, max(0, int(u % 1 * w))), min(h - 1, max(0, int(v % 1 * h)))
+            o = (y * w + x) * 4
+            acc.setdefault(mesh.data.loops[li].vertex_index, []).append(px[o:o + 3])
+    return {vi: tuple(sum(c[i] for c in cs) / len(cs) for i in range(3)) for vi, cs in acc.items()}
+
+
+def weapon_set(mesh, cfg, k):
+    """Вершины оружия: капсула ствола и всё, что связано с ней через металл (серое, без насыщенности) и зелёные
+    линзы в коридоре fill (ближе dmax к оси, z0..z1, перед корпусом: y меньше y0) — оптика прижата к груди, и по
+    одному положению её от груди не отличить, а полосы разгрузки на груди отделены оливковой тканью."""
+    w = cfg['weapon']
+    a, b, r = w['capsule']
+    A, B = Vector(a), Vector(b)
+    raw = lambda v: v.co / k
+    out = {v.index for v in mesh.data.vertices if seg_dist(raw(v), A, B) < r}
+    fill = w.get('fill')
+    if not fill:
+        return out
+    dmax, z0, z1, y0 = fill
+    col = vertex_colors(mesh)
+
+    def metal(vi):
+        rr, gg, bb = col.get(vi, (0.5, 0.5, 0.5))
+        mx, mn = max(rr, gg, bb), min(rr, gg, bb)
+        sat = (mx - mn) / mx if mx > 1e-6 else 0
+        # Металл — серый; линзы — зелёные (оттенок 0,2–0,5) и насыщенные, даже тёмные; ткань — жёлто-бурая (~0,13)
+        import colorsys
+        hue = colorsys.rgb_to_hsv(rr, gg, bb)[0]
+        return sat < 0.2 or (0.2 < hue < 0.5 and sat > 0.3)
+
+    verts = mesh.data.vertices
+    ok = {v.index for v in verts if seg_dist(raw(v), A, B) < dmax and z0 < raw(v).z < z1 and raw(v).y < y0 and metal(v.index)}
+    nbr = {}
+    for e in mesh.data.edges:
+        i, j = e.vertices
+        nbr.setdefault(i, []).append(j)
+        nbr.setdefault(j, []).append(i)
+    front = list(out)
+    while front:
+        nxt = []
+        for i in front:
+            for j in nbr.get(i, ()):
+                if j in ok and j not in out:
+                    out.add(j)
+                    nxt.append(j)
+        front = nxt
+    # Отдельные куски сетки целиком у ствола (оптика, затвор — Rodin делает их отдельной геометрией, рёбрами
+    # с винтовкой они не связаны) — тоже оружие
+    seen = set()
+    islands = 0
+    for v in verts:
+        if v.index in seen:
+            continue
+        comp, stack = [], [v.index]
+        seen.add(v.index)
+        while stack:
+            i = stack.pop()
+            comp.append(i)
+            for j in nbr.get(i, ()):
+                if j not in seen:
+                    seen.add(j)
+                    stack.append(j)
+        if len(comp) < 3000 and all(seg_dist(raw(verts[i]), A, B) < dmax for i in comp):
+            out.update(comp)
+            islands += 1
+    print(f'[weapon] кусков у ствола: {islands}')
+    return out
+
+
+def is_weapon(cfg, v, k):
+    """Вершина — часть оружия: по набору weapon_set, если он посчитан, иначе по капсуле."""
+    ws = cfg.get('_wset')
+    return v.index in ws if ws is not None else in_weapon(cfg, v.co / k)
+
+
 def weapon_axis(mesh, cfg, k):
     """Ось ствола — ось капсулы (от приклада к дулу); дуло — самая дальняя вдоль неё вершина оружия."""
     a, b, _ = cfg['weapon']['capsule']
@@ -272,12 +389,23 @@ def skin(mesh, rig, cfg, k):
             g.remove([v.index])
         groups[name].add([v.index], 1.0, 'REPLACE')
 
-    fixed = orphans = 0
+    # cloak — плащ по бокам ниже локтей (z ниже zmax, позади предплечий: y больше ymin) не ходит за руками:
+    # иначе, когда руки вскидывают оружие, он тянется за ними крылом. Веса рук с него снимаются, остаток — на Spine
+    cloak = cfg.get('cloak')
+    arm_groups = [groups[n].index for n in ('Arm.L', 'Forearm.L', 'Arm.R', 'Forearm.R')]
+    fixed = orphans = freed = 0
     for v in mesh.data.vertices:
-        if cfg.get('weapon') and in_weapon(cfg, v.co / k):   # капсула — в метрах сырой модели
+        if cfg.get('weapon') and is_weapon(cfg, v, k):   # капсула — в метрах сырой модели
             set_only(v, 'Forearm.R')
             fixed += 1
             continue
+        raw = v.co / k
+        if cloak and raw.z < cloak[0] and raw.y > cloak[1] and any(g.group in arm_groups and g.weight > 0 for g in v.groups):
+            for gi in arm_groups:
+                mesh.vertex_groups[gi].remove([v.index])
+            if sum(g.weight for g in v.groups) < 0.01:
+                groups['Spine'].add([v.index], 1.0, 'REPLACE')
+            freed += 1
         if sum(g.weight for g in v.groups) < 0.01:
             near = min(segs, key=lambda n: seg_dist(v.co, *segs[n]))
             set_only(v, near)
@@ -287,7 +415,67 @@ def skin(mesh, rig, cfg, k):
     bpy.ops.object.vertex_group_limit_total(group_select_mode='ALL', limit=4)
     bpy.ops.object.vertex_group_normalize_all(group_select_mode='ALL', lock_active=False)
     bpy.ops.object.mode_set(mode='OBJECT')
+    print(f'[cloak] {cfg["name"]}: с рук снято вершин плаща {freed}')
     return fixed, orphans
+
+
+ARM_BONES = ('Arm.L', 'Forearm.L', 'Arm.R', 'Forearm.R')
+
+
+def split_arms(mesh, rig, cfg, k):
+    """Оружие, руки и тело — тремя отдельными кусками сетки: разрез по границам «оружие — рука», «рука — тело»
+    и «оружие — тело». Иначе, когда руки вскидывают оружие вперёд, грани между ними (подмышки, плащ, линза оптики
+    у левой руки) тянутся клиньями. Рука — только то, что у самих костей рук (ближе split_arms к отрезку кости);
+    плащ на плечах, даже если heat дал ему веса рук, остаётся на теле. Оружие весит только на правом предплечье,
+    руки — только на костях рук (локоть плавный), тело — без костей рук."""
+    vg = {g.name: g.index for g in mesh.vertex_groups}
+    arm_idx = {vg[n] for n in ARM_BONES}
+    segs = {vg[n]: (rig.data.bones[n].head_local, rig.data.bones[n].tail_local) for n in ARM_BONES}
+    near_r = cfg['split_arms'] * k
+    bm = bmesh.new()
+    bm.from_mesh(mesh.data)
+    deform = bm.verts.layers.deform.verify()
+
+    def nearest_arm(v):
+        return min(segs, key=lambda gi: seg_dist(v.co, *segs[gi]))
+
+    def kind(v):   # w — оружие, a — рука, s — тело
+        if is_weapon(cfg, v, k):
+            return 'w'
+        return 'a' if seg_dist(v.co, *segs[nearest_arm(v)]) < near_r else 's'
+    vk = {v: kind(v) for v in bm.verts}
+
+    def face_kind(f):
+        n = {c: sum(vk[v] == c for v in f.verts) for c in 'was'}
+        return max('was', key=lambda c: n[c])   # при равенстве — оружие, потом рука
+    fk = {f: face_kind(f) for f in bm.faces}
+    seam = [e for e in bm.edges if len(e.link_faces) == 2 and fk[e.link_faces[0]] != fk[e.link_faces[1]]]
+    seam_pos = {v.co.to_tuple(5) for e in seam for v in e.verts}
+    bmesh.ops.split_edges(bm, edges=seam)
+    side = {}
+    for f in bm.faces:
+        for v in f.verts:
+            side.setdefault(v, set()).add(fk.get(f, 's'))
+    for v, sides in side.items():
+        d = v[deform]
+        if 'w' in sides:
+            new = {vg['Forearm.R']: 1.0}
+        elif 'a' in sides:
+            new = {gi: w for gi, w in d.items() if gi in arm_idx} or {nearest_arm(v): 1.0}
+        else:
+            new = {gi: w for gi, w in d.items() if gi not in arm_idx} or {vg['Spine']: 1.0}
+        total = sum(new.values())
+        d.clear()
+        for gi, w in new.items():
+            d[gi] = w / total
+    # Крышки на швах — только по желанию (split_caps): на длинном неровном шве заливка натягивает плоские «плавники»
+    border = [e for e in bm.edges if e.is_boundary and all(v.co.to_tuple(5) in seam_pos for v in e.verts)]
+    if cfg.get('split_caps'):
+        bmesh.ops.holes_fill(bm, edges=border, sides=0)
+    bm.to_mesh(mesh.data)
+    bm.free()
+    mesh.data.update()
+    print(f'[split] швы оружие/руки/тело: {len(seam)} рёбер')
 
 
 def rotate_about_head(rig, name, q):
@@ -327,11 +515,39 @@ def weapon_pose(rig, axis, raise_deg, pitch_deg, lean_deg, yaw_deg=0):
 
 
 UPPER = ('Spine', 'Arm.R', 'Forearm.R')
+UPPER_TWO_HAND = UPPER + ('Arm.L', 'Forearm.L')
 
 
-def key_upper(rig, frame):
-    for name in UPPER:
+def key_upper(rig, frame, bones=UPPER):
+    for name in bones:
         rig.pose.bones[name].keyframe_insert(data_path='rotation_euler', frame=frame)
+
+
+def bone_dir(rig, name):
+    pb = rig.pose.bones[name]
+    return (pb.tail - pb.head).normalized()
+
+
+def reach_left(rig, grip):
+    """Двуручное оружие: левая кисть (вершины на цевье — в капсуле, ходят с правым предплечьем) уехала вместе
+    с оружием — тянем к ней левую руку двухзвенным IK, локоть сгибается туда же, где был. grip — где была левая кисть
+    в позе привязки (в осях арматуры)"""
+    fr = rig.pose.bones['Forearm.R']
+    delta = fr.matrix @ fr.bone.matrix_local.inverted()
+    target = delta @ grip
+    arm, fore = rig.pose.bones['Arm.L'], rig.pose.bones['Forearm.L']
+    l1, l2 = arm.bone.length, fore.bone.length
+    s = arm.head.copy()
+    to = target - s
+    d = min(to.length, (l1 + l2) * 0.999)
+    to.normalize()
+    a = math.acos(max(-1.0, min(1.0, (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d))))
+    # Локоть остаётся в той же плоскости, где был: сгиб — в сторону его нынешнего положения
+    elbow = fore.head - s
+    pole = (elbow - to * elbow.dot(to)).normalized()
+    upper = (to * math.cos(a) + pole * math.sin(a)).normalized()
+    rotate_about_head(rig, 'Arm.L', bone_dir(rig, 'Arm.L').rotation_difference(upper))
+    rotate_about_head(rig, 'Forearm.L', bone_dir(rig, 'Forearm.L').rotation_difference((target - fore.head).normalized()))
 
 
 def new_action(rig, name):
@@ -342,33 +558,46 @@ def new_action(rig, name):
 
 
 def animate_weapon(rig, cfg, axis):
-    """Клипы стрельбы: прицел, отдача, опущенное оружие. Ключи только у Spine, Arm.R, Forearm.R."""
+    """Клипы стрельбы: прицел, отдача, опущенное оружие. Ключи у Spine, Arm.R, Forearm.R, у двуручного — и у
+    левой руки (two_hand: где левая кисть держит оружие в позе привязки, метры сырой модели — reach_left)."""
     w = cfg['weapon']
     sc = bpy.context.scene
+    grip = Vector(w['two_hand']) * cfg['_k'] if w.get('two_hand') else None
+    bones = UPPER_TWO_HAND if grip else UPPER
+
+    def aim():
+        t = weapon_pose(rig, axis, *w['aim'])
+        if grip:
+            reach_left(rig, grip)
+        return t
+
     new_action(rig, cfg['name'] + '_Aim')
     sc.frame_set(1)
-    weapon_pose(rig, axis, *w['aim'])
-    key_upper(rig, 1)
-    key_upper(rig, 2)
+    aim()
+    key_upper(rig, 1, bones)
+    key_upper(rig, 2, bones)
 
     new_action(rig, cfg['name'] + '_Fire')
     sc.frame_set(1)
-    target = weapon_pose(rig, axis, *w['aim'])
-    key_upper(rig, 1)
-    key_upper(rig, 3)
+    target = aim()
+    key_upper(rig, 1, bones)
+    key_upper(rig, 3, bones)
     sc.frame_set(2)
     # Отдача: корпус назад, ствол подбрасывает вверх
     rotate_about_head(rig, 'Spine', Quaternion((1, 0, 0), math.radians(-w['kick'] * 0.3)))
     side = target.cross(Vector((0, 0, 1))).normalized()
     rotate_about_head(rig, 'Forearm.R', Quaternion(side, math.radians(w['kick'])))
-    key_upper(rig, 2)
+    if grip:
+        reach_left(rig, grip)
+    key_upper(rig, 2, bones)
 
-    rest_name, rest = w['rest']
-    new_action(rig, cfg['name'] + '_' + rest_name)
-    sc.frame_set(1)
-    weapon_pose(rig, axis, *rest)
-    key_upper(rig, 1)
-    key_upper(rig, 2)
+    if w.get('rest'):   # оружие опущено (перегрев, перезарядка); у снайпера нет
+        rest_name, rest = w['rest']
+        new_action(rig, cfg['name'] + '_' + rest_name)
+        sc.frame_set(1)
+        weapon_pose(rig, axis, *rest)
+        key_upper(rig, 1)
+        key_upper(rig, 2)
     reset_pose(rig)
 
 
@@ -391,7 +620,7 @@ def animate(rig, cfg):
         pb['Pelvis'].location = (0, 0, pz)
         pb['Spine'].rotation_euler = (0, math.radians(sy), 0)
         pb['Head'].rotation_euler = (math.radians(math.sin(f * 0.4) * 3) if cfg['nod'] else 0, 0, 0)
-        pb['Arm.L'].rotation_euler = (math.radians(-tl * ARM_SWING), 0, 0)
+        pb['Arm.L'].rotation_euler = (math.radians(-tl * ARM_SWING * cfg.get('swing', 1)), 0, 0)
         for name in ('Thigh.L', 'Thigh.R', 'Shin.L', 'Shin.R', 'Spine', 'Head', 'Arm.L'):
             pb[name].keyframe_insert(data_path='rotation_euler', frame=f)
         pb['Pelvis'].keyframe_insert(data_path='location', frame=f)
@@ -474,9 +703,15 @@ def process(name, cfg):
     mesh.data.transform(Matrix.Scale(k, 4) @ Matrix.Translation(-origin))
     mesh.data.update()
     weapon = weapon_axis(mesh, cfg, k) if cfg.get('weapon') else None
+    if cfg.get('weapon') and cfg['weapon'].get('fill'):
+        cfg['_wset'] = weapon_set(mesh, cfg, k)
+        print(f'[weapon] {cfg["name"]}: вершин оружия {len(cfg["_wset"])}')
     cfg['_axis'] = weapon[0] if weapon else None
+    cfg['_k'] = k
     rig = build_rig(cfg, k, weapon)
     fixed, orphans = skin(mesh, rig, cfg, k)
+    if cfg.get('split_arms'):
+        split_arms(mesh, rig, cfg, k)
     animate(rig, cfg)
     out = os.path.join(OUT, name + '.glb')
     bpy.ops.object.select_all(action='SELECT')

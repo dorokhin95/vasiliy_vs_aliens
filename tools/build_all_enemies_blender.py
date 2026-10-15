@@ -15,18 +15,8 @@ ENEMY_CONFIGS = [
         'back_color': (0.16, 0.24, 0.12, 1.0),
         'cam_scale': 2.3,
     },
-    {
-        'id': 'toad_sniper',
-        'name': 'Toad_Sniper',
-        'obj': 'blender_assets/toad_sniper_volumetric.obj',
-        'tex': 'assets/enemies/toad_sniper_perfect.png',
-        'tex_back': 'assets/enemies/toad_sniper_back.png',
-        'glb': 'assets/models/toad_sniper.glb',
-        'width': 1.05,
-        'height': 1.82,
-        'back_color': (0.17, 0.21, 0.14, 1.0),
-        'cam_scale': 2.3,
-    },
+    # Снайпер больше не собирается здесь: новая модель с винтовкой, прицелом и дулом — tools/build_promzona_toads_blender.py
+    # (TOADS['toad_sniper']). Запуск этого скрипта иначе затёр бы её старой объёмной картинкой
     {
         'id': 'toad_brute',
         'name': 'Toad_Brute',

@@ -90,11 +90,15 @@ const BRUTE_FRAME = { w: 138, anchor: -16 };
 const GRUNT_FRAME = { w: 86, anchor: -10 };
 const BRUTE_POSE_FRAME = { w: 170, anchor: -37 };
 
-// Жабы Промзоны со стрелковым оружием (tools/build_promzona_toads_blender.py): грузятся при первом заходе
-// в Промзону. Кроме ходьбы у них клипы верхней части тела — прицел, отдача (Fire) и опущенное оружие
-// (rest: перегрев штурмовика, перезарядка ракетчика). Позы game.js выставляет в e.gunPose:
-// 'aim' | 'fire' | 'rest' | null (идёт с оружием как в позе привязки). Кость Muzzle — дуло
+// Жабы со стрелковым оружием (tools/build_promzona_toads_blender.py). Кроме ходьбы у них клипы верхней части
+// тела — прицел, отдача (Fire) и опущенное оружие (rest: перегрев штурмовика, перезарядка ракетчика; у снайпера
+// нет). Позы game.js выставляет в e.gunPose: 'aim' | 'fire' | 'rest' | null (идёт с оружием как в позе
+// привязки). Кость Muzzle — дуло. Штурмовик и ракетчик грузятся при первом заходе в Промзону, снайпер (city) —
+// сразу, он живёт и в городе
 const GUNNER_TYPES = {
+  // Снайпер держит винтовку двумя руками: в позах двигается и левая рука (bones)
+  sniper: { file: 'assets/models/toad_sniper.glb', v: 1182, frame: { w: 90, anchor: -11 }, rest: null, city: true,
+    bones: ['Spine', 'ArmR', 'ForearmR', 'ArmL', 'ForearmL'] },
   stormtrooper: { file: 'assets/models/toad_stormtrooper.glb', frame: { w: 92, anchor: -11 }, rest: 'Overheat' },
   rocketeer: { file: 'assets/models/toad_rocketeer.glb', frame: { w: 98, anchor: -12 }, rest: 'Reload' }
 };
@@ -234,7 +238,7 @@ class ThreeEnemyManager {
   loadAllModels() {
     this.loadModels([
       { type: 'grunt',  file: 'assets/models/toad_grunt.glb' },
-      { type: 'sniper', file: 'assets/models/toad_sniper.glb' },
+      { type: 'sniper', file: GUNNER_TYPES.sniper.file, v: GUNNER_TYPES.sniper.v },
       { type: 'brute',  file: 'assets/models/toad_brute.glb' }
     ]);
   }
@@ -243,7 +247,8 @@ class ThreeEnemyManager {
   loadPromzona() {
     if (this.promzonaRequested) return;
     this.promzonaRequested = true;
-    this.loadModels(Object.keys(GUNNER_TYPES).map(type => ({ type, file: GUNNER_TYPES[type].file })));
+    this.loadModels(Object.keys(GUNNER_TYPES).filter(type => !GUNNER_TYPES[type].city)
+      .map(type => ({ type, file: GUNNER_TYPES[type].file })));
   }
 
   loadModels(configs) {
@@ -267,7 +272,7 @@ class ThreeEnemyManager {
 
     configs.forEach(cfg => {
       loader.load(
-        cfg.file + '?v=1030',
+        cfg.file + '?v=' + (cfg.v || 1030),   // своя версия — у переделанных моделей (снайпер)
         (gltf) => {
           const model = gltf.scene;
           this.models[cfg.type] = model;
@@ -325,16 +330,17 @@ class ThreeEnemyManager {
    */
   buildGunnerPoses(type, model, clips) {
     const rest = GUNNER_TYPES[type].rest;
+    const bones = GUNNER_TYPES[type].bones || GUNNER_UPPER_BONES;
     const sample = (suffix, at) => {
       const clip = clips.find(c => c.name.endsWith('_' + suffix));
       if (!clip) return [];
       const t = clip.duration * at;
       return clip.tracks
-        .filter(tr => tr.name.endsWith('.quaternion') && GUNNER_UPPER_BONES.includes(tr.name.split('.')[0]))
+        .filter(tr => tr.name.endsWith('.quaternion') && bones.includes(tr.name.split('.')[0]))
         .map(tr => [model.getObjectByName(tr.name.split('.')[0]), new THREE.Quaternion().fromArray(tr.createInterpolant().evaluate(t))])
         .filter(([bone]) => bone);
     };
-    return { aim: sample('Aim', 0), fire: sample('Fire', 0.5), rest: sample(rest, 0) };
+    return { aim: sample('Aim', 0), fire: sample('Fire', 0.5), rest: rest ? sample(rest, 0) : [] };
   }
 
   // Поставить стрелку позу поверх ходьбы. Следующий setTime ходьбы вернёт кости: в клипе ходьбы есть все
@@ -359,7 +365,8 @@ class ThreeEnemyManager {
     for (const type of types) {
       if (!this.isLoaded[type]) continue;
       // Стрелки ходят и с опущенным оружием, и целясь, и перегретыми; отдача — один кадр шага
-      const poses = GUNNER_TYPES[type] ? [null, 'aim', 'rest'] : [null];
+      const gunner = GUNNER_TYPES[type];
+      const poses = gunner ? [null, 'aim'].concat(gunner.rest ? ['rest'] : []) : [null];
       for (let dirIdx = 0; dirIdx < this.numDirections; dirIdx++) {
         for (const pose of poses) {
           for (let frameIdx = 0; frameIdx < this.numFrames; frameIdx++) {
@@ -764,9 +771,6 @@ class ThreeEnemyManager {
     if (gunner) {
       renderW = gunner.frame.w;
       anchorOffsetY = gunner.frame.anchor;
-    } else if (type === 'sniper') {
-      renderW = 82;
-      anchorOffsetY = -10;
     } else if (type === 'brute') {
       renderW = BRUTE_FRAME.w;
       anchorOffsetY = BRUTE_FRAME.anchor;
