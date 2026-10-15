@@ -9655,16 +9655,15 @@ function render() {
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
 
     const tipsy = fumeOn && Math.hypot(e.x - player.x, e.y - player.y) < fumeAuraRadius();
-    if (e.type === 'boss') {
-      drawBoss(ctx, e);
+    // Горящие (горючая жижа, src/perks_pz.js): огонь за фигурой, фигура дёргается и темнеет, огонь перед ней
+    if (e.type === 'boss' || e.type === 'pounder') {
+      drawBurningBack(ctx, e);
+      ctx.save();
+      burnTransform(ctx, e);
+      if (e.type === 'boss') drawBoss(ctx, e); else drawPounder(ctx, e);
+      ctx.restore();
+      drawBurningFront(ctx, e);
       if (tipsy) drawFumeTipsy(ctx, e);
-      drawBurning(ctx, e);
-      continue;
-    }
-    if (e.type === 'pounder') {
-      drawPounder(ctx, e);
-      if (tipsy) drawFumeTipsy(ctx, e);
-      drawBurning(ctx, e);
       continue;
     }
 
@@ -9690,6 +9689,9 @@ function render() {
     // Раскалённый ствол штурмовика: за фигурой, если жаба стоит спиной
     const glowBehind = e.overheat > 0 && gunMuzzle(e).behind;
     if (glowBehind) drawOverheatGlow(ctx, e);
+    drawBurningBack(ctx, e);
+    ctx.save();
+    burnTransform(ctx, e);
     if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
       if (e.type === 'grunt') {
         SpriteRenderer.drawToadGrunt(ctx, e);
@@ -9700,10 +9702,11 @@ function render() {
         SpriteRenderer.drawToadSniper(ctx, e);
       }
     }
+    ctx.restore();
+    drawBurningFront(ctx, e);
     if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
     if (e.overheat > 0 && !glowBehind) drawOverheatGlow(ctx, e);
     if (tipsy) drawFumeTipsy(ctx, e);
-    drawBurning(ctx, e); // горючая жижа (src/perks_pz.js)
   }
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
