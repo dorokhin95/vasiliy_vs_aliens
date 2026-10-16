@@ -16,6 +16,7 @@
 
 window.Menu = (() => {
   const SAVE_KEY = 'vasiliy.run';
+  const COOP_SAVE_KEY = 'vasiliy.coopRun';   // сетевой кооп — у хоста (src/net.js)
   const SETTINGS_KEY = 'vasiliy.settings';
   // Меняя состав сохранения, увеличьте номер и научите applyRun() читать старые форматы.
   // 1 — без врагов (тогда враги расставляются заново), 2 — с живыми врагами,
@@ -256,9 +257,11 @@ window.Menu = (() => {
   // посреди драки и обновлением страницы сбежать к Михалычу со всем добытым в бою
   function inCombat() {
     if (bossRef && bossRef.isAggroed) return true;
+    // Кооп: бой, если гонятся хоть за кем-то из игроков
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      if (e.isAggroed && Math.hypot(e.x - player.x, e.y - player.y) < COMBAT_RADIUS) return true;
+      if (!e.isAggroed) continue;
+      if (players.some(p => !p.dead && Math.hypot(e.x - p.x, e.y - p.y) < COMBAT_RADIUS)) return true;
     }
     return false;
   }
@@ -325,7 +328,7 @@ window.Menu = (() => {
       // Мясник есть только в городе: в Промзоне bossRef нет, но это не значит, что он побеждён
       bossDefeated: currentLocation === 'city' && !bossRef,
       boss: bossRef ? {
-        hp: Math.ceil(bossRef.hp), enraged: !!bossRef.enraged,
+        hp: Math.ceil(bossRef.hp / (bossRef.coopK || 1)), enraged: !!bossRef.enraged,
         shield: Math.ceil(bossRef.shield), berserk: !!bossRef.berserk
       } : null,
       fence: { state: fenceBreach.state, cracks: fenceBreach.cracks },
@@ -333,10 +336,11 @@ window.Menu = (() => {
       enemyTotal: levelEnemyTotal,
       // Долбильщик есть только в Промзоне, как Мясник — только в городе
       pounderDefeated: currentLocation === 'promzona' && !pounderRef,
-      pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp), phase: pounderRef.phase, snipers: !!pounderRef.snipersCalled } : null,
+      pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp / (pounderRef.coopK || 1)), phase: pounderRef.phase, snipers: !!pounderRef.snipersCalled } : null,
       // Жабы обороны у пролома не сохраняются: незаконченная оборона после загрузки начнётся заново
       enemies: enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).map(e => ({
-        type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp), maxHp: e.maxHp,
+        // Здоровье — без кооп-усиления (coopScaleEnemy в game.js усилит заново)
+        type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp / (e.coopK || 1)), maxHp: e.maxHp / (e.coopK || 1),
         armor: e.armor || 0,
         radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
         tier: e.tier, districtId: e.districtId, bounds: e.bounds
@@ -370,6 +374,14 @@ window.Menu = (() => {
 
   // Пишет сохранение, если сейчас можно: идёт забег и нет боя
   function saveRun() {
+    // Сетевой кооп сохраняет хост — отдельно от одиночного забега: мир и игроки по именам (src/net.js)
+    if (window.Net && window.Net.started) {
+      if (!window.Net.isHost() || !runActive() || inCombat()) return false;
+      if (!writeJSON(COOP_SAVE_KEY, window.Net.coopSnapshot(snapshot))) return false;
+      lastSaveAt = Date.now();
+      saveRequested = false;
+      return true;
+    }
     // Тренировочный бой (?boss2, src/practice.js) не пишет сохранение
     if (window.Practice && window.Practice.active) return false;
     if (!runActive() || inCombat()) return false;
@@ -393,6 +405,12 @@ window.Menu = (() => {
   // Вызывается из startGame() после generateWorld(): переносит прогресс на свежую карту.
   // Каждое поле проверяется: сохранение могло прийти из кода, набранного руками
   function applyRun(s) {
+    applyPlayer(s);
+    applyRunWorld(s);
+  }
+
+  // Василий из сохранения: здоровье, припасы, оружие, перки, карты, мастерская, столовая (кооп — каждый свой)
+  function applyPlayer(s) {
     const p = s.player || {};
     player.maxHp = num(p.maxHp, player.maxHp, 1, 100000);
     player.hp = num(p.hp, player.maxHp, 1, player.maxHp);
@@ -447,7 +465,9 @@ window.Menu = (() => {
     player.pendingCards = !!p.pendingCards;
     player.slimeArmor = num(p.slimeArmor, slimeArmorMax(), 0, slimeArmorMax());
     player.rmbAbility = typeof p.rmbAbility === 'string' ? p.rmbAbility : null;
+  }
 
+  function applyRunWorld(s) {
     // Миры локаций. Формат 6 — по локациям: мир той, где Василий, восстанавливается сразу (generateWorld
     // уже построил её в startGame), другой ждёт перехода через пролом. Раньше был один мир — городской.
     // Сохранение со старой карты (до WORLD_FORMAT): прогресс Василия перенесён, мир остаётся свежим
@@ -535,7 +555,7 @@ window.Menu = (() => {
     }
     (Array.isArray(w.loot) ? w.loot : []).slice(0, LOOT_LIMIT).forEach(it => {
       if (!Array.isArray(it) || !LOOT_TYPES.has(it[2])) return;
-      spawn3DLootItem(num(it[0], safeZone.x, 0, WORLD_WIDTH), num(it[1], safeZone.y, 0, WORLD_HEIGHT), it[2], num(it[3], 1, 1, 9999));
+      spawn3DLootItem(num(it[0], safeZone.x, 0, WORLD_WIDTH), num(it[1], safeZone.y, 0, WORLD_HEIGHT), it[2], num(it[3], 1, 1, 9999), true);
     });
     // Живые враги (формат 2). В формате 1 их нет — остаются только что расставленные
     if (Array.isArray(w.enemies)) {
@@ -573,9 +593,11 @@ window.Menu = (() => {
     levelCleared = enemies.length === 0 && levelEnemyTotal > 0;
   }
 
-  function onGameOver() {
+  // net — кончился сетевой кооп ('host' | 'client'): хост стирает его сохранение, одиночное не трогаем
+  function onGameOver(net) {
     if (window.Practice && window.Practice.active) return;   // тренировка забег не стирает
-    removeKey(SAVE_KEY);
+    if (net === 'client') return;
+    removeKey(net === 'host' ? COOP_SAVE_KEY : SAVE_KEY);
     lastSaveAt = 0;
     saveRequested = false;
   }
@@ -930,7 +952,8 @@ window.Menu = (() => {
   refreshTexts();
 
   return {
-    applyRun, onGameOver, requestSave, refreshTexts, onEscape, pause, resume, saveRun, inCombat,
+    applyRun, applyPlayer, snapshot, loadCoop: () => readJSON(COOP_SAVE_KEY), clearCoop: () => removeKey(COOP_SAVE_KEY),
+    onGameOver, requestSave, refreshTexts, onEscape, pause, resume, saveRun, inCombat,
     snapshotWorld, applyWorld, locationOf, loadSave
   };
 })();

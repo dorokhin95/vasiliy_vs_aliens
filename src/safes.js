@@ -46,16 +46,29 @@ window.Safes = (function () {
     return d.slice(0, n);
   }
 
+  // Сетевой кооп: код сейфа загадывает и проверяет только хост (у клиента он лишь приходит в снимке),
+  // поэтому подготовка и проверка кода — только у хоста (netAction local: false)
+  const cIndex = ([c, ...rest]) => [containers.indexOf(c), ...rest];
+  const cFrom = ([i, ...rest]) => [containers[i], ...rest];
+  const prep = netAction('safe.prep', prepRaw, cIndex, cFrom, false);
+  const tryCode = netAction('safe.try', tryCodeRaw, cIndex, cFrom, false);
+
+  function prepRaw(c) {
+    if (!c || !isSafe(c) || c.searched) return;
+    const s = state(c), def = SAFE_TYPES[c.type];
+    if (s.jam > 0) return;
+    if (!s.code) s.code = newCode(def.digits);
+    // Стетоскоп: инженер слышит механизм — одна цифра сразу известна
+    if (s.hint === null && player.hasPerk('stethoscope')) s.hint = Math.floor(Math.random() * def.digits);
+  }
+
   function open(c) {
     const s = state(c);
     if (s.jam > 0) {
       addFloatingText(c.x - 40, c.y - 60, L('🔒 Заклинило', '🔒 Jammed'), '#f87171');
       return;
     }
-    const def = SAFE_TYPES[c.type];
-    if (!s.code) s.code = newCode(def.digits);
-    // Стетоскоп: инженер слышит механизм — одна цифра сразу известна
-    if (s.hint === null && player.hasPerk('stethoscope')) s.hint = Math.floor(Math.random() * def.digits);
+    prep(c);
     cur = c;
     input = [];
     lastHp = player.hp;
@@ -74,6 +87,13 @@ window.Safes = (function () {
     dialAngle = target + spin;
     const el = $('safe-dial');
     if (el) el.style.transform = `rotate(${dialAngle}deg)`;
+  }
+
+  // Снимок обновил сейф, который открыт у клиента (src/net.js): лампочки, вскрыт, заклинило
+  function refresh() {
+    if (!cur) return;
+    if (cur.searched || state(cur).jam > 0) close();
+    else render();
   }
 
   function close() {
@@ -101,13 +121,23 @@ window.Safes = (function () {
     if (!cur) return;
     const def = SAFE_TYPES[cur.type];
     if (input.length < def.digits) return;
-    const s = state(cur);
-    const lamps = input.map((d, i) => (d === s.code[i] ? 'green' : s.code.includes(d) ? 'yellow' : 'off'));
-    s.guesses.push({ digits: input.slice(), lamps });
+    const digits = input.slice();
     input = [];
     turnDial(0, 360);
+    tryCode(cur, digits);
+    if (cur) render();
+  }
+
+  // Проверка кода (у хоста — и за товарища по сети: тогда c не тот, что открыт здесь)
+  function tryCodeRaw(c, digits) {
+    if (!c || !isSafe(c) || c.searched || !Array.isArray(digits)) return;
+    const def = SAFE_TYPES[c.type];
+    const s = state(c);
+    if (!s.code || s.jam > 0 || digits.length !== def.digits) return;
+    const lamps = digits.map((d, i) => (d === s.code[i] ? 'green' : s.code.includes(d) ? 'yellow' : 'off'));
+    s.guesses.push({ digits: digits.slice(), lamps });
     if (lamps.every(l => l === 'green')) {
-      crack(cur);
+      crack(c);
       return;
     }
     if (s.guesses.length >= def.attempts) {
@@ -116,21 +146,21 @@ window.Safes = (function () {
       s.code = null;
       s.guesses = [];
       s.hint = null;
-      jammed.add(cur);
-      addFloatingText(cur.x - 50, cur.y - 60, L('🔒 ЗАКЛИНИЛО!', '🔒 JAMMED!'), '#f87171');
+      jammed.add(c);
+      addFloatingText(c.x - 50, c.y - 60, L('🔒 ЗАКЛИНИЛО!', '🔒 JAMMED!'), '#f87171');
       SoundFX.overheat();
-      close();
+      if (cur === c) close();
       return;
     }
     SoundFX.reload();
-    render();
+    if (cur === c) render();
   }
 
   function crack(c) {
     c.searched = true;
     const s = state(c);
     s.code = null;
-    close();
+    if (cur === c) close();
     const loot = SAFE_LOOT[c.type] || [];
     const drops = [];
     loot.forEach(([type, a, b, chance = 1]) => {
@@ -214,7 +244,7 @@ window.Safes = (function () {
     $('safe-attempts').textContent = L(`Попыток осталось: ${def.attempts - s.guesses.length}`,
       `Attempts left: ${def.attempts - s.guesses.length}`);
     const hintEl = $('safe-hint');
-    if (s.hint !== null) {
+    if (s.hint !== null && s.code) {
       hintEl.style.display = 'block';
       hintEl.textContent = L(`🩺 Стетоскоп: ${s.hint + 1}-я цифра — ${s.code[s.hint]}`,
         `🩺 Stethoscope: digit ${s.hint + 1} is ${s.code[s.hint]}`);
@@ -259,5 +289,5 @@ window.Safes = (function () {
   }
   buildKeypad();
 
-  return { isSafe, isOpen, open, close, update, handleKey, prompt, SAFE_TYPES };
+  return { isSafe, isOpen, open, close, refresh, update, handleKey, prompt, SAFE_TYPES };
 })();

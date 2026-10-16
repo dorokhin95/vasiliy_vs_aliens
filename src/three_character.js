@@ -9,8 +9,15 @@
  * - Modular weapons (Shotgun, Mining Drill, Plasma Rifle) seated directly in hands pointing forward
  */
 
+// Кооп (docs/COOP.md): у каждого игрока свой цвет ватника. Множитель к цвету ткани (ватник почти серый,
+// поэтому не поворот оттенка, а окраска): 0 — родной, 1 — синий, 2 — бордовый, 3 — оранжевый «дорожник»
+const COOP_VATNIK = [null, [0.55, 0.95, 2.6], [1.9, 0.45, 0.45], [3.0, 1.45, 0.35]];
+// Цвет игрока в интерфейсе: имена над головой, стрелки у края экрана
+const COOP_COLORS = ['#a3b18a', '#60a5fa', '#f87171', '#fb923c'];
+
 class ThreeCharacterManager {
-  constructor() {
+  constructor(color = 0) {
+    this.color = color;
     this.isLoaded = false;
     this.loadFailed = false;
     this.width = 160;
@@ -248,6 +255,7 @@ class ThreeCharacterManager {
         }
 
         this.rollPivot.add(this.model);
+        if (COOP_VATNIK[this.color]) this.tintVatnik(COOP_VATNIK[this.color]);
 
         // Initial weapon setup (default spiked bat)
         this.setWeapon('bat');
@@ -325,6 +333,42 @@ class ThreeCharacterManager {
     this._m = new THREE.Matrix4();
     this._v1 = new THREE.Vector3();
     this._v2 = new THREE.Vector3();
+  }
+
+  /**
+   * Перекрасить ватник: у вершин корпуса от пояса до воротника и у рукавов (материал «model» с текстурой
+   * одежды; перчатки — свой материал) цвет ткани умножается на tint. Маска — атрибут вершин, считается
+   * по позе привязки: у корпуса — по высоте, рукава целиком
+   */
+  tintVatnik(tint) {
+    const patched = new Set();
+    this.model.traverse(o => {
+      if (!o.isMesh || !o.material || Array.isArray(o.material) || o.material.name !== 'model') return;
+      const g = o.geometry;
+      const pos = g.attributes.position;
+      if (!g.boundingBox) g.computeBoundingBox();
+      const body = g.boundingBox.max.y - g.boundingBox.min.y > 1.2;
+      const mask = new Float32Array(pos.count);
+      const ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+      for (let i = 0; i < pos.count; i++) {
+        const y = pos.getY(i);
+        mask[i] = body ? ss(0.86, 0.93, y) * (1 - ss(1.55, 1.62, y)) : 1;
+      }
+      g.setAttribute('vatnik', new THREE.BufferAttribute(mask, 1));
+      const m = o.material;
+      if (patched.has(m)) return;
+      patched.add(m);
+      m.onBeforeCompile = (shader) => {
+        shader.uniforms.uVatnikTint = { value: new THREE.Vector3(tint[0], tint[1], tint[2]) };
+        shader.vertexShader = 'attribute float vatnik;\nvarying float vVatnik;\n' +
+          shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vVatnik = vatnik;');
+        shader.fragmentShader = 'uniform vec3 uVatnikTint;\nvarying float vVatnik;\n' +
+          shader.fragmentShader.replace('#include <map_fragment>',
+            '#include <map_fragment>\n  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * uVatnikTint, vVatnik);');
+      };
+      m.customProgramCacheKey = () => 'vatnik' + this.color;
+      m.needsUpdate = true;
+    });
   }
 
   undoTwist() {
@@ -520,6 +564,28 @@ class ThreeCharacterManager {
     const moveDy = this.lastY !== null ? (player.y - this.lastY) : 0;
     this.lastX = player.x;
     this.lastY = player.y;
+
+    // Кооп: упал или погиб — лежит на спине без оружия (кадр один и тот же, рисуем раз в 10 кадров)
+    if (player.downT > 0 || player.dead) {
+      if (this.currentWeaponId !== 'none') {
+        this.currentWeaponId = 'none';
+        this.setWeapon('none');
+      }
+      this.characterRoot.rotation.y = -player.angle + Math.PI / 2;
+      this.rollPivot.rotation.set(-1.4, 0, 0);
+      this.rollPivot.position.set(0, 0.32, 0);
+      this.rollPivot.scale.set(1, 1, 1);
+      if (this.mixer) { this.switchAction('idle'); this.mixer.update(0); }
+      if ((++this.idleFrameCounter % 10) === 0 || this.lastRenderState !== 'down') {
+        this.lastRenderState = 'down';
+        this.renderer.render(this.scene, this.camera);
+      }
+      return;
+    }
+    if (this.lastRenderState === 'down') {
+      this.lastRenderState = '';
+      this.rollPivot.position.set(0, this.pivotHeight, 0);
+    }
 
     // 1. Weapon Selection (hide weapon briefly during tight somersault roll so barrel doesn't poke ground)
     const currentWeapon = player.currentWeapon || 'none';

@@ -66,6 +66,33 @@ window.Settlers = (function () {
     });
   }
 
+  // Сетевой кооп (src/net.js): спасённых ведёт хост, клиенту — где они, их выстрелы и реплика
+  function netGet() {
+    const strip = o => { const r = Object.assign({}, o); delete r.def; delete r.sp; r.did = o.def.id; return r; };
+    return { settlers: settlers.map(strip), shots, bubble: bubble ? { si: settlers.indexOf(bubble.s), text: bubble.text, t: bubble.t, max: bubble.max } : null, weldT };
+  }
+  function netSet(v) {
+    const defs = window.Defense.SURVIVORS;
+    if (settlers.length !== v.settlers.length) settlers = v.settlers.map(() => ({}));
+    v.settlers.forEach((o, i) => {
+      Object.assign(settlers[i], o);
+      settlers[i].def = defs.find(d => d.id === o.did);
+      settlers[i].sp = SPOTS[o.did];
+    });
+    shots = v.shots || [];
+    bubble = v.bubble && settlers[v.bubble.si] ? { s: settlers[v.bubble.si], text: v.bubble.text, t: v.bubble.t, max: v.bubble.max } : null;
+    weldT = v.weldT || 0;
+  }
+
+  // Для миникарты (src/minimap.js): пост, мастерская и столовая, когда спасённые в городе
+  function places() {
+    if (!active()) return [];
+    const list = [{ x: POST.x, y: POST.y + 60, kind: 'post' }];
+    if (window.Quests && window.Quests.flag('workshop')) list.push({ x: WORKSHOP.x, y: WORKSHOP.y, kind: 'workshop' });
+    if (window.Quests && window.Quests.flag('canteen')) list.push({ x: CANTEEN.x, y: CANTEEN.y, kind: 'canteen' });
+    return list;
+  }
+
   // --- Обновление ---
   function update() {
     if (!active()) {
@@ -727,6 +754,6 @@ window.Settlers = (function () {
   const inArea = (x, y) => [[POST.x, POST.y + 120, 360], [WORKSHOP.x, WORKSHOP.y - 20, 190], [CANTEEN.x, CANTEEN.y - 10, 170]]
     .some(([cx, cy, r]) => Math.hypot(x - cx, (y - cy) / GROUND_SQUASH) < r);
 
-  return { saveState, loadState, update, nearest, prompt, talk, drawGround, drawActors, drawShots, drawBubble,
+  return { saveState, loadState, update, netGet, netSet, places, nearest, prompt, talk, drawGround, drawActors, drawShots, drawBubble,
     addActors, addShadows, addObstacles, inArea, get list() { return settlers; } };
 })();

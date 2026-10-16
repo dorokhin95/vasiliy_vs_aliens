@@ -192,6 +192,17 @@ window.Quests = (function () {
   }
   const flag = k => !!flags[k];
 
+  // Сетевой кооп (src/net.js): квесты общие — состояние и предметы на земле ведёт хост
+  function netGet() {
+    return { state, flags, pickups: pickups.map(p => ({ qi: p.q.id, k: p.k, x: p.x, y: p.y })) };
+  }
+  function netSet(v) {
+    state = v.state || {};
+    flags = v.flags || {};
+    pickups = (v.pickups || []).map(p => ({ q: byId[p.qi], k: p.k, x: p.x, y: p.y })).filter(p => p.q);
+    prepared = true;
+  }
+
   // --- Состояние квеста ---
   const isActive = q => state[q.id] && state[q.id].s === 'active';
   const isDone = q => state[q.id] && state[q.id].s === 'done';
@@ -257,7 +268,14 @@ window.Quests = (function () {
     ]))];
   }
 
-  function accept(q, ui) {
+  // Взять, сдать, набрать пробу — и сетевым товарищам (netAction в game.js). Хост отвечает в пустое окно:
+  // реплики показывает окно диалога у самого игрока
+  const NO_UI = { say() {}, menu() {}, pages() {} };
+  const accept = netAction('q.accept', acceptRaw, ([q]) => [q.id], ([id]) => [byId[id], NO_UI]);
+  const turnIn = netAction('q.turnIn', turnInRaw, ([q]) => [q.id], ([id]) => [byId[id], NO_UI]);
+
+  function acceptRaw(q, ui) {
+    if (!q || state[q.id]) return;
     state[q.id] = { s: 'active', got: Array(q.find ? q.find.n : q.sample || q.boss ? 1 : 0).fill(false) };
     prepared = false;
     showToast(L('НОВОЕ ЗАДАНИЕ', 'NEW QUEST'), `${T(q.title)} — ${T(q.where)}`);
@@ -266,7 +284,9 @@ window.Quests = (function () {
     ui.menu(T(q.boss && q.acceptedDown && bossDown() ? q.acceptedDown : q.accepted));
   }
 
-  function turnIn(q, ui) {
+  // Сдал один — квест закрыт у всех, награда — ему (кооп: player — тот, кто сдаёт)
+  function turnInRaw(q, ui) {
+    if (!q || !state[q.id] || state[q.id].s === 'done') return;
     state[q.id].s = 'done';
     if (q.bring) payCost(q.bring);
     giveReward(q);
@@ -278,6 +298,7 @@ window.Quests = (function () {
 
   function giveReward(q) {
     flags[q.reward] = true;
+    if (q.reward === 'freeUpgrade') player.freeUpgrade = true;
     if (q.reward === 'launcher' && window.Workshop) window.Workshop.giveLauncher();
     if (q.reward === 'blueprint') {
       player.resources.blueprint = (player.resources.blueprint || 0) + 1;
@@ -395,9 +416,10 @@ window.Quests = (function () {
   function update() {
     if (!prepared) prepare();
     bossDrops();
+    // Предмет квеста подбирает любой из игроков — квест общий
     for (let i = pickups.length - 1; i >= 0; i--) {
       const p = pickups[i];
-      if (Math.hypot(player.x - p.x, player.y - p.y) < PICK_R) pickUp(p);
+      if (players.some(pl => !pl.dead && !(pl.downT > 0) && Math.hypot(pl.x - p.x, pl.y - p.y) < PICK_R)) pickUp(p);
     }
     updateTracker();
   }
@@ -419,7 +441,8 @@ window.Quests = (function () {
     return !!(q && p && Math.hypot(player.x - p.x, (player.y - p.y) / GROUND_SQUASH) < SAMPLE_R);
   }
   const samplePrompt = () => L('[E] Набрать пробу шлама', '[E] Take a sludge sample');
-  function takeSample() {
+  const takeSample = netAction('q.sample', takeSampleRaw);
+  function takeSampleRaw() {
     const q = sampleQuest();
     if (!q || !nearSample()) return;
     state[q.id].got[0] = true;
@@ -574,6 +597,6 @@ window.Quests = (function () {
     });
   }
 
-  return { saveState, loadState, flag, marker, topic, onWorld, onSearched, update, drawWorld, drawOverlay, drawBang, journal,
+  return { saveState, loadState, netGet, netSet, refreshTracker: () => updateTracker(), flag, marker, topic, onWorld, onSearched, update, drawWorld, drawOverlay, drawBang, journal,
     nearSample, samplePrompt, takeSample, sampleSpot: () => (sampleQuest() ? sampleSpot() : null) };
 })();

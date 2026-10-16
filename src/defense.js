@@ -139,7 +139,9 @@ window.Defense = (function () {
 
   const defenseToads = () => enemies.filter(e => e.defense);
 
+  let bannerText = '';
   function setBanner(text) {
+    bannerText = text;
     if (!banner) {
       banner = document.createElement('div');
       banner.id = 'defense-banner';
@@ -150,6 +152,21 @@ window.Defense = (function () {
     }
     banner.style.display = text ? 'block' : 'none';
     if (banner.textContent !== text) banner.textContent = text;
+  }
+
+  // Сетевой кооп (src/net.js): оборону ведёт хост, клиенту — этап, выжившие, их выстрелы, надпись
+  const strip = o => { const r = Object.assign({}, o); delete r.def; return r; };
+  function netGet() {
+    return { stage, wave, timer, banner: bannerText, shots, survivors: survivors.map(s => Object.assign(strip(s), { di: SURVIVORS.indexOf(s.def) })) };
+  }
+  function netSet(v) {
+    stage = v.stage;
+    wave = v.wave;
+    timer = v.timer;
+    shots = v.shots || [];
+    if (survivors.length !== v.survivors.length) survivors = v.survivors.map(() => ({}));
+    v.survivors.forEach((o, i) => { Object.assign(survivors[i], o); survivors[i].def = SURVIVORS[o.di]; });
+    if (v.banner !== bannerText) setBanner(v.banner);
   }
 
   // Передышка: подбросить патронов к купленным стволам или бинт
@@ -611,6 +628,6 @@ window.Defense = (function () {
   const inArea = (x, y) => Math.hypot(x - C.x, (y - C.y) / GROUND_SQUASH) < R + 120;
 
   // SURVIVORS и drawPiece — и для города после спасения (src/settlers.js)
-  return { saveState, loadState, onWorld, onEnter, update, drawGround, drawActors, drawShots, addActors, addShadows, addObstacles,
-    isDefenseToad, inArea, SURVIVORS, drawPiece, get stage() { return stage; }, get actors() { return survivors; } };
+  return { saveState, loadState, onWorld, onEnter, update, netGet, netSet, drawGround, drawActors, drawShots, addActors, addShadows, addObstacles,
+    isDefenseToad, inArea, SURVIVORS, drawPiece, center: C, get stage() { return stage; }, get actors() { return survivors; } };
 })();

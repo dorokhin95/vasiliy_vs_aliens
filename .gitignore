@@ -30,3 +30,6 @@ blender_assets/*_concepts/
 blender_assets/*_models/
 blender_assets/*.obj
 assets/models/preview/
+
+# Python cache
+__pycache__/

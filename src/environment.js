@@ -2285,6 +2285,11 @@ class EnvironmentRenderer {
     const typeKey = `loot_${l.type}`;
     if (this.loot && this.loot[typeKey]) {
       img = this.loot[typeKey];
+    } else if (l.img) {
+      // Выкинутое в коопе: ствол, блюдо столовой — своя картинка (game.js dropItem)
+      const cache = this.dropImgs || (this.dropImgs = {});
+      if (!cache[l.img]) { cache[l.img] = new Image(); cache[l.img].src = l.img; }
+      if (cache[l.img].complete && cache[l.img].naturalWidth) img = cache[l.img];
     }
 
     ctx.save();

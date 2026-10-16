@@ -22,6 +22,9 @@ function slimeArmorMax() {
 // Урон по Василию с учётом брони: возвращает, сколько дошло до здоровья (здоровье здесь не меняется).
 // kind: 'melee' | 'ranged' | 'energy'
 function armorAbsorb(dmg, kind) {
+  // Кооп: лежащего не добивают; жабы и боссы бьют сильнее, чем больше игроков (coopScale в game.js)
+  if (player.downT > 0 || player.dead) return 0;
+  if (players.length > 1) dmg *= enemyActing && (enemyActing.type === 'boss' || enemyActing.type === 'pounder') ? coopScale().bossDmg : coopScale().dmg;
   player.hurtFrame = 0;
   const max = slimeArmorMax();
   if (max <= 0 || !(player.slimeArmor > 0) || dmg <= 0) return dmg;
@@ -306,7 +309,7 @@ function shootFireGoo() {
 }
 
 function landGoo(sh) {
-  FireSound.land(enemySoundVolume(sh.tx, sh.ty));
+  FireSound.land(enemySoundVolume(sh.tx, sh.ty, true));
   // Лужа растекается от места попадания; огонь бежит по ней (pool.spread)
   // Очаги огня разложены по всей круглой луже: середина, внутреннее и внешнее кольцо; рисуются от дальних к ближним
   const cols = [{ dx: 0, dy: 0, r: 0 }];
@@ -618,11 +621,11 @@ const FireSound = {
 // гул и случайный треск
 function updateFireSound() {
   let level = 0;
-  firePools.forEach(p => { level += poolPower(p) * enemySoundVolume(p.x, p.y); });
+  firePools.forEach(p => { level += poolPower(p) * enemySoundVolume(p.x, p.y, true); });
   for (let j = 0; j < enemies.length; j++) {
     const e = enemies[j];
     if (!(e.burnLeft > 0)) continue;
-    const v = burnPower(e) * enemySoundVolume(e.x, e.y);
+    const v = burnPower(e) * enemySoundVolume(e.x, e.y, true);
     level += v * 0.45;
     if (Math.random() < 0.012) FireSound.sizzle(v);
   }

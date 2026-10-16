@@ -169,6 +169,7 @@ window.Canteen = (function () {
   }
 
   function render() {
+    if (player !== localPlayer) return; // блюдо товарища по сети — окно не наше
     $('cn-title').textContent = L('СТОЛОВАЯ ЛЕНЫ', 'LENA\'S CANTEEN');
     $('cn-sub').textContent = L('Лена варит из жабьих трофеев: снадобья и бустеры. Готовое — в инвентарь, в ячейки хотбара 1–3 ставь в окне инвентаря (I).',
       'Lena cooks toad trophies into remedies and boosters. They go to your inventory — put them into hotbar slots 1–3 in the inventory window (I).');
@@ -218,8 +219,10 @@ window.Canteen = (function () {
     ['stew', 'bandage'].forEach(k => cell(ITEM_IMG[k], player.items[k] || 0));
   }
 
-  function cook(d) {
-    if (!known(d) || !affordable(d)) return;
+  // Сварить — и сетевым товарищам (netAction в game.js)
+  const cook = netAction('canteen.cook', cookRaw, ([d]) => [d.id], ([id]) => [byId[id]]);
+  function cookRaw(d) {
+    if (!d || !known(d) || !affordable(d)) return;
     payCost(d.cost);
     Object.keys(d.items || {}).forEach(k => { player.items[k] -= d.items[k]; });
     player.items[d.id] = (player.items[d.id] || 0) + 1;
@@ -239,5 +242,5 @@ window.Canteen = (function () {
   $('cn-close').addEventListener('click', close);
   ['mousedown', 'mouseup'].forEach(ev => $('canteen-modal').addEventListener(ev, e => e.stopPropagation()));
 
-  return { DISHES, isDish, use, update, open, close, isOpen, saveState, loadState, bonus, sludgeProof, steady, info };
+  return { DISHES, isDish, use, update, open, close, isOpen, refresh: () => { if (isOpen()) render(); }, saveState, loadState, bonus, sludgeProof, steady, info };
 })();

@@ -87,9 +87,28 @@ window.CharacterPanel = (function () {
     el.addEventListener('dragend', () => el.classList.remove('dragging'));
   }
 
+  // Кооп: кнопка «выкинуть» на ячейке — товарищ подберёт (game.js dropItem). Shift — всё сразу
+  function withDrop(d, kind, id) {
+    if (players.length < 2) return d;
+    const b = document.createElement('button');
+    b.className = 'inv-drop';
+    b.textContent = '⤓';
+    b.title = kind === 'weapon' ? L('Выкинуть — товарищ подберёт', 'Drop — a teammate can pick it up')
+      : L('Выкинуть (Shift — всё) — товарищ подберёт', 'Drop (Shift — all) — a teammate can pick it up');
+    b.draggable = false;
+    b.addEventListener('mousedown', e => e.stopPropagation());
+    b.addEventListener('click', e => {
+      e.stopPropagation();
+      window.dropItem(kind, id, e.shiftKey);
+      render();
+    });
+    d.append(b);
+    return d;
+  }
+
   function supplyCell(k) {
     const info = itemInfo(k);
-    const d = cell(info.img, info.name, player.items[k]);
+    const d = withDrop(cell(info.img, info.name, player.items[k]), 'item', k);
     d.title = info.title;
     d.classList.add('inv-supply');
     dragFrom(d, k);
@@ -134,16 +153,16 @@ window.CharacterPanel = (function () {
     const ammo = [];
     const pm = player.ammo.makarov, sg = player.ammo.shotgun;
     // Патроны — только к купленному оружию: стартовый запас без ствола не нужен
-    if (player.unlockedWeapons.makarov) {
-      ammo.push(cell('assets/sprites/loot/ammo_9x18.png', L('Патроны 9×18', '9×18 rounds'), `${pm.clip} + ${pm.reserve}`));
+    if (player.unlockedWeapons.makarov || pm.reserve > 0) {
+      ammo.push(withDrop(cell('assets/sprites/loot/ammo_9x18.png', L('Патроны 9×18', '9×18 rounds'), `${pm.clip} + ${pm.reserve}`), 'ammo', 'makarov'));
     }
-    if (player.unlockedWeapons.shotgun) {
-      ammo.push(cell('assets/sprites/loot/ammo_12g.png', L('Патроны 12 калибра', '12-gauge shells'), `${sg.clip} + ${sg.reserve}`));
+    if (player.unlockedWeapons.shotgun || sg.reserve > 0) {
+      ammo.push(withDrop(cell('assets/sprites/loot/ammo_12g.png', L('Патроны 12 калибра', '12-gauge shells'), `${sg.clip} + ${sg.reserve}`), 'ammo', 'shotgun'));
     }
     // Наган Зины (квест «Коля»)
-    if (player.unlockedWeapons.nagant) {
+    if (player.unlockedWeapons.nagant || player.ammo.nagant.reserve > 0) {
       const ng = player.ammo.nagant;
-      ammo.push(cell('assets/sprites/loot/ammo_762n.png?v=1', L('Патроны 7,62 к нагану', '7.62 Nagant rounds'), `${ng.clip} + ${ng.reserve}`));
+      ammo.push(withDrop(cell('assets/sprites/loot/ammo_762n.png?v=1', L('Патроны 7,62 к нагану', '7.62 Nagant rounds'), `${ng.clip} + ${ng.reserve}`), 'ammo', 'nagant'));
     }
     // Мастерская Толика (src/workshop.js)
     if (player.unlockedWeapons.launcher) {
@@ -155,9 +174,13 @@ window.CharacterPanel = (function () {
     }
     // Оружие: с собой или оставлено у Михалыча
     const weapons = SHOP_ARSENAL_ITEMS.filter(it => it.type === 'weapon' && player.unlockedWeapons[it.weaponKey])
-      .map(it => cell(it.img, L(it.name_ru, it.name_en),
-        player.equipped[it.weaponKey] ? L('с собой', 'carried') : L('у Михалыча', 'at Mikhalych'),
-        player.equipped[it.weaponKey] ? '#4ade80' : '#94a3b8'));
+      .map(it => {
+        const d = cell(it.img, L(it.name_ru, it.name_en),
+          player.equipped[it.weaponKey] ? L('с собой', 'carried') : L('у Михалыча', 'at Mikhalych'),
+          player.equipped[it.weaponKey] ? '#4ade80' : '#94a3b8');
+        // Выкинуть можно то, что с собой
+        return player.equipped[it.weaponKey] ? withDrop(d, 'weapon', it.weaponKey) : d;
+      });
     hoverSupply = null;
     body.append(section(L('Ячейки хотбара 1–3 — перетащи сюда припас (или наведи на него и нажми 1–3)',
       'Hotbar slots 1–3 — drag a supply here (or hover it and press 1–3)'), [0, 1, 2].map(slotCell)));
@@ -305,5 +328,10 @@ window.CharacterPanel = (function () {
   // Клик по затемнению вокруг окна закрывает его
   $('char-panel').addEventListener('mousedown', e => { if (e.target.id === 'char-panel') close(); });
 
-  return { open, close, toggle, isOpen };
+  // Снимок поменял Василия (src/net.js) — окно открыто: перерисовать
+  function refresh() {
+    if (isOpen()) render();
+  }
+
+  return { open, close, toggle, isOpen, refresh };
 })();

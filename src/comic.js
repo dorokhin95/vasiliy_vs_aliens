@@ -174,7 +174,7 @@ window.Comic = (() => {
     (next.decode ? next.decode() : Promise.resolve()).then(reveal, reveal);
 
     caption.classList.remove('shown');
-    caption.textContent = set.frames[i][currentLang === 'en' ? 'en' : 'ru'];
+    caption.textContent = personalize(set.frames[i][currentLang === 'en' ? 'en' : 'ru']); // кооп: имя игрока
     void caption.offsetWidth;
     caption.classList.add('shown');
     Array.from(dots.children).forEach((d, k) => d.classList.toggle('on', k === i));

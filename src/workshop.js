@@ -56,22 +56,23 @@ window.Workshop = (function () {
   const LAUNCHER_RANGE = 450, LAUNCHER_BLAST = 90;
   const EMP_RANGE = 420;
 
-  let bought = new Set(), freeUsed = false, empMade = 0;
+  // Купленное у Толика — у каждого Василия своё (кооп): player.ws
+  const W = () => player.ws || (player.ws = { bought: new Set(), freeUsed: false, empMade: 0 });
   let arcs = [], empRings = [];
 
   // --- Сохранение ---
   function saveState() {
-    return { bought: [...bought], freeUsed, empMade };
+    return { bought: [...W().bought], freeUsed: W().freeUsed, empMade: W().empMade };
   }
   function loadState(v) {
-    bought = new Set((v && Array.isArray(v.bought) ? v.bought : []).filter(id => UPGRADES.some(u => u.id === id)));
-    freeUsed = !!(v && v.freeUsed);
-    empMade = Math.min(EMP_MAX, Math.max(0, Math.floor((v && v.empMade) || 0)));
+    W().bought = new Set((v && Array.isArray(v.bought) ? v.bought : []).filter(id => UPGRADES.some(u => u.id === id)));
+    W().freeUsed = !!(v && v.freeUsed);
+    W().empMade = Math.min(EMP_MAX, Math.max(0, Math.floor((v && v.empMade) || 0)));
     arcs = [];
     empRings = [];
     applyStats();
   }
-  const has = id => bought.has(id);
+  const has = id => W().bought.has(id);
 
   // Магазин ПМ и перезарядка обреза живут в player.ammo — пересчитать после покупки и загрузки
   function applyStats() {
@@ -81,7 +82,9 @@ window.Workshop = (function () {
     sg.reloadTime = has('sg_break') ? 72 : 110;
   }
 
-  const freeAvailable = () => !!(window.Quests && window.Quests.flag('freeUpgrade')) && !freeUsed;
+  // Бесплатное улучшение — награда квеста Толика: в коопе — только тому, кто его сдал (player.freeUpgrade)
+  const freeAvailable = () => !!(window.Quests && window.Quests.flag('freeUpgrade')) &&
+    (players.length === 1 || !!player.freeUpgrade) && !W().freeUsed;
   const isOpen = () => gameState === 'WORKSHOP';
 
   // --- Окно ---
@@ -125,6 +128,7 @@ window.Workshop = (function () {
   }
 
   function render() {
+    if (player !== localPlayer) return; // покупка товарища по сети — окно не наше
     $('ws-title').textContent = L('МАСТЕРСКАЯ ТОЛИКА', 'TOLIK\'S WORKSHOP');
     $('ws-sub').textContent = L('Толик варит, точит и мотает: улучшения стволов, новое оружие и боеприпасы к нему.',
       'Tolik welds, grinds and winds: weapon upgrades, new weapons and ammo for them.');
@@ -176,6 +180,7 @@ window.Workshop = (function () {
         button(formatCostHTML(ARC_COST), canAffordCost(ARC_COST), buildArc)));
     }
     // ЭМИ-граната: только когда есть электроника или граната уже делалась. Зачем — не говорим
+    const empMade = W().empMade;
     if (player.resources.electronics > 0 || empMade > 0) {
       const left = EMP_MAX - empMade;
       craft.append(card(WEAPON_IMG('emp'), L(`ЭМИ-граната (сделано ${empMade} из ${EMP_MAX})`, `EMP grenade (made ${empMade} of ${EMP_MAX})`),
@@ -191,7 +196,7 @@ window.Workshop = (function () {
     const box = $('ws-wallet');
     box.innerHTML = '';
     ['scrap', 'mil_parts', 'nonferrous', 'blueprint', 'plasma_cell', 'kvako_charge', 'electronics'].forEach(k => {
-      if (k === 'electronics' && !player.resources.electronics && !empMade) return;
+      if (k === 'electronics' && !player.resources.electronics && !W().empMade) return;
       const d = RES_DISPLAY[k];
       const it = document.createElement('div');
       it.className = 'resource-item';
@@ -211,40 +216,46 @@ window.Workshop = (function () {
     render();
   }
 
-  function buy(u, free) {
-    if (has(u.id) || !player.unlockedWeapons[u.weapon]) return;
+  // Действия окна — и сетевым товарищам (netAction в game.js): у клиента сразу, у хоста — по-настоящему
+  const buy = netAction('ws.buy', buyRaw, ([u, free]) => [u.id, free], ([id, free]) => [UPGRADES.find(x => x.id === id), free]);
+  const craftGrenades = netAction('ws.grenades', craftGrenadesRaw);
+  const buildArc = netAction('ws.arc', buildArcRaw);
+  const craftEmp = netAction('ws.emp', craftEmpRaw);
+
+  function buyRaw(u, free) {
+    if (!u || has(u.id) || !player.unlockedWeapons[u.weapon]) return;
     if (free) {
       if (!freeAvailable()) return;
-      freeUsed = true;
+      W().freeUsed = true;
     } else {
       if (!canAffordCost(u.cost)) return;
       payCost(u.cost);
     }
-    bought.add(u.id);
+    W().bought.add(u.id);
     applyStats();
     done(`🔧 ${T(u.name)}`);
   }
 
   const grenades = () => player.ammo.launcher.clip + player.ammo.launcher.reserve;
 
-  function craftGrenades() {
+  function craftGrenadesRaw() {
     if (!canAffordCost(GRENADE_COST)) return;
     payCost(GRENADE_COST);
     player.ammo.launcher.reserve += GRENADES_PER;
     done(L(`+${GRENADES_PER} ГРАНАТЫ`, `+${GRENADES_PER} GRENADES`));
   }
 
-  function buildArc() {
+  function buildArcRaw() {
     if (player.unlockedWeapons.arc || !canAffordCost(ARC_COST)) return;
     payCost(ARC_COST);
     unlockWeapon('arc');
     done(L('⚡ СВАРОЧНЫЙ РАЗРЯДНИК', '⚡ WELDING ARC'));
   }
 
-  function craftEmp() {
-    if (empMade >= EMP_MAX || !canAffordCost(EMP_COST)) return;
+  function craftEmpRaw() {
+    if (W().empMade >= EMP_MAX || !canAffordCost(EMP_COST)) return;
     payCost(EMP_COST);
-    empMade++;
+    W().empMade++;
     player.empGrenades = (player.empGrenades || 0) + 1;
     unlockWeapon('emp');
     done(L('+1 ЭМИ-ГРАНАТА', '+1 EMP GRENADE'));
@@ -484,11 +495,15 @@ window.Workshop = (function () {
   }
 
   // --- Каждый кадр (game.js update) ---
-  function update() {
+  // ЭМИ на самом Василии — у каждого игрока свой (game.js зовёт для каждого)
+  function updatePlayer() {
     if (player.empT > 0 && --player.empT === 0) {
       addFloatingText(player.x, player.y - 46, L('⚡ ЭЛЕКТРОНИКА ОЖИЛА', '⚡ ELECTRONICS BACK ONLINE'), '#7dd3fc');
-      updateHUD(true);
+      if (player === localPlayer) updateHUD(true);
     }
+  }
+
+  function update() {
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
       if (!(e.empT > 0)) continue;
@@ -499,6 +514,10 @@ window.Workshop = (function () {
     for (let i = arcs.length - 1; i >= 0; i--) if (--arcs[i].life <= 0) arcs.splice(i, 1);
     for (let i = empRings.length - 1; i >= 0; i--) if (++empRings[i].t >= empRings[i].life) empRings.splice(i, 1);
   }
+
+  // Сетевой кооп (src/net.js): дуги и кольца ЭМИ хост шлёт клиентам
+  function netGet() { return { arcs, empRings }; }
+  function netSet(v) { arcs = v.arcs || []; empRings = v.empRings || []; }
 
   // --- Отрисовка: дуги разрядника, кольцо ЭМИ (после выстрелов, в координатах мира) ---
   function drawEffects(ctx) {
@@ -587,6 +606,6 @@ window.Workshop = (function () {
   // Клики по окну не стреляют
   ['mousedown', 'mouseup'].forEach(ev => $('workshop-modal').addEventListener(ev, e => e.stopPropagation()));
 
-  return { UPGRADES, has, open, close, isOpen, saveState, loadState, applyStats, fire, jammed, explode, update, drawEffects,
+  return { UPGRADES, has, open, close, isOpen, saveState, loadState, applyStats, fire, jammed, explode, update, updatePlayer, netGet, netSet, drawEffects, refresh: () => { if (isOpen()) render(); },
     drawProjectile, slotText, isElectronicsSafe, giveLauncher, EMP_MAX };
 })();

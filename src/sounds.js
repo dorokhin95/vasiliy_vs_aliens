@@ -17,7 +17,9 @@
 
   // --- Инструменты ---
   const rnd = (a, b) => a + Math.random() * (b - a);
-  const pan = x => Math.max(-0.85, Math.min(0.85, (x - player.x) / 700));
+  // Слушает всегда свой Василий (кооп: player — тот, чей ход сейчас считается, он может быть чужим)
+  const ear = () => (typeof localPlayer !== 'undefined' ? localPlayer : player);
+  const pan = x => Math.max(-0.85, Math.min(0.85, (x - ear().x) / 700));
 
   // Шум на 2 с: коричневый (тёплый рокот) и розовый (мягче белого)
   function noiseBuf(kind) {
@@ -74,6 +76,17 @@
   // Шина звука: громкость, панорама, доля эха
   function bus(vol = 1, p = 0, wet = 0) {
     const ac = S.ctx;
+    // Кооп: звук с места на карте (сетевой хост посчитал громкость от ближайшего игрока, S.at.v) — от своего
+    const me = ear();
+    if (S.at) {
+      const mine = soundFalloff(Math.hypot(S.at.x - me.x, S.at.y - me.y));
+      vol *= mine / Math.max(0.05, S.at.v || 1);
+      p = pan(S.at.x);
+    } else if (player !== me && !(typeof enemyActing !== 'undefined' && enemyActing)) {
+      // Звук хода чужого Василия (выстрел, перезарядка) — оттуда, где он, и тише издалека
+      vol *= soundFalloff(Math.hypot(player.x - me.x, player.y - me.y));
+      p = pan(player.x);
+    }
     const g = ac.createGain();
     g.gain.value = vol;
     let tail = g;
@@ -593,7 +606,7 @@
 
   // Слышимость шагов: px, громкость вблизи, шаг (px пути на один звук)
   const HEAR = {
-    player: [0, 0.22, 46], human: [520, 0.36, 34], toad: [650, 0.35, 40], heavy: [900, 0.6, 64], giant: [1300, 0.75, 95]
+    player: [1100, 0.22, 46], human: [800, 0.36, 34], toad: [950, 0.35, 40], heavy: [1300, 0.6, 64], giant: [2000, 0.75, 95]
   };
   const tracks = new WeakMap();
   let budget = 0;
@@ -612,15 +625,17 @@
     st.acc += dd;
     if (st.acc < stride * size) return;
     st.acc = 0;
-    const dist = Math.hypot(x - player.x, y - player.y);
-    const vol = kind === 'player' ? vol0 : vol0 * Math.max(0, 1 - dist / radius);
+    const dist = Math.hypot(x - ear().x, y - ear().y);
+    // Шаги стихают плавно: (1 − d/R)² (soundFalloff в game.js)
+    const vol = kind === 'player' && o === ear() ? vol0 : vol0 * soundFalloff(dist, radius);
     if (vol < 0.03 || budget-- <= 0) return;
     const surf = surfaceAt(x, y);
     // Записи шагов (ниже, BANK); пока не загрузились — синтез
-    if (sampleStep(kind, surf, vol, kind === 'player' ? 0 : pan(x), size, kind === 'player' ? 0 : dist / radius)) return;
+    const own = kind === 'player' && o === ear();
+    if (sampleStep(kind, surf, vol, own ? 0 : pan(x), size, own ? 0 : Math.min(1, dist / radius))) return;
     const t = start();
     if (t === null) return;
-    const d = bus(vol, kind === 'player' ? 0 : pan(x));
+    const d = bus(vol, own ? 0 : pan(x));
     if (kind === 'player' || kind === 'human') humanStep(t, d, surf);
     else if (kind === 'toad') toadStep(t, d, surf, size);
     else if (kind === 'heavy') heavyStep(t, d, surf);
@@ -631,11 +646,15 @@
   S.updateSteps = function () {
     if (!S.ctx) return;
     budget = 6;
-    if (!player.isRolling) track(player, player.x, player.y + footDY(player), 'player');
-    else tracks.delete(player);
+    // Шаги всех Василиев (кооп): свой — рядом, чужие — по расстоянию, как люди
+    (typeof players !== 'undefined' ? players : [player]).forEach(p => {
+      if (!p.isRolling && !(p.downT > 0) && !p.dead) track(p, p.x, p.y + footDY(p), 'player');
+      else tracks.delete(p);
+    });
+    const me = ear();
     for (let i = 0; i < enemies.length; i++) {
       const e = enemies[i];
-      if (Math.abs(e.x - player.x) > 1300 || Math.abs(e.y - player.y) > 1300) continue;
+      if (Math.abs(e.x - me.x) > 2000 || Math.abs(e.y - me.y) > 2000) continue;
       const fy = e.y + footDY(e);
       if (e.type === 'boss' || e.type === 'pounder') track(e, e.x, fy, 'giant', e.isMini ? 0.7 : 1);
       else if (e.type === 'brute') track(e, e.x, fy, 'heavy');
@@ -893,9 +912,10 @@
   }
 
   // Звук на карте: громкость и глухость по расстоянию (дальше — тише и без верхов), панорама
-  function spatial(x, y, radius = 950) {
-    const k = Math.min(1, Math.hypot(x - player.x, y - player.y) / radius);
-    return { vol: Math.max(0, 1 - k), pan: pan(x), lp: 18000 * Math.pow(1 - k, 2) + 900 };
+  function spatial(x, y, radius = SOUND_RANGE) {
+    const d = Math.hypot(x - ear().x, y - ear().y);
+    const k = Math.min(1, d / radius);
+    return { vol: soundFalloff(d, radius), pan: pan(x), lp: 18000 * Math.pow(1 - k, 2) + 900 };
   }
 
   const synth = {};
@@ -1249,7 +1269,7 @@
     const fx = BOSS_FX[ev];
     if (!fx) return;
     if (!ready() || !has('boom')) return synth.bossSwing(!/slash|sweep|spin|wind|blink|hook|mini/.test(ev));
-    const sp = spatial(x, y, 1700);
+    const sp = spatial(x, y, 2600);   // боссов слышно дальше
     if (sp.vol < 0.03) return;
     const P = (key, o = {}) => play(key, Object.assign({}, o, {
       vol: (o.vol === undefined ? 1 : o.vol) * sp.vol * 0.8, pan: sp.pan, lp: Math.min(o.lp || 20000, sp.lp)

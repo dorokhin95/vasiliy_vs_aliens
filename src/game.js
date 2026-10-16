@@ -930,6 +930,7 @@ const LANGS = {
     say_shield_melee: "Кажется, железкой этот щит не пробить…",
     say_plasma_armor: "Кажется, плазма плохо пробивает эту броню…",
     say_boss_invuln: "Его сейчас ничем не взять — переждать бы…",
+    say_coop_later: "Это окно в сетевом коопе пока не открывается — скоро",
     boss_invuln: "НЕУЯЗВИМ — берсерк",
     boss_shield_down: "⚡ ЩИТ ПРОБИТ!",
     status_daze: "ОГЛУШЁН: −40% скорости",
@@ -1013,6 +1014,7 @@ const LANGS = {
     say_shield_melee: "Looks like I can't smash through this shield…",
     say_plasma_armor: "Looks like plasma barely scratches this armor…",
     say_boss_invuln: "Nothing gets through to him right now — better wait it out…",
+    say_coop_later: "This window doesn't open in network co-op yet — coming soon",
     boss_invuln: "INVULNERABLE — berserk",
     boss_shield_down: "⚡ SHIELD DOWN!",
     status_daze: "DAZED: −40% speed",
@@ -1048,7 +1050,61 @@ const LANGS = {
 };
 
 let currentLang = 'ru';
-function t(key) { return LANGS[currentLang][key] || key; }
+function t(key) {
+  const s = LANGS[currentLang][key] || key;
+  return key === 'game_title' ? s : personalize(s); // название игры — всегда про Василия
+}
+
+// --- Кооп: имя игрока вместо «Василий» в текстах (кат-сцены, диалоги, квесты, подписи) — со склонением ---
+// Падежи, какие встречаются в текстах: Василий, Василия (род./вин.), Василию, Василием, Василии
+const NAME_FORMS = {};
+function nameForms(name) {
+  if (NAME_FORMS[name]) return NAME_FORMS[name];
+  const words = name.trim().split(/\s+/);
+  const last = words.pop();
+  const head = words.length ? words.join(' ') + ' ' : '';
+  const lo = last.toLowerCase();
+  const end1 = lo.slice(-1), end2 = lo.slice(-2);
+  const stem = n => last.slice(0, last.length - n);
+  let f;
+  if (!/^[а-яё-]+$/i.test(last) || /[оеиуыюэё]$/.test(lo)) {
+    f = [last, last, last, last, last];                                 // не склоняется: Ли, Хосе, Ник латиницей
+  } else if (end2 === 'ий') {
+    f = [last, stem(1) + 'я', stem(1) + 'ю', stem(1) + 'ем', stem(1) + 'и'];   // Василий, Дмитрий
+  } else if (end1 === 'й') {
+    f = [last, stem(1) + 'я', stem(1) + 'ю', stem(1) + 'ем', stem(1) + 'е'];   // Андрей, Сергей
+  } else if (end1 === 'ь') {
+    f = [last, stem(1) + 'я', stem(1) + 'ю', stem(1) + 'ем', stem(1) + 'е'];   // Игорь
+  } else if (end2 === 'ия') {
+    f = [last, stem(1) + 'и', stem(1) + 'и', stem(1) + 'ей', stem(1) + 'и'];   // Мария
+  } else if (end1 === 'я') {
+    f = [last, stem(1) + 'и', stem(1) + 'е', stem(1) + (end2 === 'ья' ? 'ёй' : 'ей'), stem(1) + 'е'];   // Вася, Коля, Илья
+  } else if (end1 === 'а') {
+    const soft = /[гкхжшщч]$/.test(lo.slice(0, -1));
+    const hiss = /[жшщчц]$/.test(lo.slice(0, -1));
+    f = [last, stem(1) + (soft ? 'и' : 'ы'), stem(1) + 'е', stem(1) + (hiss ? 'ей' : 'ой'), stem(1) + 'е'];  // Миша, Никита
+  } else {
+    // Согласная: Иван, Пётр, Павел (беглая гласная — как в жизни)
+    const FLEETING = { 'пётр': 'Петр', 'петр': 'Петр', 'павел': 'Павл', 'лев': 'Льв' };
+    let b = FLEETING[lo] ? (last[0] === last[0].toUpperCase() ? FLEETING[lo] : FLEETING[lo].toLowerCase()) : last;
+    const hiss = /[жшщчц]$/.test(lo);
+    f = [last, b + 'а', b + 'у', b + (hiss ? 'ем' : 'ом'), b + 'е'];
+  }
+  NAME_FORMS[name] = { nom: head + f[0], gen: head + f[1], dat: head + f[2], ins: head + f[3], pre: head + f[4] };
+  return NAME_FORMS[name];
+}
+
+// Текст для своего игрока: в коопе со своим именем — «Василий» в нём меняется на это имя в нужном падеже
+function personalize(text) {
+  if (typeof text !== 'string') return text;
+  let name, many;
+  try { name = (localPlayer.name || '').trim(); many = players.length > 1; } catch (e) { return text; } // игрок ещё не создан
+  if (!name || name === 'Василий' || name === 'Vasiliy' || !many) return text;
+  const f = nameForms(name);
+  return text
+    .replace(/Васили(ем|ю|я|и|й)(?![а-яё])/g, (m, end) => ({ 'й': f.nom, 'я': f.gen, 'ю': f.dat, 'ем': f.ins, 'и': f.pre })[end])
+    .replace(/Vasil(?:i)?y\b/g, name);
+}
 
 function updateUILanguage() {
   document.getElementById('lbl-hp').innerText = t('hp');
@@ -1173,7 +1229,9 @@ const WORLD_HEIGHT = MAP.SIZE;
 const camera = { x: 0, y: 0 };
 let gameState = 'MENU';
 
-const player = {
+// Игрок. В коопе (docs/COOP.md) их несколько — players; makePlayer() создаёт каждого с нуля
+function makePlayer() {
+  return {
   x: MAP.CENTER,
   y: MAP.CENTER,
   radius: 20,
@@ -1266,8 +1324,23 @@ const player = {
   blockedPerks: new Set(),
   hasPerk(id) {
     return this.unlockedPerks.has(id);
-  }
-};
+  },
+  // Кооп: кто это и чем управляется. input — его клавиши и мышь (свои — с клавиатуры, чужие — по сети)
+  id: 0,
+  name: '',
+  color: 0,          // цвет ватника (COOP_COLORS)
+  input: { keys: {}, mouse: { x: 0, y: 0 }, down: false },
+  shootCd: 0,
+  nearby: null,
+  char: null         // его 3D-Василий (ThreeCharacterManager)
+  };
+}
+
+// player — «текущий» игрок: тот, чей ход сейчас считает update() (usePlayer), а вне этого — свой (localPlayer).
+// Так сотни мест player.* работают для любого из игроков без переделки
+let player = makePlayer();
+const players = [player];
+let localPlayer = player;
 
 const safeZone = {
   x: MAP.CENTER,
@@ -2177,12 +2250,279 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
 }
 
 // --- УПРАВЛЕНИЕ ---
-const keys = {};
+// Ввод и перезарядка текущего игрока: usePlayer подставляет сюда того, чей ход считается
+let keys = player.input.keys;
 let mouseScreen = { x: 0, y: 0 };
-let mouseWorld = { x: 0, y: 0 };
+let mouseWorld = player.input.mouse;
 let mouseDown = false;
 let shootCooldown = 0;
 let nearbyInteractable = null;
+
+// Сделать p текущим игроком: его ввод, перезарядка, подсказка рядом и 3D-модель. Скаляры прошлого — к нему
+function usePlayer(p) {
+  if (!p || p === player) return;
+  player.input.down = mouseDown;
+  player.shootCd = shootCooldown;
+  player.nearby = nearbyInteractable;
+  player = p;
+  keys = p.input.keys;
+  mouseWorld = p.input.mouse;
+  mouseDown = p.input.down;
+  shootCooldown = p.shootCd;
+  nearbyInteractable = p.nearby;
+  if (p.char) window.threeCharacter = p.char;
+}
+
+// --- Действия из окон в сетевом коопе (src/net.js) ---
+// Окна (лавка, мастерская, столовая, сейф, диалог, инвентарь) открываются у самого игрока и работают по его
+// копии Василия из снимка. Действие (купить, сварить, сдать квест, выкинуть) у клиента выполняется сразу —
+// окно отзывается без задержки — и уходит хосту, а тот выполняет его за этого игрока по-настоящему; следующий
+// снимок исправит, если вышло иначе. local: false — только у хоста (там, где решает случай или тайна хоста).
+// toWire / fromWire — аргументы в сообщение и обратно (объекты — по id)
+const NET_ACTIONS = {};
+function netAction(name, fn, toWire = a => a, fromWire = a => a, local = true) {
+  NET_ACTIONS[name] = (wire) => fn(...fromWire(wire));
+  return function (...args) {
+    if (window.Net && window.Net.isClient()) {
+      window.Net.rpc(name, toWire(args));
+      if (!local) return undefined;
+      return window.Net.optimistic(() => fn(...args));
+    }
+    return fn(...args);
+  };
+}
+
+// --- КООП (docs/COOP.md): сила врагов и лут от числа игроков, цели жаб, упавшие и подъём ---
+// Числа — стартовые, правятся по ощущениям. Индекс — число игроков (1..4)
+const COOP_SCALE = {
+  hp:      [1, 1, 1.5, 2, 2.5],      // здоровье жаб
+  dmg:     [1, 1, 1.1, 1.2, 1.3],    // урон жаб
+  bossHp:  [1, 1, 1.8, 2.6, 3.4],
+  bossDmg: [1, 1, 1.15, 1.3, 1.45],
+  bossRate:[1, 1, 1.1, 1.2, 1.3],    // частота атак боссов
+  loot:    [1, 1, 1.8, 2.6, 3.4]
+};
+const DOWN_FRAMES = 60 * 60;         // упавшего можно поднять 60 с, потом — окончательная смерть
+const REVIVE_FRAMES = 3 * 60;        // держать E над упавшим
+const REVIVE_RADIUS = 70;
+function coopScale() {
+  const n = Math.max(1, Math.min(4, players.filter(p => !p.left).length));
+  const o = {};
+  for (const k in COOP_SCALE) o[k] = COOP_SCALE[k][n];
+  return o;
+}
+let enemyActing = null;              // чей ход сейчас считается (armorAbsorb: удар босса или жабы)
+
+function alivePlayers() {
+  return players.filter(p => !p.dead && !(p.downT > 0));
+}
+
+// Игрок, в которого попадает точка (пули жаб)
+function playerAt(x, y, r) {
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    if (p.dead || p.downT > 0) continue;
+    if (Math.hypot(x - p.x, y - p.y) < r + p.radius) return p;
+  }
+  return null;
+}
+
+// Удар по площади: fn для каждого стоящего на ногах игрока, на это время он текущий
+function forEachPlayer(fn) {
+  const was = player;
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    if (p.dead || p.downT > 0) continue;
+    usePlayer(p);
+    fn(p);
+  }
+  usePlayer(was);
+}
+
+// Пули, выпущенные за ход игрока, — его (урон по боссу идёт ему в угрозу, перки — его)
+function tagBulletOwners() {
+  for (let i = bullets.length - 1; i >= 0 && !bullets[i].owner; i--) bullets[i].owner = player;
+}
+
+// Кого бьёт жаба. Одиночная игра — как раньше: Василия. В коопе — ближайшего; держит цель, пока не ушла
+// дальше полутора радиусов агро; ударивший с шансом 50 % перетягивает её на себя. Боссы — по угрозе (bossTarget)
+function pickTarget(e) {
+  if (players.length === 1) return players[0];
+  const alive = alivePlayers();
+  if (!alive.length) return null;
+  let near = alive[0], nd = Infinity;
+  for (const p of alive) {
+    const d = Math.hypot(p.x - e.x, p.y - e.y) + (p.inSafe ? 5000 : 0);
+    if (d < nd) { nd = d; near = p; }
+  }
+  if (e.type === 'boss' || e.type === 'pounder') return bossTarget(e, alive, near);
+  const dist = p => Math.hypot(p.x - e.x, p.y - e.y);
+  if (e.type === 'sniper') return e.target = sniperTarget(e, alive, near);
+  if (e.type === 'brute') return e.target = bruteTarget(e, alive, near, dist);
+  let t = e.target && alive.includes(e.target) ? e.target : null;
+  if (!t || !e.isAggroed || t.inSafe || dist(t) > (e.aggroRadius || 400) * 1.5) t = near;
+  if (e.lastHitBy && e.lastHitBy !== t && alive.includes(e.lastHitBy)) {
+    if (Math.random() < 0.5 && dist(e.lastHitBy) <= dist(t) * 1.5) t = e.lastHitBy;
+  }
+  e.lastHitBy = null;
+  e.target = t;
+  return t;
+}
+
+// Нет ли стены между точками (через 40 px)
+function lineClear(x1, y1, x2, y2) {
+  const n = Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 40);
+  for (let i = 1; i < n; i++) {
+    if (checkBuildingCollision(x1 + (x2 - x1) * i / n, y1 + (y2 - y1) * i / n, 4)) return false;
+  }
+  return true;
+}
+
+// Снайпер бьёт ближайшего из тех, кого видит (не за стеной). Пока горит лазер — цель не меняет:
+// по лазеру видно, в кого он целится. Пересматривает раз в треть секунды
+function sniperTarget(e, alive, near) {
+  const t = e.target && alive.includes(e.target) && !e.target.inSafe ? e.target : null;
+  if (t && (e.shootCooldown < SN_AIM || --e.retargetT > 0)) return t;
+  e.retargetT = 20;
+  let best = null, bd = Infinity;
+  for (const p of alive) {
+    if (p.inSafe || !lineClear(e.x, e.y - 20, p.x, p.y - 20)) continue;
+    const d = Math.hypot(p.x - e.x, p.y - e.y);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best || near;
+}
+
+// Громила: кто вплотную — того кулаками; иначе швыряет в самого дальнего из видимых (стрелков сзади).
+// Пока несёт предмет — цель не меняет
+function bruteTarget(e, alive, near, dist) {
+  const t = e.target && alive.includes(e.target) && !e.target.inSafe ? e.target : null;
+  if (t && e.throwState) return t;
+  if (dist(near) < THROW_RANGE_MIN) return near;
+  if (t && --e.retargetT > 0) return t;
+  e.retargetT = 30;
+  const reach = Math.min(THROW_RANGE_MAX, (e.aggroRadius || 400) * 1.4);
+  let best = null, bd = -1;
+  for (const p of alive) {
+    const d = dist(p);
+    if (p.inSafe || d > reach || d <= bd || !lineClear(e.x, e.y - 30, p.x, p.y - 20)) continue;
+    bd = d;
+    best = p;
+  }
+  return best || near;
+}
+
+// Босс раз в 6–10 с выбирает, на кого идти: на самого опасного (урон по нему + близость), раненого охотнее,
+// иногда — на случайного. Угроза со временем остывает
+function bossTarget(e, alive, near) {
+  // Из логова босс не уходит: цель — из тех, кто в логове (иначе он ушёл бы домой, пока там дерутся другие)
+  const home = e.type === 'boss' ? BOSS_HOME : (e.isClone || e.isMini ? null : POUNDER_HOME);
+  const leash = e.type === 'boss' ? BOSS_LEASH_RADIUS : POUNDER_LEASH;
+  if (home) {
+    const inLair = alive.filter(p => Math.hypot(p.x - home.x, p.y - home.y) < leash && !p.inSafe);
+    if (inLair.length) {
+      alive = inLair;
+      if (!inLair.includes(near)) near = inLair[0];
+      if (e.target && !inLair.includes(e.target)) e.retargetT = 0;
+    }
+  }
+  if (e.target && alive.includes(e.target) && --e.retargetT > 0) return e.target;
+  e.retargetT = 360 + Math.floor(Math.random() * 240);
+  const threat = e.threat || (e.threat = new Map());
+  let best = near;
+  if (alive.length > 1 && Math.random() < 0.25) best = alive[Math.floor(Math.random() * alive.length)];
+  else {
+    let bs = -Infinity;
+    for (const p of alive) {
+      const d = Math.hypot(p.x - e.x, p.y - e.y);
+      const score = (threat.get(p) || 0) + 300 * (1 - Math.min(d, 1200) / 1200) + (p.hp < p.maxHp * 0.3 ? 200 : 0) - (p.inSafe ? 5000 : 0);
+      if (score > bs) { bs = score; best = p; }
+    }
+  }
+  threat.forEach((v, p) => threat.set(p, v * 0.5));
+  if (e.target && best !== e.target) addFloatingText(best.x - 10, best.y - 70, '⚠', '#ef4444');
+  e.target = best;
+  return best;
+}
+
+// Жабы и боссы крепче, чем больше игроков (раз на жабу — при первом её ходе)
+function coopScaleEnemy(e) {
+  e.coopScaled = true;
+  if (players.length === 1 || e.defense) return;
+  const boss = e.type === 'boss' || e.type === 'pounder';
+  const k = boss ? coopScale().bossHp : coopScale().hp;
+  e.coopK = k;       // снимок мира (src/menu.js) пишет здоровье без него: вернувшись, жаба усилится заново
+  e.maxHp = (e.maxHp || e.hp) * k;
+  e.hp *= k;
+}
+
+// Кто нанёс урон: жаба может переключиться на него, босс копит угрозу (damageEnemy)
+function noteAttacker(e, dealt, weapon) {
+  if (players.length === 1 || !(dealt > 0) || weapon === 'rocket' || weapon === 'thrown') return;
+  e.lastHitBy = player;
+  if (e.type === 'boss' || e.type === 'pounder') {
+    const threat = e.threat || (e.threat = new Map());
+    threat.set(player, (threat.get(player) || 0) + dealt);
+  }
+}
+
+// Текущий Василий упал: лежит 60 с, его могут поднять; не подняли — погиб насовсем
+function playerDown() {
+  if (player.downT > 0 || player.dead) return;
+  player.hp = 0;
+  player.downT = DOWN_FRAMES;
+  player.reviveT = 0;
+  player.helpCall = false;
+  player.isMoving = false;
+  player.isRolling = false;
+  player.reloadingWeapon = null;
+  addFloatingText(player.x - 30, player.y - 60, currentLang === 'ru' ? `${player.name || 'Василий'} упал!` : `${player.name || 'Vasiliy'} is down!`, '#ef4444');
+  checkAllDown();
+}
+
+// Упавший зовёт на помощь (H): у товарищей — окно и стрелка к нему (src/minimap.js), пока не подняли или не погиб
+function callForHelp() {
+  if (!(player.downT > 0)) return;
+  player.helpCall = true;
+  player.helpN = (player.helpN || 0) + 1;   // каждый новый зов — окно у товарищей мигает заново
+}
+
+// Ход упавшего: таймер идёт, рядом стоящий товарищ с зажатой E поднимает
+function updateDowned() {
+  const me = player;
+  let helper = null;
+  for (const p of players) {
+    if (p === me || p.dead || p.downT > 0) continue;
+    if (p.input.keys['KeyE'] && Math.hypot(p.x - me.x, p.y - me.y) < REVIVE_RADIUS) { helper = p; break; }
+  }
+  me.reviving = !!helper;   // поднимают — таймер стоит
+  if (helper) {
+    if (++me.reviveT >= REVIVE_FRAMES) {
+      me.downT = 0;
+      me.reviveT = 0;
+      me.helpCall = false;
+      me.hp = me.maxHp * 0.35;
+      addFloatingText(me.x - 30, me.y - 60, currentLang === 'ru' ? 'НА НОГАХ!' : 'BACK UP!', '#4ade80');
+      createParticles(me.x, me.y - 20, '#4ade80', 14);
+    }
+    return;
+  }
+  me.reviveT = Math.max(0, (me.reviveT || 0) - 2);
+  if (--me.downT <= 0) {
+    me.downT = 0;
+    me.dead = true;
+    me.helpCall = false;
+    addFloatingText(me.x - 30, me.y - 60, currentLang === 'ru' ? `${me.name || 'Василий'} погиб` : `${me.name || 'Vasiliy'} is dead`, '#94a3b8');
+    checkAllDown();
+  }
+}
+
+// Все лежат или погибли — поднимать некому: конец забега
+function checkAllDown() {
+  if (alivePlayers().length > 0) return;
+  usePlayer(localPlayer);
+  gameOverAll();
+}
 
 window.addEventListener('keydown', (e) => {
   // Окно диалога забирает все клавиши: ответы, «дальше», ESC (src/dialog.js)
@@ -2209,6 +2549,8 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyR') startReload();
     if (e.code === 'KeyQ') cycleWeapon();
     if (e.code === 'KeyF') cycleRmbAbility();
+    if (e.code === 'KeyH') callForHelp();          // кооп: упал — позвать товарищей
+    if (e.code === 'KeyM' && window.Minimap) window.Minimap.toggle();
     // Цифры 1–9 — видимые слоты хотбара по порядку (порядок игрок меняет перетаскиванием)
     const digit = /^Digit[1-9]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
     if (digit) {
@@ -2348,6 +2690,7 @@ function activateHotbarSlot(id) {
 
 // Расставляет слоты в DOM по hotbarOrder и подписывает клавиши [1]..[N] у видимых
 function applyHotbarOrder() {
+  if (player !== localPlayer) return;
   const bar = document.getElementById('hotbar');
   if (!bar) return;
   const visible = visibleHotbarSlots();
@@ -2412,12 +2755,12 @@ window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = fals
 
 // Кнопки меню, сохранения, пауза и настройки — в src/menu.js.
 // save — сохранённый забег (RunSave): мир строится заново, поверх него восстанавливается прогресс
-function startGame(save = null) {
-  gameState = 'PLAYING';
-  document.getElementById('screen-menu').style.display = 'none';
-
-  player.x = safeZone.x;
-  player.y = safeZone.y + 70;
+// Василий с нуля: здоровье, припасы, оружие, карты, перки (новый забег; сохранение потом накладывается сверху)
+function resetPlayerState() {
+  // Кооп: встают полукругом под куполом, свой — в середине
+  const slot = players.indexOf(player);
+  player.x = safeZone.x + [0, -70, 70, 0][slot % 4];
+  player.y = safeZone.y + 70 + [0, 30, 30, 70][slot % 4];
   player.maxHp = 100;
   player.hp = player.maxHp;
   player.maxStamina = 100;
@@ -2431,7 +2774,6 @@ function startGame(save = null) {
   player.dazeTimer = 0;
   player.cards = { speed: 0, agility: 0, vitality: 0, laser: 0, dash: 0, regen: 0 };
   player.pendingCards = false;
-  cardOfferTimer = 0;
   player.items = { vodka: 0, stew: 1, bandage: 2, soup: 0, tincture: 0, jelly: 0, compress: 0, drops: 0, ointment: 0, borscht: 0 };
   player.buffs = {};
   player.healRate = 0;
@@ -2484,10 +2826,24 @@ function startGame(save = null) {
   player.critMult = 1.6;
   player.unlockedPerks.clear();
   player.blockedPerks.clear();
+  player.downT = 0;
+  player.dead = false;
+  player.ws = null;            // мастерская Толика — у каждого своя (src/workshop.js)
+  player.freeUpgrade = false;  // бесплатное улучшение — тому, кто сдал квест Толика
+}
+
+// loc — где начать без сохранения (сетевой клиент, вошедший в идущую игру)
+function startGame(save = null, loc = null) {
+  gameState = 'PLAYING';
+  document.getElementById('screen-menu').style.display = 'none';
+
+  players.forEach(p => { usePlayer(p); resetPlayerState(); });
+  usePlayer(localPlayer);
+  cardOfferTimer = 0;
   lastPlayerDistrictId = 'hub';
 
   // Локация, где Василий был при сохранении (новый забег — город)
-  currentLocation = save && window.Menu ? window.Menu.locationOf(save) : 'city';
+  currentLocation = loc || (save && window.Menu ? window.Menu.locationOf(save) : 'city');
   locationWorlds = {};
   autoScale.hold(6000);
   locationsVisited = new Set(['city', currentLocation]);
@@ -2599,6 +2955,15 @@ const Loading = {
 };
 
 function gameOver() {
+  // Кооп: упал — ещё не конец, могут поднять (playerDown); конец — когда на ногах никого
+  if (players.length > 1) { playerDown(); return; }
+  gameOverAll();
+}
+
+function gameOverAll() {
+  // Сетевой кооп: стирает своё сохранение только хост; у клиента своих сохранений сеанса нет
+  const net = !!(window.Net && window.Net.started) ? (window.Net.isHost() ? 'host' : 'client') : null;
+  if (window.Net) window.Net.onGameOver();
   gameState = 'GAMEOVER';
   // Тренировочный бой (?boss2): забег не стирается, бой начинается заново
   if (window.Practice && window.Practice.active) {
@@ -2606,7 +2971,7 @@ function gameOver() {
     return;
   }
   // Рогалик: смерть заканчивает забег, сохранение стирается
-  if (window.Menu) window.Menu.onGameOver();
+  if (window.Menu) window.Menu.onGameOver(net);
   document.getElementById('screen-menu').style.display = 'flex';
   updateUILanguage();
 }
@@ -2614,6 +2979,15 @@ function gameOver() {
 // --- ВЗАИМОДЕЙСТВИЕ И МАГАЗИН/ВЕРСТАК ---
 function handleInteract() {
   if (!nearbyInteractable) return;
+  if (player !== localPlayer) {
+    // Товарищ по сети: тайники и пролом — здесь, окна (лавка, диалог, сейф) — у него (src/net.js)
+    const it = nearbyInteractable;
+    if (it.type === 'container' && !(window.Safes && window.Safes.isSafe(it.target))) scavengeContainer(it.target);
+    else if (it.type === 'breach' && levelCleared) breakFence();
+    else if (it.type === 'sample') window.Quests.takeSample();
+    else if (window.Net) window.Net.remoteInteract(player, it);
+    return;
+  }
   if (nearbyInteractable.type === 'shop') openShop();
   else if (nearbyInteractable.type === 'breach') {
     if (levelCleared) breakFence();
@@ -2627,7 +3001,8 @@ function handleInteract() {
   }
 }
 
-function spawn3DLootItem(x, y, type, val = 1) {
+// raw — из сохранения: уже с кооп-множителем, второй раз не умножать
+function spawn3DLootItem(x, y, type, val = 1, raw = false) {
   const icons = {
     scrap: '⚙️',
     bottle: '🍾',
@@ -2648,6 +3023,17 @@ function spawn3DLootItem(x, y, type, val = 1) {
     plasma_cell: '🔋',
     kvako_charge: '🚀'
   };
+  // Кооп: всего выпадает больше, чтобы хватало всем; чертёж — каждому свой
+  if (players.length > 1 && !raw) {
+    if (COOP_PER_PLAYER_LOOT.has(type)) {
+      for (let k = 1; k < players.length; k++) {
+        lootItems.push({ x: Math.round(x + (k - 1.5) * 26), y: Math.round(y + 18), type, icon: icons[type] || '⚙️', val: Math.max(1, Math.round(val)) });
+      }
+    } else {
+      const v = val * coopScale().loot;
+      val = Math.floor(v) + (Math.random() < v - Math.floor(v) ? 1 : 0);
+    }
+  }
   lootItems.push({
     x: Math.round(x),
     y: Math.round(y),
@@ -2656,6 +3042,7 @@ function spawn3DLootItem(x, y, type, val = 1) {
     val: Math.max(1, Math.round(val))
   });
 }
+const COOP_PER_PLAYER_LOOT = new Set(['blueprint']);
 
 // Тайники дают меньше стеклотары и чермета, чем раньше: обыскать всё и не драться было выгоднее,
 // чем зачищать район (см. docs/BALANCE.md)
@@ -3066,6 +3453,7 @@ window.switchShopTab = function(tab) {
 };
 
 function renderArsenalAndSupplies() {
+  if (player !== localPlayer) return; // покупка товарища по сети — окно не наше
   updateShopWallet();
 
   const arsenalBox = document.getElementById('arsenal-container');
@@ -3152,7 +3540,10 @@ function renderArsenalAndSupplies() {
   }
 }
 
-function buyArsenalItem(item) {
+const buyArsenalItem = netAction('shop.arsenal', buyArsenalItemRaw,
+  ([item]) => [SHOP_ARSENAL_ITEMS.indexOf(item)], ([i]) => [SHOP_ARSENAL_ITEMS[i]]);
+function buyArsenalItemRaw(item) {
+  if (!item) return;
   if (!canAffordCost(item.cost)) return;
   if (item.type === 'weapon' && player.unlockedWeapons[item.weaponKey]) return;
 
@@ -3179,7 +3570,7 @@ function buyArsenalItem(item) {
   renderArsenalAndSupplies();
 }
 
-window.buyItem = function(item, costBottles) {
+window.buyItem = netAction('shop.item', function(item, costBottles) {
   if (player.resources.bottles >= costBottles) {
     player.resources.bottles -= costBottles;
     player.items[item]++;
@@ -3187,9 +3578,10 @@ window.buyItem = function(item, costBottles) {
     updateHUD(true);
     renderArsenalAndSupplies();
   }
-};
+});
 
 function renderUpgradeTrees() {
+  if (player !== localPlayer) return;
   const container = document.getElementById('tree-container');
   if (!container) return;
   container.innerHTML = '';
@@ -3229,7 +3621,7 @@ function renderUpgradeTrees() {
 
       const descEl = document.createElement('div');
       descEl.className = 'perk-desc';
-      descEl.innerText = currentLang === 'ru' ? perk.desc_ru : perk.desc_en;
+      descEl.innerText = personalize(currentLang === 'ru' ? perk.desc_ru : perk.desc_en);
 
       const costEl = document.createElement('div');
       costEl.className = 'perk-cost';
@@ -3271,8 +3663,13 @@ function renderUpgradeTrees() {
   }
 }
 
-function buyPerk(perk) {
-  if (!canAffordCost(perk.cost)) return;
+const buyPerk = netAction('shop.perk', buyPerkRaw, ([perk]) => [perk.id], ([id]) => [findPerk(id)]);
+function findPerk(id) {
+  for (const k in UPGRADE_TREES) for (const pk in UPGRADE_TREES[k].perks) if (UPGRADE_TREES[k].perks[pk].id === id) return UPGRADE_TREES[k].perks[pk];
+  return null;
+}
+function buyPerkRaw(perk) {
+  if (!perk || !canAffordCost(perk.cost)) return;
   if (player.blockedPerks.has(perk.id)) return;
 
   payCost(perk.cost);
@@ -3305,6 +3702,56 @@ function buyPerk(perk) {
   renderUpgradeTrees();
 }
 
+// --- Кооп: выкинуть оружие, патроны, припас (окно инвентаря) — подберёт любой ---
+// Патроны — пачкой (all — весь запас), припас — по одному (all — все). Выкинувший подберёт обратно через 3 с
+const DROP_AMMO = { makarov: ['ammo_9x18', 8], shotgun: ['ammo_12g', 4], nagant: ['ammo_762n', 7] };
+const LOOT_ITEM_TYPES = new Set(['stew', 'vodka', 'bandage']);
+function weaponTitle(w) {
+  const it = SHOP_ARSENAL_ITEMS.find(x => x.type === 'weapon' && x.weaponKey === w);
+  return it ? (currentLang === 'ru' ? it.name_ru : it.name_en).toUpperCase() : w.toUpperCase();
+}
+function weaponImg(w) {
+  const it = SHOP_ARSENAL_ITEMS.find(x => x.type === 'weapon' && x.weaponKey === w);
+  return it ? it.img : `assets/sprites/weapons/weapon_${w}.png?v=1`;
+}
+function dropLoot(type, val, extra) {
+  const a = player.angle;
+  lootItems.push(Object.assign({
+    x: Math.round(player.x + Math.cos(a) * 46 + (Math.random() - 0.5) * 18),
+    y: Math.round(player.y + Math.sin(a) * 30 + 18 + (Math.random() - 0.5) * 10),
+    type, icon: '📦', val, by: player.id, noPick: 180
+  }, extra || {}));
+}
+window.dropItem = netAction('drop', function(kind, id, all) {
+  if (kind === 'item') {
+    const n = Math.min(player.items[id] || 0, all ? 999 : 1);
+    if (n <= 0) return;
+    player.items[id] -= n;
+    const info = itemInfo(id);
+    dropLoot(LOOT_ITEM_TYPES.has(id) ? id : 'item:' + id, n, info ? { img: info.img } : null);
+  } else if (kind === 'ammo') {
+    const d = DROP_AMMO[id], am = player.ammo[id];
+    if (!d || !am) return;
+    const n = Math.min(am.reserve, all ? am.reserve : d[1]);
+    if (n <= 0) return;
+    am.reserve -= n;
+    dropLoot(d[0], n);
+  } else if (kind === 'weapon') {
+    if (!player.unlockedWeapons[id]) return;
+    // Ствол — с патронами в обойме; запас остаётся у себя (его выкидывают отдельно)
+    const clip = player.ammo[id] ? player.ammo[id].clip : 0;
+    if (player.ammo[id]) player.ammo[id].clip = 0;
+    if (player.reloadingWeapon === id) { player.reloadingWeapon = null; player.reloadTimer = 0; }
+    player.unlockedWeapons[id] = false;
+    player.equipped[id] = false;
+    if (player.currentWeapon === id) player.currentWeapon = equippedWeapons()[0] || null;
+    dropLoot('weapon:' + id, 1, { img: weaponImg(id), ammo: clip });
+    applyHotbarOrder();
+  }
+  addFloatingText(player.x - 30, player.y - 50, currentLang === 'ru' ? 'Выкинул' : 'Dropped', '#94a3b8');
+  updateHUD(true);
+});
+
 // Расходники: общая перезарядка, а бинт лечит постепенно. Раньше бинт лечил мгновенно и без
 // перезарядки, и спамом бинтов можно было перекрыть любой урон (так стояли против Мясника)
 const CONSUMABLE_COOLDOWN = 180; // кадров при 60 Гц — 3 с
@@ -3312,7 +3759,7 @@ const BANDAGE_HEAL = 45;
 const BANDAGE_HEAL_FRAMES = 180;
 
 window.useItem = function(itemType) {
-  if (gameState !== 'PLAYING') return;
+  if (gameState !== 'PLAYING' && player === localPlayer) return;
   if (player.items[itemType] <= 0) return;
   if (player.itemCooldown > 0) {
     addFloatingText(player.x, player.y - 30, currentLang === 'ru' ? '⏳ ЕЩЁ НЕ ВРЕМЯ' : '⏳ NOT YET', '#94a3b8');
@@ -3395,7 +3842,7 @@ function equippedWeapons() {
   return hotbarOrder.filter(w => HOTBAR_WEAPONS.has(w) && isEquipped(w));
 }
 
-window.setEquipped = function(w, on) {
+window.setEquipped = netAction('shop.equip', function(w, on) {
   if (!player.unlockedWeapons[w]) return;
   player.equipped[w] = on;
   if (on) {
@@ -3416,7 +3863,7 @@ window.setEquipped = function(w, on) {
   applyHotbarOrder();
   updateHUD(true);
   renderArsenalAndSupplies();
-};
+});
 
 window.switchWeapon = function(weaponKey) {
   const allWeapons = [...HOTBAR_WEAPONS];
@@ -3591,6 +4038,7 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
   const dealt = armor > 0 ? dmg * (fromBehind ? BACKSTAB_MULT : armorFactor(armor, weapon)) : dmg;
   e.hp -= dealt;
   e.isAggroed = true;
+  noteAttacker(e, dealt, weapon);
   if (e.lunge && e.lunge.phase === 'windup' && (weapon === 'bat' || weapon === 'drill')) interruptTongue(e);
   if (armor > 0 && !fromBehind && dealt < dmg * 0.8) {
     // Звонкий удар по железу: серые искры навстречу удару
@@ -3624,6 +4072,7 @@ function damageBoss(e, dmg, weapon, fromX, fromY) {
     }
     const absorbed = Math.min(e.shield, dmg);
     e.shield -= absorbed;
+    noteAttacker(e, absorbed, weapon);
     if (e.shield <= 0) {
       e.shield = 0;
       onBossShieldBroken(e);
@@ -3641,6 +4090,7 @@ function damageBoss(e, dmg, weapon, fromX, fromY) {
   else if (fromBehind) dealt = dmg * BACKSTAB_MULT;
   else dealt = Math.max(dmg * BOSS_ARMOR_MIN, dmg - BOSS_ARMOR_FLAT);
   e.hp -= dealt;
+  noteAttacker(e, dealt, weapon);
   const armored = !fromBehind && dealt < dmg * 0.8;
   if (armored) {
     spawnDirectionalSparks(e.x, e.y - 40, hitAngle, 1.3, 6, '#fde047', 3, 9, 9);
@@ -4930,6 +5380,11 @@ const SPEECH_REPEAT = 600;     // 10 с
 const speech = { key: null, t: 0, clock: 0, lastAt: {} };
 
 function sayLine(key) {
+  // Реплика — тому Василию, чей ход: свой говорит у себя, товарищу она уходит по сети (src/net.js)
+  if (player !== localPlayer) {
+    if (window.Net) window.Net.sayTo(player, key);
+    return;
+  }
   const last = speech.lastAt[key];
   if (last !== undefined && speech.clock - last < SPEECH_REPEAT) return;
   speech.lastAt[key] = speech.clock;
@@ -5142,10 +5597,12 @@ function bruteSlamImpact(e) {
     cameraKickX += (Math.random() - 0.5) * 22;
     cameraKickY += (Math.random() - 0.5) * 22;
   }
-  const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
-  if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), fx, fy, SLAM_RADIUS)) {
-    if (!playerDodged()) dazePlayer(SLAM_STUN, SLAM_DAZE, SLAM_DAZE_SPEED);
-  }
+  forEachPlayer(() => {
+    const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
+    if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), fx, fy, SLAM_RADIUS)) {
+      if (!playerDodged()) dazePlayer(SLAM_STUN, SLAM_DAZE, SLAM_DAZE_SPEED);
+    }
+  });
 }
 
 // Круг на земле, пока громила замахивается: кольцо — докуда достанет, заливка — сколько осталось
@@ -5187,8 +5644,25 @@ function gunMuzzle(e) {
 }
 
 // Громкость выстрелов жаб: чем дальше от Василия, тем тише; за экраном не слышно
-function enemySoundVolume(x, y) {
-  return Math.max(0, 1 - Math.hypot(x - player.x, y - player.y) / 950);
+// Громкость звука от расстояния — плавно, без обрыва: (1 − d/R)². Половина громкости — на ~530 px, четверть —
+// на ~900 (край экрана), тишина — на SOUND_RANGE, уже за краем. Раньше было линейно до 950 px: ограничитель
+// громкости выравнивал тихое, и звук на краю экрана просто пропадал
+const SOUND_RANGE = 1800;
+function soundFalloff(d, range = SOUND_RANGE) {
+  const x = Math.min(1, d / range);
+  return (1 - x) * (1 - x);
+}
+
+// Громкость звука на карте. Сетевой хост считает от ближайшего игрока (иначе звук у далёкого от хоста товарища
+// не прозвучал бы вовсе) и помечает место: при воспроизведении громкость пересчитается от своего Василия.
+// ownOnly — только для себя (непрерывный треск огня, src/perks_pz.js)
+function enemySoundVolume(x, y, ownOnly = false) {
+  const own = soundFalloff(Math.hypot(x - localPlayer.x, y - localPlayer.y));
+  if (ownOnly || !(window.Net && window.Net.isHost())) return own;
+  let v = own;
+  players.forEach(p => { if (!p.dead) v = Math.max(v, soundFalloff(Math.hypot(x - p.x, y - p.y))); });
+  window.Net.noteSoundAt(x, y, v);
+  return v;
 }
 
 // Штурмовик держит среднюю дистанцию и ходит боком, стреляя очередями из плазменного автомата.
@@ -5524,16 +5998,18 @@ function rocketExplode(r) {
   const vol = enemySoundVolume(x, y);
   if (vol > 0) SoundFX.explosion(vol);
 
-  const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
-  if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5)
-      && !playerDodged()) {
-    player.hp -= armorAbsorb(r.dmg, 'ranged');
-    const a = Math.atan2(player.y - y, player.x - x);
-    slideMove(player, Math.cos(a) * 18, Math.sin(a) * 18, player.radius);
-    createParticles(player.x, player.y, '#ef4444', 10);
-    addFloatingText(player.x, player.y - 30, `-${r.dmg}`, '#ef4444');
-    if (player.hp <= 0) gameOver();
-  }
+  forEachPlayer(() => {
+    const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
+    if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5)
+        && !playerDodged()) {
+      player.hp -= armorAbsorb(r.dmg, 'ranged');
+      const a = Math.atan2(player.y - y, player.x - x);
+      slideMove(player, Math.cos(a) * 18, Math.sin(a) * 18, player.radius);
+      createParticles(player.x, player.y, '#ef4444', 10);
+      addFloatingText(player.x, player.y - 30, `-${r.dmg}`, '#ef4444');
+      if (player.hp <= 0) gameOver();
+    }
+  });
   // Своих не жалеет: взрыв бьёт и жаб
   enemies.forEach(en => {
     if (en.type === 'boss' || en.type === 'pounder') return;
@@ -5788,18 +6264,23 @@ function applyBossCard(id) {
     player.equipped.laser = true;
     player.laserCharge = CARD_EFFECTS.laserCharge;
     player.laserRecharge = 0;
-    applyHotbarOrder();
-    window.switchWeapon('laser');
+    if (player === localPlayer) {
+      applyHotbarOrder();
+      window.switchWeapon('laser');
+    } else player.currentWeapon = 'laser';
   } else if (id === 'dash' || id === 'regen') {
     player.abilityCd = 0;
     addFloatingText(player.x, player.y - 44, currentLang === 'ru' ? 'ПКМ — СПОСОБНОСТЬ' : 'RMB — ABILITY', '#facc15');
   }
   player.pendingCards = false;
-  gameState = 'PLAYING';
   createParticles(player.x, player.y - 20, '#facc15', 24);
+  if (player !== localPlayer) return; // товарищ выбрал у себя (src/coop.js)
+  gameState = 'PLAYING';
   updateHUD(true);
   if (window.Menu) window.Menu.requestSave();
 }
+// Какие карты дают за босса этой локации (id — как в src/cards.js)
+const BOSS_CARD_IDS = { city: ['speed', 'agility', 'vitality'], promzona: ['laser', 'dash', 'regen'] };
 
 // --- ПРОЛОМ В ЗАБОРЕ (переход между городом и Промзоной) ---
 // Удары берсерка-Мясника по земле трескают пролёт бетонного забора прямо за его логовом. Когда
@@ -5847,10 +6328,27 @@ function breakFence() {
 
 // Пролом открыт и Василий шагнул в него — переход в другую локацию. В Промзону в первый раз — через
 // комикс перехода (src/comic.js, 8 кадров; пропуск по ESC — тоже переход), дальше — сразу
+// Василий вышел в пролом
+function atBreach(p) {
+  if (Math.abs(p.x - fenceBreach.x) > fenceBreach.halfW) return false;
+  return fenceBreach.side === 'top' ? p.y < 48 : p.y > WORLD_HEIGHT - 48;
+}
+
+let breachWaitT = 0;
 function checkBreachTransit() {
-  if (fenceBreach.state !== 'open' || Math.abs(player.x - fenceBreach.x) > fenceBreach.halfW) return;
-  const beyond = fenceBreach.side === 'top' ? player.y < 48 : player.y > WORLD_HEIGHT - 48;
-  if (!beyond) return;
+  if (fenceBreach.state !== 'open') return;
+  // Кооп: уходят все вместе — когда в проломе все, кто не погиб (упавшего сначала надо поднять)
+  const team = players.filter(p => !p.dead);
+  const ready = team.filter(atBreach).length;
+  if (ready === 0) return;
+  if (ready < team.length) {
+    if (atBreach(localPlayer) && --breachWaitT <= 0) {
+      breachWaitT = 120;
+      addFloatingText(localPlayer.x - 60, localPlayer.y - 70, currentLang === 'ru' ? `Ждём остальных: ${ready}/${team.length}` : `Waiting for the rest: ${ready}/${team.length}`, '#facc15');
+    }
+    return;
+  }
+  breachWaitT = 0;
   const target = currentLocation === 'city' ? 'promzona' : 'city';
   if (locationsVisited.has(target) || target !== 'promzona' || !window.Comic) {
     travelTo(target);
@@ -5862,14 +6360,18 @@ function checkBreachTransit() {
 
 // Василий стоит у пролома с внутренней стороны забора
 function placePlayerAtBreach() {
-  player.x = fenceBreach.x;
-  player.y = breachFenceY() + breachInward() * 110;
-  player.isRolling = false;
+  // Кооп: все рядом, в ряд поперёк прохода
+  players.forEach((p, i) => {
+    p.x = fenceBreach.x + (i - (players.length - 1) / 2) * 50;
+    p.y = breachFenceY() + breachInward() * (110 + (i % 2) * 30);
+    p.isRolling = false;
+  });
 }
 
 // Переход в другую локацию: мир текущей запоминается тем же снимком, что пишет сохранение,
 // другая строится заново и, если Василий там уже был, восстанавливается
 function travelTo(target) {
+  if (window.Net) window.Net.onTravel(target);
   autoScale.hold(6000);
   if (window.Menu) locationWorlds[currentLocation] = window.Menu.snapshotWorld();
   currentLocation = target;
@@ -6552,14 +7054,16 @@ function landThrowable(f) {
   placeObstacleFor(o, f.kind);
 
   const hitR = def.radius + 26;
-  if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR && !playerDodged()) {
-    player.hp -= armorAbsorb(def.dmg, 'melee');
-    const a = Math.atan2(player.y - y, player.x - x);
-    slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
-    createParticles(player.x, player.y, '#ef4444', 12);
-    addFloatingText(player.x, player.y - 30, `-${def.dmg}`, '#ef4444');
-    if (player.hp <= 0) gameOver();
-  }
+  forEachPlayer(() => {
+    if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR && !playerDodged()) {
+      player.hp -= armorAbsorb(def.dmg, 'melee');
+      const a = Math.atan2(player.y - y, player.x - x);
+      slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
+      createParticles(player.x, player.y, '#ef4444', 12);
+      addFloatingText(player.x, player.y - 30, `-${def.dmg}`, '#ef4444');
+      if (player.hp <= 0) gameOver();
+    }
+  });
   // По своим тоже прилетает
   enemies.forEach(en => {
     if (en === f.thrower || en.type === 'boss' || en.type === 'pounder') return;
@@ -6731,6 +7235,7 @@ function setHudStyle(el, prop, value) {
 }
 
 function updateHUD(forceWeaponRefresh = false) {
+  if (player !== localPlayer) return; // HUD — своего Василия (кооп: ход товарища тоже зовёт)
   const hpPct = Math.round(Math.max(0, (player.hp / player.maxHp) * 100));
   if (_hudCache.hpPct !== hpPct) {
     _hudCache.hpPct = hpPct;
@@ -7334,11 +7839,16 @@ function updatePounderStrike(e, a, def) {
   const dx = player.x - e.x, dy = player.y - e.y;
   const dist = Math.hypot(dx, dy);
   const footY = player.y + footDY(player);
+  // Площадные удары задевают всех, кто в зоне (кооп: forEachPlayer), а не только того, на кого шёл
   if (a.kind === 'slam') {
     const c = pounderSlamCenter(e, a);
-    if (a.t === 1 && inGroundEllipse(player.x, footY, c.x, c.y, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
+    if (a.t === 1) forEachPlayer(() => {
+      if (inGroundEllipse(player.x, player.y + footDY(player), c.x, c.y, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
+    });
   } else if (a.kind === 'sweep') {
-    if (a.t === 3 && dist < def.range + player.radius) {
+    if (a.t === 3) forEachPlayer(() => {
+      const dx = player.x - e.x, dy = player.y - e.y;
+      if (Math.hypot(dx, dy) >= def.range + player.radius) return;
       let diff = Math.atan2(dy, dx) - a.aim;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
@@ -7351,22 +7861,28 @@ function updatePounderStrike(e, a, def) {
         player.knockVx = Math.cos(Math.atan2(dy, dx)) * 12;
         player.knockVy = Math.sin(Math.atan2(dy, dx)) * 12;
       }
-    }
+    });
   } else if (a.key === 'electric') {
     // Фронт разряда за active кадров пробегает всю длину; кого догнал в полосе — урон и оглушение
     const front = def.range * Math.min(1, a.t / def.active);
-    const along = (player.x - a.bolt.x) * Math.cos(a.aim) + (footY - a.bolt.y) * Math.sin(a.aim);
-    const across = Math.abs(-(player.x - a.bolt.x) * Math.sin(a.aim) + (footY - a.bolt.y) * Math.cos(a.aim));
     const fx = a.bolt.x + Math.cos(a.aim) * front, fy = a.bolt.y + Math.sin(a.aim) * front;
     spawnDirectionalSparks(fx, fy, -Math.PI / 2, Math.PI * 1.5, 3, '#d8b4fe', 3, 8, 10);
-    if (!a.hit && along > -player.radius && along < front && across < def.width / 2 + player.radius * 0.5) {
-      a.hit = true;   // кого фронт прошёл — того уже не ударит, даже если увернулся
-      const hp0 = player.hp;
-      pounderHit(e, def.damage, 'energy');
-      if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
-    }
+    const hits = a.hits || (a.hits = new Set());
+    forEachPlayer(p => {
+      const fy0 = player.y + footDY(player);
+      const along = (player.x - a.bolt.x) * Math.cos(a.aim) + (fy0 - a.bolt.y) * Math.sin(a.aim);
+      const across = Math.abs(-(player.x - a.bolt.x) * Math.sin(a.aim) + (fy0 - a.bolt.y) * Math.cos(a.aim));
+      if (!hits.has(p) && along > -player.radius && along < front && across < def.width / 2 + player.radius * 0.5) {
+        hits.add(p);   // кого фронт прошёл — того уже не ударит, даже если увернулся
+        const hp0 = player.hp;
+        pounderHit(e, def.damage, 'energy');
+        if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
+      }
+    });
   } else if (a.key === 'leap') {
-    if (a.t === 1 && inGroundEllipse(player.x, footY, e.x, e.y + 4, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
+    if (a.t === 1) forEachPlayer(() => {
+      if (inGroundEllipse(player.x, player.y + footDY(player), e.x, e.y + 4, def.range + player.radius * 0.5)) pounderHit(e, def.damage);
+    });
   } else if (a.key === 'storm') {
     // Кольца выпускаются и в фазе восстановления — см. advancePounderAttack
   } else if (a.key === 'hook') {
@@ -7388,18 +7904,24 @@ function updatePounderStrike(e, a, def) {
     a.aim += 0.55;                          // модель крутится
     if (a.t % 3 === 0) spawnDirectionalSparks(e.x, e.y - 20, a.aim, 0.6, 2, '#c084fc', 3, 9, 10);
     if (a.t % 4 === 0) createParticles(e.x, e.y + 10, '#78716c', 2);
-    a.hitCd = Math.max(0, (a.hitCd || 0) - 1);
-    if (a.hitCd === 0 && dist < def.range + player.radius) {
-      a.hitCd = def.hitEvery;
-      const hp0 = player.hp;
-      pounderHit(e, def.damage);
-      if (player.hp < hp0) {
-        player.stunTimer = Math.max(player.stunTimer || 0, 12);
-        player.knockFrames = 12;
-        player.knockVx = Math.cos(want) * 14;
-        player.knockVy = Math.sin(want) * 14;
+    // Задевает всех, на кого налетела; у каждого своя пауза между ударами
+    const cds = a.hitCds || (a.hitCds = new Map());
+    forEachPlayer(p => {
+      const cd = Math.max(0, (cds.get(p) || 0) - 1);
+      cds.set(p, cd);
+      const away = Math.atan2(player.y - e.y, player.x - e.x);
+      if (cd === 0 && Math.hypot(player.x - e.x, player.y - e.y) < def.range + player.radius) {
+        cds.set(p, def.hitEvery);
+        const hp0 = player.hp;
+        pounderHit(e, def.damage);
+        if (player.hp < hp0) {
+          player.stunTimer = Math.max(player.stunTimer || 0, 12);
+          player.knockFrames = 12;
+          player.knockVx = Math.cos(away) * 14;
+          player.knockVy = Math.sin(away) * 14;
+        }
       }
-    }
+    });
     // Упёрся в стену надолго — раскрутка кончается раньше
     a.stuck = Math.hypot(e.x - px, e.y - py) < def.speed * 0.2 ? (a.stuck || 0) + 1 : 0;
     if (a.stuck > 40) a.t = def.active;
@@ -7426,15 +7948,20 @@ function updatePounderRings() {
       pounderRings.splice(i, 1);
       continue;
     }
-    // Василий там, где прошла кромка кольца: оглушение и урон, перекат — перепрыгнул
-    if (ring.hit || player.isRolling) continue;
-    const d = Math.hypot((player.x - ring.x), (player.y + footDY(player) - ring.y) / GROUND_SQUASH);
-    if (d > prev - def.ringWidth / 2 && d < ring.r + def.ringWidth / 2) {
-      ring.hit = true;
-      const hp0 = player.hp;
-      pounderHit(ring.owner, def.damage, 'energy');
-      if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
-    }
+    // Василий там, где прошла кромка кольца: оглушение и урон, перекат — перепрыгнул. Кольцо бьёт каждого раз
+    const hits = ring.hits || (ring.hits = new Set());
+    enemyActing = ring.owner;
+    forEachPlayer(p => {
+      if (hits.has(p) || player.isRolling) return;
+      const d = Math.hypot((player.x - ring.x), (player.y + footDY(player) - ring.y) / GROUND_SQUASH);
+      if (d > prev - def.ringWidth / 2 && d < ring.r + def.ringWidth / 2) {
+        hits.add(p);
+        const hp0 = player.hp;
+        pounderHit(ring.owner, def.damage, 'energy');
+        if (player.hp < hp0) dazePlayer(def.stun, def.stun, 0.6);
+      }
+    });
+    enemyActing = null;
   }
 }
 
@@ -7544,7 +8071,7 @@ function updatePounderPhases(e) {
 function updatePounder(e, playerInSafe, hasFumeAura) {
   e.animTimer++;
   if (e.hitFlash > 0) e.hitFlash--;
-  if (e.attackCooldown > 0) e.attackCooldown--;
+  if (e.attackCooldown > 0) e.attackCooldown -= players.length > 1 ? coopScale().bossRate : 1;
   if (e.electricCd > 0) e.electricCd--;
   if (e.leapCd > 0) e.leapCd--;
   if (e.stormCd > 0) e.stormCd--;
@@ -7873,7 +8400,8 @@ function onPounderDefeated(e) {
   shakeScreen(30, 18);
   SoundFX.bossFx('pounder_death', e.x, e.y);
   addFloatingText(e.x - 140, e.y - 100, t('pounder_defeated'), '#c084fc');
-  player.pendingCards = true;
+  // Кооп: карту выбирает каждый, кто не погиб, — у каждого своя раскладка
+  players.forEach(p => { if (!p.dead) p.pendingCards = true; });
   cardOfferTimer = 150;
   POUNDER_REWARD.forEach(([type, val], i) => {
     const a = (i / POUNDER_REWARD.length) * Math.PI * 2;
@@ -8275,7 +8803,24 @@ function onBossStrike(e, a, def) {
   }
 }
 
+// Удары Мясника: захват — только того, на кого шёл; остальное задевает всех, кто попал (кооп)
 function updateBossStrike(e, a, def) {
+  if (a.key === 'lunge') {
+    const step = def.range / def.active;
+    const nx = e.x + Math.cos(a.aim) * step;
+    const ny = e.y + Math.sin(a.aim) * step;
+    if (!checkWalkCollision(nx, e.y, e.radius, footDY(e))) e.x = nx;
+    if (!checkWalkCollision(e.x, ny, e.radius, footDY(e))) e.y = ny;
+    if (a.t % 2 === 0) createParticles(e.x, e.y + 14, '#78716c', 2);
+    if (a.t === def.active - 3) {
+      muzzleFlashes.push({ x: e.x, y: e.y - 18, angle: a.aim, type: 'boss_slash', life: 10, maxLife: 10, scale: 2.4 });
+    }
+  }
+  if (a.key === 'grab') bossStrikeOn(e, a, def, player);
+  else forEachPlayer(p => bossStrikeOn(e, a, def, p));
+}
+
+function bossStrikeOn(e, a, def, p) {
   const dx = player.x - e.x;
   const dy = player.y - e.y;
   const dist = Math.hypot(dx, dy);
@@ -8317,18 +8862,10 @@ function updateBossStrike(e, a, def) {
       if (player.hp <= 0) gameOver();
     }
   } else if (a.key === 'lunge') {
-    const step = def.range / def.active;
-    const nx = e.x + Math.cos(a.aim) * step;
-    const ny = e.y + Math.sin(a.aim) * step;
-    if (!checkWalkCollision(nx, e.y, e.radius, footDY(e))) e.x = nx;
-    if (!checkWalkCollision(e.x, ny, e.radius, footDY(e))) e.y = ny;
-    if (a.t % 2 === 0) createParticles(e.x, e.y + 14, '#78716c', 2);
-    if (!a.hit && dist < e.radius + player.radius + 34) {
-      a.hit = true;
+    const hits = a.hits || (a.hits = new Set());
+    if (!hits.has(p) && dist < e.radius + player.radius + 34) {
+      hits.add(p);
       bossHitPlayer(e, def.damage);
-    }
-    if (a.t === def.active - 3) {
-      muzzleFlashes.push({ x: e.x, y: e.y - 18, angle: a.aim, type: 'boss_slash', life: 10, maxLife: 10, scale: 2.4 });
     }
   }
 }
@@ -8381,7 +8918,7 @@ function chooseBossAttack(e, dist) {
 function updateBoss(e, playerInSafe, hasFumeAura) {
   e.animTimer++;
   if (e.hitFlash > 0) e.hitFlash--;
-  if (e.attackCooldown > 0) e.attackCooldown--;
+  if (e.attackCooldown > 0) e.attackCooldown -= players.length > 1 ? coopScale().bossRate : 1;
   if (e.lungeCooldown > 0) e.lungeCooldown--;
   if (e.shieldFlash > 0) e.shieldFlash--;
   if (e.shieldRipples) e.shieldRipples = e.shieldRipples.filter(r => ++r.t < 34);
@@ -8516,7 +9053,8 @@ function onBossDefeated(e) {
   addFloatingText(e.x - 110, e.y - 80, t('boss_defeated'), '#facc15');
   // Забор за логовом трещит (если берсерк не успел его расколоть), а Василию — выбор из трёх карт
   crackFence();
-  player.pendingCards = true;
+  // Кооп: карту выбирает каждый, кто не погиб, — у каждого своя раскладка
+  players.forEach(p => { if (!p.dead) p.pendingCards = true; });
   cardOfferTimer = 150;
 
   // Разовая крупная награда, раскиданная вокруг тела
@@ -8972,12 +9510,72 @@ function drawLairCracks(ctx) {
 
 let _lastPromptKey = '';
 
-function update() {
-  if (gameState !== 'PLAYING') return;
+// Текущий Василий подбирает лут, до которого дотянулся (scrap, bottle, mil_parts, alien_core, патроны, расходники)
+function pickUpLoot() {
+  const pickupRadius = player.radius + 22;
+  for (let i = lootItems.length - 1; i >= 0; i--) {
+    const item = lootItems[i];
+    if (item.noPick > 0 && item.by === player.id) continue; // только что выкинул сам
+    if (Math.abs(item.x - player.x) < pickupRadius && Math.abs(item.y - player.y) < pickupRadius) {
+      if (Math.hypot(item.x - player.x, item.y - player.y) < pickupRadius) {
+        if (item.type.startsWith('weapon:')) {
+          // Выкинутый товарищем ствол: свой такой уже есть — лежит дальше
+          const w = item.type.slice(7);
+          if (player.unlockedWeapons[w]) continue;
+          player.unlockedWeapons[w] = true;
+          player.equipped[w] = true;
+          if (player.ammo[w] && item.ammo) player.ammo[w].clip = Math.min(player.ammo[w].maxClip, player.ammo[w].clip + item.ammo);
+          applyHotbarOrder();
+          addFloatingText(item.x, item.y - 22, `+ ${weaponTitle(w)}`, '#38bdf8');
+          updateHUD(true);
+        } else if (item.type.startsWith('item:')) {
+          const id = item.type.slice(5);
+          player.items[id] = (player.items[id] || 0) + item.val;
+          const info = itemInfo(id);
+          addFloatingText(item.x, item.y - 20, `+${item.val} ${info ? info.name.toUpperCase() : id}`, '#4ade80');
+        } else if (item.type === 'scrap') {
+          player.resources.scrap += item.val;
+          addFloatingText(item.x, item.y - 16, `+${item.val} Чермет`, '#38bdf8');
+        } else if (item.type === 'bottle') {
+          player.resources.bottles += item.val;
+          addFloatingText(item.x, item.y - 16, `+${item.val} Стеклотара`, '#22c55e');
+        } else if (item.type === 'mil_parts') {
+          player.resources.mil_parts += item.val;
+          addFloatingText(item.x, item.y - 22, `+${item.val} ОРУЖЕЙНЫЕ ДЕТАЛИ!`, '#f87171');
+        } else if (item.type === 'alien_core') {
+          player.resources.alien_core += item.val;
+          addFloatingText(item.x, item.y - 22, `+${item.val} КВАКО-ЯДРО!`, '#c084fc');
+        } else if (item.type === 'ammo_9x18') {
+          player.ammo.makarov.reserve += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 9×18`, '#facc15');
+        } else if (item.type === 'ammo_12g') {
+          player.ammo.shotgun.reserve += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 12К`, '#fb923c');
+        } else if (item.type === 'ammo_762n') {
+          player.ammo.nagant.reserve += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 7,62 Н`, '#facc15');
+        } else if (item.type === 'stew') {
+          player.items.stew += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ТУШЁНКА`, '#fbbf24');
+        } else if (item.type === 'vodka') {
+          player.items.vodka += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} ВОДКА`, '#f59e0b');
+        } else if (item.type === 'bandage') {
+          player.items.bandage += item.val;
+          addFloatingText(item.x, item.y - 20, `+${item.val} БИНТЫ`, '#4ade80');
+        } else if (TROPHY_NAMES[item.type] || PZ_LOOT_NAMES[item.type]) {
+          const [ru, en, color] = TROPHY_NAMES[item.type] || PZ_LOOT_NAMES[item.type];
+          player.resources[item.type] += item.val;
+          addFloatingText(item.x, item.y - 22, `+${item.val} ${currentLang === 'ru' ? ru : en}`, color);
+        }
+        lootItems.splice(i, 1);
+      }
+    }
+  }
+}
 
-  mouseWorld.x = mouseScreen.x + camera.x;
-  mouseWorld.y = mouseScreen.y + camera.y;
-
+// Ход одного Василия (текущего, usePlayer): здоровье, выносливость, перезарядка, движение, стрельба, лут рядом
+function updatePlayerSelf() {
   if (player.hasPerk('shaman_carpet') && player.hp < player.maxHp) {
     player.hp = Math.min(player.maxHp, player.hp + 0.018);
   }
@@ -9139,13 +9737,6 @@ function update() {
   player.x = Math.max(player.radius, Math.min(WORLD_WIDTH - player.radius, player.x));
   player.y = Math.max(player.radius, Math.min(WORLD_HEIGHT - player.radius, player.y));
 
-  cameraKickX *= 0.72;
-  cameraKickY *= 0.72;
-  if (Math.abs(cameraKickX) < 0.05) cameraKickX = 0;
-  if (Math.abs(cameraKickY) < 0.05) cameraKickY = 0;
-
-  camera.x = player.x - viewW / 2 + cameraKickX;
-  camera.y = player.y - viewH / 2 + cameraKickY;
   player.angle = Math.atan2(mouseWorld.y - player.y, mouseWorld.x - player.x);
 
   const angleDeg = (player.angle * 180 / Math.PI + 360) % 360;
@@ -9159,6 +9750,7 @@ function update() {
   player.facingLeft = (angleDeg > 90 && angleDeg < 270);
 
   const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
+  player.inSafe = inSafe;
   if (shootCooldown > 0) shootCooldown--;
   if (mouseDown && !player.isRolling && !inSafe && !(player.stunTimer > 0)) {
     shootPlayerWeapon();
@@ -9166,7 +9758,10 @@ function update() {
 
   nearbyInteractable = null;
   const distToShop = Math.hypot(player.x - safeZone.shopX, player.y - safeZone.shopY);
-  if (distToShop < safeZone.shopRadius + player.radius + 20) {
+  const fallen = players.length > 1 && players.find(o => o.downT > 0 && Math.hypot(o.x - player.x, o.y - player.y) < REVIVE_RADIUS);
+  if (fallen) {
+    nearbyInteractable = { type: 'revive', target: fallen }; // держать E — поднять (updateDowned)
+  } else if (distToShop < safeZone.shopRadius + player.radius + 20) {
     nearbyInteractable = { type: 'shop' };
   } else if (fenceBreach.state === 'cracked' && Math.abs(player.x - fenceBreach.x) < 90 && player.y < 150) {
     nearbyInteractable = { type: 'breach' };
@@ -9184,31 +9779,13 @@ function update() {
     }
   }
 
-  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).length;
-  const safeTarget = nearbyInteractable && nearbyInteractable.type === 'container' && window.Safes &&
-    window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
-  const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
-  const settlerPrompt = nearbyInteractable && nearbyInteractable.type === 'settler' ? window.Settlers.prompt(nearbyInteractable.target) : '';
-  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}_${settlerPrompt}` : '';
-  if (_lastPromptKey !== nextPromptKey) {
-    _lastPromptKey = nextPromptKey;
-    const promptEl = document.getElementById('interact-prompt');
-    if (nearbyInteractable) {
-      promptEl.style.display = 'block';
-      const type = nearbyInteractable.type;
-      promptEl.innerText = type === 'shop' ? t('prompt_shop')
-        : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
-        : type === 'sample' ? window.Quests.samplePrompt()
-        : settlerPrompt || safePrompt || t('prompt_search');
-    } else {
-      promptEl.style.display = 'none';
-    }
-  }
+  if (player === localPlayer) updateInteractPrompt();
 
   const pullRadius = player.hasPerk('tentacle_arm') ? 185 : 58;
   const pullSpeed = player.hasPerk('tentacle_arm') ? 5.5 : 3.2;
   for (let i = 0; i < lootItems.length; i++) {
     const item = lootItems[i];
+    if (item.noPick > 0 && item.by === player.id) continue;
     if (Math.abs(player.x - item.x) < pullRadius && Math.abs(player.y - item.y) < pullRadius) {
       const dist = Math.hypot(player.x - item.x, player.y - item.y);
       if (dist < pullRadius) {
@@ -9218,6 +9795,153 @@ function update() {
       }
     }
   }
+
+  // Баффы столовой и ЭМИ на самом Василии — у каждого свои (src/canteen.js, src/workshop.js)
+  if (window.Canteen) window.Canteen.update();
+  if (window.Workshop && window.Workshop.updatePlayer) window.Workshop.updatePlayer();
+}
+
+// Подсказка «E — …» над тем, что рядом со своим Василием (DOM — только у себя)
+function updateInteractPrompt() {
+  const toadsLeft = enemies.filter(e => e.type !== 'boss' && e.type !== 'pounder' && !e.defense && !e.summon).length;
+  const safeTarget = nearbyInteractable && nearbyInteractable.type === 'container' && window.Safes &&
+    window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
+  const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
+  const settlerPrompt = nearbyInteractable && nearbyInteractable.type === 'settler' ? window.Settlers.prompt(nearbyInteractable.target) : '';
+  const revivePrompt = nearbyInteractable && nearbyInteractable.type === 'revive'
+    ? (currentLang === 'ru' ? `Держи E — поднять: ${nearbyInteractable.target.name}` : `Hold E — revive ${nearbyInteractable.target.name}`) : '';
+  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}_${settlerPrompt}_${revivePrompt}` : '';
+  if (_lastPromptKey !== nextPromptKey) {
+    _lastPromptKey = nextPromptKey;
+    const promptEl = document.getElementById('interact-prompt');
+    if (nearbyInteractable) {
+      promptEl.style.display = 'block';
+      const type = nearbyInteractable.type;
+      promptEl.innerText = type === 'revive' ? revivePrompt
+        : type === 'shop' ? t('prompt_shop')
+        : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
+        : type === 'sample' ? window.Quests.samplePrompt()
+        : settlerPrompt || safePrompt || t('prompt_search');
+    } else {
+      promptEl.style.display = 'none';
+    }
+  }
+}
+
+
+// Состояния, в которых мир сетевого коопа живёт дальше: у игрока открыто меню, а остальные играют
+const NET_LIVE_STATES = new Set(['PLAYING', 'PAUSED', 'INVENTORY', 'SHOP', 'WORKSHOP', 'CANTEEN', 'DIALOG', 'CARDS']);
+function worldLive() {
+  return gameState === 'PLAYING' || (!!window.Net && window.Net.started && NET_LIVE_STATES.has(gameState));
+}
+
+// Вспышки, гильзы, частицы, всплывающие цифры — живут сами по себе (у сетевого клиента — тоже, src/net.js)
+function updateCosmetics() {
+  for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
+    muzzleFlashes[i].life--;
+    if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
+  }
+
+  for (let i = shellCasings.length - 1; i >= 0; i--) {
+    const sc = shellCasings[i];
+    if (sc.z > 0 || sc.vz !== 0) {
+      sc.x += sc.vx;
+      sc.y += sc.vy;
+      sc.rot += sc.vRot;
+      sc.z += sc.vz;
+      sc.vz -= 0.45;
+      if (sc.z <= 0) {
+        sc.z = 0;
+        if (Math.abs(sc.vz) > 1.0) {
+          sc.vz = -sc.vz * 0.42;
+          sc.vx *= 0.55;
+          sc.vy *= 0.55;
+          sc.vRot *= 0.5;
+        } else {
+          sc.vz = 0;
+          sc.vx = 0;
+          sc.vy = 0;
+          sc.vRot = 0;
+        }
+      }
+    }
+    sc.life--;
+    if (sc.life <= 0) shellCasings.splice(i, 1);
+  }
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.drag) {
+      p.vx *= p.drag;
+      p.vy *= p.drag;
+    }
+    if (p.type === 'smoke') {
+      p.radius += 0.32;
+    }
+    p.life--;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i]; ft.y += ft.vy; ft.life--;
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
+  }
+}
+
+function update() {
+  // Сетевой клиент мир не считает: берёт его у хоста (src/net.js)
+  if (window.Net && window.Net.isClient()) {
+    if (NET_LIVE_STATES.has(gameState)) window.Net.clientUpdate();
+    return;
+  }
+  if (!worldLive()) return;
+  if (window.Net) window.Net.hostBegin();
+
+  usePlayer(localPlayer);
+  mouseWorld.x = mouseScreen.x + camera.x;
+  mouseWorld.y = mouseScreen.y + camera.y;
+  // В меню свой Василий стоит: клавиши и мышь — меню, а не ему
+  const menuOpen = gameState !== 'PLAYING';
+  const ownInput = localPlayer.input;
+  if (menuOpen) {
+    localPlayer.input = { keys: {}, mouse: { x: mouseWorld.x, y: mouseWorld.y }, down: false };
+    keys = localPlayer.input.keys;
+    mouseWorld = localPlayer.input.mouse;
+    mouseDown = false;
+  }
+  mouseWorld.x = mouseScreen.x + camera.x;
+  mouseWorld.y = mouseScreen.y + camera.y;
+  // Ввод остальных игроков: по сети или от отладочного бота (src/coop.js)
+  if (window.Coop) window.Coop.beforeUpdate();
+  for (let pi = 0; pi < players.length; pi++) {
+    const p = players[pi];
+    if (p.dead) continue;
+    usePlayer(p);
+    // Отдача и тряска от чужой стрельбы — не наша камера
+    const kickX = cameraKickX, kickY = cameraKickY;
+    if (p.downT > 0) updateDowned();
+    else updatePlayerSelf();
+    tagBulletOwners();
+    if (p !== localPlayer) { cameraKickX = kickX; cameraKickY = kickY; }
+  }
+  usePlayer(localPlayer);
+  if (menuOpen) {
+    localPlayer.input = ownInput;
+    keys = ownInput.keys;
+    mouseWorld = ownInput.mouse;
+    mouseDown = false;
+  }
+
+  cameraKickX *= 0.72;
+  cameraKickY *= 0.72;
+  if (Math.abs(cameraKickX) < 0.05) cameraKickX = 0;
+  if (Math.abs(cameraKickY) < 0.05) cameraKickY = 0;
+
+  // Погиб насовсем — камера следит за живым товарищем
+  const camP = localPlayer.dead ? (alivePlayers()[0] || localPlayer) : localPlayer;
+  camera.x = camP.x - viewW / 2 + cameraKickX;
+  camera.y = camP.y - viewH / 2 + cameraKickY;
 
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i];
@@ -9265,6 +9989,7 @@ function update() {
     }
 
     if (b.weaponType === 'wad') continue;
+    if (b.owner && b.owner !== player) usePlayer(b.owner);
 
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
@@ -9321,12 +10046,12 @@ function update() {
     }
   }
 
+  usePlayer(localPlayer);
   updateThrownProps();
   updateRockets();
   updateFireGoo();
   if (window.Safes) window.Safes.update();
   if (window.Workshop) window.Workshop.update();
-  if (window.Canteen) window.Canteen.update();
   if (window.Defense) window.Defense.update();
   if (window.Settlers) window.Settlers.update();
   if (window.Quests) window.Quests.update();
@@ -9344,11 +10069,18 @@ function update() {
   }
   checkLevelCleared();
 
-  const hasFumeAura = player.hasPerk('fume_aura');
   const activeSimRadius = Math.max(viewW, viewH) * 0.72 + 220;
 
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
+    // Цель — один из игроков (pickTarget): на время хода жабы он «текущий», её AI работает с ним как с player
+    if (!e.coopScaled) coopScaleEnemy(e);
+    const tgt = pickTarget(e);
+    if (!tgt) continue;
+    usePlayer(tgt);
+    enemyActing = e;
+    const inSafe = tgt.inSafe;
+    const hasFumeAura = tgt.hasPerk('fume_aura');
     if (e.type === 'boss') {
       updateBoss(e, inSafe, hasFumeAura);
       continue;
@@ -9526,6 +10258,9 @@ function update() {
     }
   }
 
+  usePlayer(localPlayer);
+  enemyActing = null;
+
   for (let i = enemyBullets.length - 1; i >= 0; i--) {
     const eb = enemyBullets[i];
     eb.x += eb.vx; eb.y += eb.vy;
@@ -9541,7 +10276,9 @@ function update() {
       enemyBullets.splice(i, 1);
       continue;
     }
-    if (Math.hypot(eb.x - player.x, eb.y - player.y) < eb.radius + player.radius) {
+    const hitP = playerAt(eb.x, eb.y, eb.radius);
+    if (hitP) {
+      usePlayer(hitP);
       if (!player.isRolling && !playerDodged()) {
         // Плазма штурмовиков броню почти не замечает, кислота снайперов — наполовину
         player.hp -= armorAbsorb(eb.damage, eb.kind === 'plasma' ? 'energy' : 'ranged');
@@ -9549,108 +10286,24 @@ function update() {
         addFloatingText(player.x, player.y - 20, `-${eb.damage}`, '#ef4444');
         if (player.hp <= 0) gameOver();
       }
+      usePlayer(localPlayer);
       enemyBullets.splice(i, 1);
     }
   }
 
-  // Подбор всех типов 3D-лута (scrap, bottle, mil_parts, alien_core, ammo_9x18, ammo_12g, stew, vodka, bandage)
-  const pickupRadius = player.radius + 22;
-  for (let i = lootItems.length - 1; i >= 0; i--) {
-    const item = lootItems[i];
-    if (Math.abs(item.x - player.x) < pickupRadius && Math.abs(item.y - player.y) < pickupRadius) {
-      if (Math.hypot(item.x - player.x, item.y - player.y) < pickupRadius) {
-        if (item.type === 'scrap') {
-          player.resources.scrap += item.val;
-          addFloatingText(item.x, item.y - 16, `+${item.val} Чермет`, '#38bdf8');
-        } else if (item.type === 'bottle') {
-          player.resources.bottles += item.val;
-          addFloatingText(item.x, item.y - 16, `+${item.val} Стеклотара`, '#22c55e');
-        } else if (item.type === 'mil_parts') {
-          player.resources.mil_parts += item.val;
-          addFloatingText(item.x, item.y - 22, `+${item.val} ОРУЖЕЙНЫЕ ДЕТАЛИ!`, '#f87171');
-        } else if (item.type === 'alien_core') {
-          player.resources.alien_core += item.val;
-          addFloatingText(item.x, item.y - 22, `+${item.val} КВАКО-ЯДРО!`, '#c084fc');
-        } else if (item.type === 'ammo_9x18') {
-          player.ammo.makarov.reserve += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 9×18`, '#facc15');
-        } else if (item.type === 'ammo_12g') {
-          player.ammo.shotgun.reserve += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 12К`, '#fb923c');
-        } else if (item.type === 'ammo_762n') {
-          player.ammo.nagant.reserve += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} ПАТР. 7,62 Н`, '#facc15');
-        } else if (item.type === 'stew') {
-          player.items.stew += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} ТУШЁНКА`, '#fbbf24');
-        } else if (item.type === 'vodka') {
-          player.items.vodka += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} ВОДКА`, '#f59e0b');
-        } else if (item.type === 'bandage') {
-          player.items.bandage += item.val;
-          addFloatingText(item.x, item.y - 20, `+${item.val} БИНТЫ`, '#4ade80');
-        } else if (TROPHY_NAMES[item.type] || PZ_LOOT_NAMES[item.type]) {
-          const [ru, en, color] = TROPHY_NAMES[item.type] || PZ_LOOT_NAMES[item.type];
-          player.resources[item.type] += item.val;
-          addFloatingText(item.x, item.y - 22, `+${item.val} ${currentLang === 'ru' ? ru : en}`, color);
-        }
-        lootItems.splice(i, 1);
-      }
-    }
+  // Подбор лута: кто ближе успел, того и вещь
+  for (let pi = 0; pi < players.length; pi++) {
+    if (players[pi].dead || players[pi].downT > 0) continue;
+    usePlayer(players[pi]);
+    pickUpLoot();
   }
+  usePlayer(localPlayer);
+  for (let i = 0; i < lootItems.length; i++) if (lootItems[i].noPick > 0) lootItems[i].noPick--;
 
-  for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
-    muzzleFlashes[i].life--;
-    if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
-  }
-
-  for (let i = shellCasings.length - 1; i >= 0; i--) {
-    const sc = shellCasings[i];
-    if (sc.z > 0 || sc.vz !== 0) {
-      sc.x += sc.vx;
-      sc.y += sc.vy;
-      sc.rot += sc.vRot;
-      sc.z += sc.vz;
-      sc.vz -= 0.45;
-      if (sc.z <= 0) {
-        sc.z = 0;
-        if (Math.abs(sc.vz) > 1.0) {
-          sc.vz = -sc.vz * 0.42;
-          sc.vx *= 0.55;
-          sc.vy *= 0.55;
-          sc.vRot *= 0.5;
-        } else {
-          sc.vz = 0;
-          sc.vx = 0;
-          sc.vy = 0;
-          sc.vRot = 0;
-        }
-      }
-    }
-    sc.life--;
-    if (sc.life <= 0) shellCasings.splice(i, 1);
-  }
-
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    if (p.drag) {
-      p.vx *= p.drag;
-      p.vy *= p.drag;
-    }
-    if (p.type === 'smoke') {
-      p.radius += 0.32;
-    }
-    p.life--;
-    if (p.life <= 0) particles.splice(i, 1);
-  }
-  for (let i = floatingTexts.length - 1; i >= 0; i--) {
-    const ft = floatingTexts[i]; ft.y += ft.vy; ft.life--;
-    if (ft.life <= 0) floatingTexts.splice(i, 1);
-  }
+  updateCosmetics();
 
   updateHUD();
+  if (window.Net) window.Net.hostSend(); // снимок мира — сетевым товарищам
 }
 
 function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
@@ -9881,8 +10534,12 @@ function drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
 // вместе с тенями домов и деревьев, до всех предметов
 function collectActorShadows(minX, maxX, minY, maxY) {
   const list = [];
-  const pc = window.threeCharacter && window.threeCharacter.shadowSprite(player);
-  if (pc) list.push(pc);
+  for (let i = 0; i < players.length; i++) {
+    const p = players[i];
+    if (p.dead || p.downT > 0 || !p.char) continue;
+    const pc = p.char.shadowSprite(p);
+    if (pc) list.push(pc);
+  }
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < minX || e.x > maxX || e.y < minY || e.y > maxY) continue;
@@ -9901,6 +10558,75 @@ function collectActorShadows(minX, maxX, minY, maxY) {
   if (window.Defense) window.Defense.addShadows(list);
   if (window.Settlers) window.Settlers.addShadows(list);
   return list;
+}
+
+// Один Василий (текущий, usePlayer): лазерный целеуказатель, модель, у чужих — имя; у упавшего — сколько осталось
+function drawOnePlayer(ctx) {
+  if (player.hasPerk && player.hasPerk('laser_eye') && !player.isRolling && !(player.downT > 0) && !player.dead) {
+    const muz = (window.threeCharacter && window.threeCharacter.getMuzzlePosition)
+      ? window.threeCharacter.getMuzzlePosition(player)
+      : { x: player.x + Math.cos(player.angle) * 44, y: player.y - 18 + Math.sin(player.angle) * 44 };
+    ctx.save();
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(muz.x, muz.y);
+    ctx.lineTo(muz.x + Math.cos(player.angle) * 480, muz.y + Math.sin(player.angle) * 480);
+    ctx.stroke();
+    ctx.restore();
+  }
+  SpriteRenderer.drawVasiliy(ctx, player);
+  if (players.length > 1) drawPlayerTag(ctx, player);
+}
+
+// Над чужим Василием — имя его цветом; упавший — красный круг: сколько секунд осталось, и полоска подъёма
+function drawPlayerTag(ctx, p) {
+  const color = COOP_COLORS[p.color] || '#e5e7eb';
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 13px Arial';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  const lying = p.downT > 0 || p.dead;
+  if (p !== localPlayer) {
+    const label = p.dead ? `✝ ${p.name}` : p.name;
+    const ly = p.y - (lying ? 58 : 82);
+    ctx.strokeText(label, p.x, ly);
+    ctx.fillStyle = p.dead ? '#94a3b8' : color;
+    ctx.fillText(label, p.x, ly);
+  }
+  if (p.downT > 0) {
+    // Сколько секунд осталось поднять — красной дугой, и полоска, пока поднимают
+    const k = p.downT / DOWN_FRAMES;
+    const cy = p.y - 34;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.arc(p.x, cy, 12, 0, Math.PI * 2);
+    ctx.fill();
+    // Поднимают — круг зелёный: таймер стоит
+    ctx.strokeStyle = p.reviving ? 'rgba(74, 222, 128, 0.95)' : 'rgba(239, 68, 68, 0.95)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(p.x, cy, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k);
+    ctx.stroke();
+    ctx.fillStyle = '#fecaca';
+    ctx.font = 'bold 11px Arial';
+    ctx.fillText(Math.ceil(p.downT / 60), p.x, cy + 4);
+    if (p.reviveT > 0) {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(p.x - 30, p.y + 14, 60, 6);
+      ctx.fillStyle = '#4ade80';
+      ctx.fillRect(p.x - 30, p.y + 14, 60 * Math.min(1, p.reviveT / REVIVE_FRAMES), 6);
+    } else if (p !== localPlayer && !localPlayer.dead && !(localPlayer.downT > 0) &&
+        Math.hypot(localPlayer.x - p.x, localPlayer.y - p.y) < 260) {
+      // Подсказка тем, кто рядом: подойти и держать E
+      ctx.font = 'bold 12px Arial';
+      ctx.strokeText(currentLang === 'ru' ? 'подойди и держи E' : 'come close, hold E', p.x, p.y + 26);
+      ctx.fillStyle = '#86efac';
+      ctx.fillText(currentLang === 'ru' ? 'подойди и держи E' : 'come close, hold E', p.x, p.y + 26);
+    }
+  }
+  ctx.restore();
 }
 
 function render() {
@@ -9924,7 +10650,7 @@ function render() {
   const viewMaxY = camera.y + viewH + 120;
 
   // Ступни и высоты фигур на экране: по ним предметы, за которыми кто-то стоит, рисуются поверх (9.2)
-  const actors = [{ x: player.x, y: player.y + footDY(player), h: 88 }];
+  const actors = players.filter(p => !p.left).map(p => ({ x: p.x, y: p.y + footDY(p), h: p.downT > 0 || p.dead ? 30 : 88 }));
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < viewMinX || e.x > viewMaxX || e.y < viewMinY || e.y > viewMaxY) continue;
@@ -10206,22 +10932,15 @@ function render() {
     }
   }
 
-  // 9. Василий с экипировкой + Лазерный целеуказатель (если взят перк laser_eye)
-  if (player.hasPerk && player.hasPerk('laser_eye') && !player.isRolling) {
-    const muz = (window.threeCharacter && window.threeCharacter.getMuzzlePosition)
-      ? window.threeCharacter.getMuzzlePosition(player)
-      : { x: player.x + Math.cos(player.angle) * 44, y: player.y - 18 + Math.sin(player.angle) * 44 };
-    ctx.save();
-    ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(muz.x, muz.y);
-    ctx.lineTo(muz.x + Math.cos(player.angle) * 480, muz.y + Math.sin(player.angle) * 480);
-    ctx.stroke();
-    ctx.restore();
+  // 9. Василии (в коопе — все, свой последним, поверх) с экипировкой + Лазерный целеуказатель (перк laser_eye)
+  for (let pi = 0; pi < players.length; pi++) {
+    const p = players[pi];
+    if (p === localPlayer || p.left || p.x < viewMinX || p.x > viewMaxX || p.y < viewMinY || p.y > viewMaxY) continue;
+    usePlayer(p);
+    drawOnePlayer(ctx);
   }
-
-  SpriteRenderer.drawVasiliy(ctx, player);
+  usePlayer(localPlayer);
+  drawOnePlayer(ctx);
   if (window.Settlers) window.Settlers.drawActors(ctx, true); // спасённые и их места перед Василием
   drawDazeStars(ctx);
   if (pounderRef) drawPounderArena(ctx, pounderRef, true); // ближняя половина барьера — перед фигурами
@@ -10288,6 +11007,7 @@ function render() {
 
   drawLastEnemyMarkers();
   drawBreachMarker();
+  if (window.Minimap) window.Minimap.frame(ctx); // миникарта, зов на помощь (src/minimap.js)
 }
 
 // Когда жаб осталось мало, у края экрана стрелки показывают, где они: иначе последнюю
@@ -10520,7 +11240,7 @@ function loop(now = performance.now()) {
   if (steps === MAX_SIM_STEPS_PER_FRAME) simAccumulator = 0;
 
   // Без нового шага симуляции кадр совпадает с предыдущим — не тратим на него GPU
-  const frozen = gameState !== 'PLAYING';
+  const frozen = gameState !== 'PLAYING' && !(window.Net && window.Net.started && NET_LIVE_STATES.has(gameState));
   if (steps > 0 && !(frozen && frozenFrameState === gameState)) {
     const t1 = performance.now();
     render();

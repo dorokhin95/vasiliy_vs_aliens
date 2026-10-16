@@ -163,7 +163,7 @@ window.Dialog = (function () {
 
   // Реплика и варианты ответа: [надпись, действие]. Варианты показываются, когда реплика допечатана
   function say(text, opts) {
-    full = text;
+    full = personalize(text); // кооп: к игроку — по его имени (game.js)
     shown = 0;
     options = opts;
     $('dialog-options').innerHTML = '';
