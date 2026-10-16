@@ -147,11 +147,6 @@ window.Minimap = (() => {
     // Кусок подложки вокруг Василия: в подложке 1 px = 1/STATIC_K мира
     const src = range * STATIC_K;
     g.drawImage(staticCanvas, (me.x - range) * STATIC_K, (me.y - range) * STATIC_K, src * 2, src * 2, 0, 0, size, size);
-    // Что видно на экране — рамкой
-    const [vx, vy] = toMap(camera.x, camera.y);
-    g.strokeStyle = 'rgba(255,255,255,0.3)';
-    g.lineWidth = 1;
-    g.strokeRect(vx, vy, viewW * k, viewH * k);
     // Ларёк: зелёный круг купола
     if (currentLocation === 'city') {
       const [sx, sy] = toMap(safeZone.x, safeZone.y);
