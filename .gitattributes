@@ -1,0 +1,4 @@
+# Bat/cmd-файлы хранятся как есть, с CRLF, — иначе cmd.exe их не понимает (и в архиве с GitHub тоже)
+*.cmd -text
+*.bat -text
+*.exe binary
