@@ -2143,6 +2143,9 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
 
 // Респауна нет, врагов на локации меньше (69 вместо 83) — зато каждый крепче
 const ENEMY_HP_SCALE = 1.3;
+// Промзона — уровень 2: Василий приходит с перками, плазмой и мастерской (базовый урон 36–56, +20%),
+// поэтому жабы там крепче городских того же тира — время убийства как в городе (docs/BALANCE.md, «Бой в Промзоне»)
+const PZ_HP_SCALE = 1.5;
 
 function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -2228,7 +2231,7 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     // Ступни этого типа тоже должны стоять на свободном месте (см. footDY)
     if (checkWalkCollision(ex, ey, radius, FOOT_DY[type])) continue;
     if (insideFactoryShape(ex, ey + FOOT_DY[type])) continue;
-    hp = Math.round(hp * ENEMY_HP_SCALE);
+    hp = Math.round(hp * ENEMY_HP_SCALE * (currentLocation === 'promzona' ? PZ_HP_SCALE : 1));
 
     enemies.push({
       x: ex,
@@ -7633,7 +7636,7 @@ function handleEnemyKilled(index) {
 const POUNDER_HOME = { x: 660, y: 640 };
 const POUNDER_LAIR_R = 330;            // площадка логова на земле; жабы и деревья туда не ставятся
 const POUNDER_LEASH = 1050;            // дальше Василий — уходит домой и зализывает раны
-const POUNDER_MAX_HP = 6500;
+const POUNDER_MAX_HP = 9000;            // чистого урона ~40–75 с при базовом 56 и мастерской (docs/BALANCE.md, «Бой в Промзоне»)
 const POUNDER_ARMOR = 0.35;            // ржавые наплечники спереди, со спины — полный урон
 const POUNDER_REGEN = 0.0004;          // доля здоровья за кадр вне боя
 // Тайминги — кадры при 60 Гц, как фазы клипов. reach — насколько впереди центр кольца удара сверху;
@@ -7655,7 +7658,7 @@ const POUNDER_ATTACKS = {
 };
 // Малая копия: раз в 1,5 мин отщепляется (первая — через 20 с боя), быстрая, только простые удары,
 // своё здоровье; пока она жива, Долбильщика не взять
-const POUNDER_MINI = { first: 1200, every: 5400, hp: 650, speed: 3.0, scale: 0.62, dmg: 0.4 };
+const POUNDER_MINI = { first: 1200, every: 5400, hp: 1000, speed: 3.0, scale: 0.62, dmg: 0.4 };
 // На 40% здоровья призывает кольцом вокруг себя снайперов гнезда: стоят на месте и стреляют
 const POUNDER_SNIPERS_AT = 0.4;
 const POUNDER_SNIPERS = 10;

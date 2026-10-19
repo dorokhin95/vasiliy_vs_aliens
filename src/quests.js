@@ -364,7 +364,7 @@ window.Quests = (function () {
     if (!c || enemies.some(e => e.questGuard === q.id)) return;
     guardSeen[q.id] = true;
     const x = c.x + 90, y = c.y + 40;
-    const hp = Math.round(900 * ENEMY_HP_SCALE);
+    const hp = Math.round(900 * ENEMY_HP_SCALE * PZ_HP_SCALE);
     enemies.push({
       x, y, startX: x, startY: y, bounds: { x1: c.x - 500, y1: c.y - 400, x2: c.x + 500, y2: c.y + 400 },
       districtId: c.districtId, tier: 4, radius: 38, hp, maxHp: hp, speed: 1.9, type: 'brute', color: '#a855f7',

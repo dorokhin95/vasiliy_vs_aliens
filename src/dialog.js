@@ -5,7 +5,7 @@
 // Темы: «Расскажи о себе» (несколько страниц), «Что слышно на заводе?» (подсказки, по одной за раз, по кругу),
 // «Есть работа?» (выдача и сдача квестов — src/quests.js), у Толика и Лены — мастерская и столовая,
 // у Зины после оружейки — «Про Колю», «Бывай». У Серёги работы нет — он рассказывает истории.
-// Портреты — tools/make_survivor_portraits.py (временные, из листа выживших).
+// Портреты — нарисованы в Gemini по листу выживших, у каждого свой фон (tools/make_survivor_portraits.py).
 // Скрипты обычные, без модулей: gameState, keys, mouseDown, currentLang — из game.js.
 window.Dialog = (function () {
   const $ = id => document.getElementById(id);
@@ -143,7 +143,7 @@ window.Dialog = (function () {
     for (const k in keys) keys[k] = false;
     mouseDown = false;
     const c = CHARS[who];
-    $('dialog-portrait').src = `assets/sprites/portraits/${who}.webp?v=1155`;
+    $('dialog-portrait').src = `assets/sprites/portraits/${who}.webp?v=1199`;
     $('dialog-name').textContent = L(s.def.name[0], s.def.name[1]);
     $('dialog-role').textContent = T(c.role);
     $('dialog-hint').textContent = T(LABELS.hint);
