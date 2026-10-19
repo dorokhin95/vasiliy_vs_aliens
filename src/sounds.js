@@ -1255,6 +1255,8 @@
     brute_throw: P => P('swish', { rate: 0.5, vol: 0.7 }),
     brute_throw_heavy: P => { P('swish', { rate: 0.35, vol: 0.9 }); P('soft_m', { rate: 0.6, vol: 0.4 }); },
     brute_slam: P => { P('lowboom2', { vol: 0.6 }); P('soft_h', { rate: 0.5, vol: 0.7 }); },
+    // Василий приземляется с переката на «Жабьих ногах»
+    frog_land: P => { P('soft_h', { rate: 0.75, vol: 0.6 }); P('lowboom2', { vol: 0.25 }); },
     fence_break: P => {
       P('crunch', { vol: 0.8 });
       P('mining', { rate: 0.6, vol: 0.8 });

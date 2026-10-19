@@ -117,8 +117,8 @@ const UPGRADE_TREES = {
         promzona: true,
         name_ru: "Жабьи ноги",
         name_en: "Frog Legs",
-        desc_ru: "Перекат на 35% длиннее",
-        desc_en: "Roll covers 35% more ground",
+        desc_ru: "Перекат на 35% длиннее и кончается приземлением: жаб рядом отбрасывает и оглушает на полсекунды (боссов — только урон)",
+        desc_en: "Roll covers 35% more ground and ends with a landing: nearby toads are knocked back and stunned for half a second (bosses just take damage)",
         cost: { scrap: 15, kvako_charge: 2, toad_leg: 5 },
         statMods: {},
         locks: []
@@ -3804,6 +3804,41 @@ window.useItem = function(itemType) {
   updateHUD(true);
 };
 
+// «Жабьи ноги»: перекат длиннее и кончается приземлением — жаб в радиусе отбрасывает и оглушает.
+// Оглушённая жаба стоит столбом (stunT, кадры); снова оглушить её можно только через stunCd — перекатами
+// толпу насовсем не заморозить. Боссов только бьёт: не отбрасывает и не оглушает
+const FROG_LEGS = { roll: 1.35, radius: 62, dmg: 0.5, push: 34, stun: 30, immune: 90 };
+
+function frogLegsLanding() {
+  if (player.inSafe) return;
+  const fx = player.x, fy = player.y + footDY(player);
+  spawnShockwave(fx, fy, FROG_LEGS.radius, '#bef264', 20);
+  SoundFX.bossFx('frog_land', fx, fy);
+  if (player === localPlayer) cameraKickY += 5;
+  const dmg = player.baseDamage * FROG_LEGS.dmg;
+  enemies.forEach(e => {
+    if (e.hp <= 0 || !inGroundEllipse(e.x, e.y + footDY(e), fx, fy, FROG_LEGS.radius + e.radius)) return;
+    const hit = damageEnemy(e, dmg, 'stomp', player.x, player.y);
+    e.hitFlash = 6;
+    addFloatingText(e.x, e.y - 20, damageLabel(hit, `-${Math.round(hit.dealt)}`), '#bef264');
+    if (e.type === 'boss' || e.type === 'pounder') return;
+    const a = Math.atan2(e.y - player.y, e.x - player.x);
+    const kb = e.type === 'brute' ? FROG_LEGS.push * 0.35 : FROG_LEGS.push;
+    const kx = e.x + Math.cos(a) * kb, ky = e.y + Math.sin(a) * kb;
+    if (!checkWalkCollision(kx, ky, e.radius, footDY(e))) {
+      e.x = kx;
+      e.y = ky;
+    }
+    if (e.stunCd > 0) return;
+    e.stunT = FROG_LEGS.stun;
+    e.stunCd = FROG_LEGS.stun + FROG_LEGS.immune;
+    if (e.lunge) { // язык в замахе — сбит
+      e.lunge = null;
+      e.squash = 0;
+    }
+  });
+}
+
 function performRoll() {
   // Карта «Ловкость»: перекат дешевле и чаще
   const agility = Math.max(0.4, 1 - CARD_EFFECTS.agilityRoll * (player.cards.agility || 0));
@@ -6604,6 +6639,33 @@ function drawFumeAura(ctx) {
 }
 
 // Хмельная жаба: над головой кружат пузыри перегара
+// Оглушённая жаба: жёлтые звёздочки кружат над головой
+function drawStunStars(ctx, e) {
+  const t = performance.now() / 1000 + e.x * 0.01;
+  const headY = e.y - (e.type === 'brute' ? 96 : 56);
+  ctx.save();
+  ctx.fillStyle = '#fde047';
+  ctx.strokeStyle = '#a16207';
+  ctx.lineWidth = 0.8;
+  for (let k = 0; k < 3; k++) {
+    const a = t * 5 + k * (Math.PI * 2 / 3);
+    const x = e.x + Math.cos(a) * 16;
+    const y = headY + Math.sin(a) * 5.5;
+    const r = Math.sin(a) > 0 ? 5.6 : 4.2;
+    ctx.globalAlpha = Math.sin(a) > 0 ? 1 : 0.6;
+    ctx.beginPath();
+    for (let j = 0; j < 10; j++) {
+      const rr = j % 2 ? r * 0.45 : r;
+      const aa = -Math.PI / 2 + j * Math.PI / 5 + t * 2;
+      ctx.lineTo(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawFumeTipsy(ctx, e) {
   const t = performance.now() / 1000 + e.x * 0.01;
   const headY = e.y - (e.type === 'boss' || e.type === 'pounder' ? 118 : e.type === 'brute' ? 92 : 52);
@@ -9721,7 +9783,7 @@ function updatePlayerSelf() {
       for (let k = 0; k < 5; k++) slideMove(player, player.rollDx * step, player.rollDy * step, player.radius);
       createParticles(player.x, player.y - 30, '#a5f3fc', 2);
     } else {
-      const v = player.hasPerk('frog_legs') ? 9 * 1.35 : 9;
+      const v = player.hasPerk('frog_legs') ? 9 * FROG_LEGS.roll : 9;
       if (playerStuck) {
         player.x += player.rollDx * v;
         player.y += player.rollDy * v;
@@ -9733,6 +9795,7 @@ function updatePlayerSelf() {
     player.rollDuration--;
     createParticles(player.x, player.y, '#64748b', 1);
     if (player.rollDuration <= 0) {
+      if (!player.isDashing && player.hasPerk('frog_legs')) frogLegsLanding();
       player.isRolling = false;
       player.isDashing = false;
     }
@@ -10161,6 +10224,14 @@ function update() {
     } else if (inSafe || distToPlayer > e.aggroRadius * 1.5) {
       // Под куполом Михалыча Василия не видно: жабы теряют цель, снайперы перестают стрелять
       e.isAggroed = false;
+    }
+
+    // Оглушена приземлением «Жабьих ног»: стоит столбом, не бьёт и не стреляет
+    if (e.stunCd > 0) e.stunCd--;
+    if (e.stunT > 0) {
+      e.stunT--;
+      if (e.hitFlash > 0) e.hitFlash--;
+      continue;
     }
 
     let eSpeed = e.speed;
@@ -10833,7 +10904,8 @@ function render() {
     drawBurningFront(ctx, e);
     if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
     if (e.overheat > 0 && !glowBehind) drawOverheatGlow(ctx, e);
-    if (tipsy) drawFumeTipsy(ctx, e);
+    if (e.stunT > 0) drawStunStars(ctx, e);
+    else if (tipsy) drawFumeTipsy(ctx, e);
   }
   drawShieldShards(ctx);
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
