@@ -64,13 +64,17 @@ window.Defense = (function () {
   let stage = 'pending';         // pending — ещё не было; wave, pause, retreat — идёт; done — выжившие ушли
   let wave = 0, timer = 0, queue = [], survivors = [], shots = [], banner = null;
 
-  // --- Состояние для сохранения: незаконченная оборона после загрузки начнётся сначала ---
+  // --- Состояние для сохранения: незаконченная оборона после загрузки начнётся сначала. 'started' — волны уже
+  // шли: повтор — без лута с жаб (replay), иначе уходом или перезагрузкой их можно фармить ---
+  let replay = false;
   function saveState() {
-    return stage === 'done' ? 'done' : 'pending';
+    if (stage === 'done') return 'done';
+    return replay || (stage !== 'pending' && wave > 0) ? 'started' : 'pending';
   }
   function loadState(v, promzonaVisited) {
     // Старые сохранения, где Промзона уже пройдена, — без обороны
     stage = v === 'done' || (v === undefined && promzonaVisited) ? 'done' : 'pending';
+    replay = v === 'started';
     clearRun();
   }
   function clearRun() {
@@ -84,6 +88,7 @@ window.Defense = (function () {
 
   // Новый мир (generateWorld): незаконченная оборона сбрасывается, жабы обороны ушли вместе с миром
   function onWorld() {
+    if (stage !== 'done' && stage !== 'pending' && wave > 0) replay = true;
     if (stage !== 'done') stage = 'pending';
     clearRun();
   }
@@ -133,7 +138,7 @@ window.Defense = (function () {
       x, y, startX: x, startY: y, bounds: { x1: 4400, y1: 4400, x2: 5900, y2: 5900 },
       districtId: 'pz_breach', tier: 2, radius: stats.radius, hp, maxHp: hp, speed: stats.speed, type, color: stats.color,
       armor: type === 'brute' ? 0.6 : 0, throwCooldown: 200, aggroRadius: 3000, isAggroed: true, hitFlash: 0,
-      patrolAngle: 0, patrolTimer: 90, shootCooldown: 60 + Math.random() * 60, defense: true
+      patrolAngle: 0, patrolTimer: 90, shootCooldown: 60 + Math.random() * 60, defense: true, noLoot: replay
     });
   }
 

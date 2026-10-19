@@ -143,7 +143,8 @@ window.Net = (() => {
     workshop: mod('Workshop'),
     defense: mod('Defense'),
     settlers: mod('Settlers'),
-    quests: mod('Quests')
+    quests: mod('Quests'),
+    basement: mod('Basement')
   };
   // Эффекты: клиенту — только новые (дальше они живут у него сами, updateCosmetics)
   const FX = {
@@ -441,6 +442,8 @@ window.Net = (() => {
       if (i >= 0) sendTo(p.netId, { t: 'ui', kind: 'settler', i });
     } else if (it.type === 'container' && window.Safes && window.Safes.isSafe(it.target)) {
       window.Safes.open && sendTo(p.netId, { t: 'ui', kind: 'safe', i: containers.indexOf(it.target) });
+    } else if (it.type === 'basement_item') {
+      sendTo(p.netId, { t: 'ui', kind: 'basement', id: it.id });
     }
   }
 
@@ -464,6 +467,7 @@ window.Net = (() => {
     if (m.kind === 'shop') openShop();
     else if (m.kind === 'settler' && window.Settlers && window.Settlers.list[m.i]) window.Settlers.talk(window.Settlers.list[m.i]);
     else if (m.kind === 'safe' && window.Safes && containers[m.i]) window.Safes.open(containers[m.i]);
+    else if (m.kind === 'basement' && window.Basement) window.Basement.open(m.id);
   }
 
   // Заставки (квест взят, уровень зачищен) — всем: хост шлёт свои с кадром, клиент повторяет за ним
@@ -526,7 +530,7 @@ window.Net = (() => {
         const rec = savedRecs[p.name];
         if (rec) { applyRecord(rec); delete savedRecs[p.name]; }
       }));
-      if (currentLocation !== 'city') placePlayerAtBreach();
+      if (currentLocation !== 'city') placePlayersOnArrival(null);
       if (localPlayer.pendingCards) cardOfferTimer = 90;
       applyHotbarOrder();
       updateHUD(true);
@@ -921,7 +925,7 @@ window.Net = (() => {
     started = false;
     role = null;
     if (ws) { closeStack = new Error().stack.slice(0, 600); ws.close(); }
-    ['shop-modal', 'workshop-modal', 'canteen-modal', 'char-panel', 'dialog-panel', 'safe-panel', 'cards-modal'].forEach(id => {
+    ['shop-modal', 'workshop-modal', 'canteen-modal', 'basement-modal', 'char-panel', 'dialog-panel', 'safe-panel', 'cards-modal'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });

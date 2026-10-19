@@ -14,8 +14,10 @@
 
 // Баррикады — в обеих локациях (loadBarricades)
 const BARRICADE_MODELS = ['prop_sandbag_wall', 'prop_pallet_barricade'];
-// Столовая Лены и мастерская Толика в городе (src/settlers.js) — тоже грузятся сразу, смотрят прямо (кадр 0)
-const CITY_MODELS = ['prop_field_kitchen', 'prop_kitchen_table', 'prop_workbench', 'prop_gas_cylinders', 'prop_crate_stack'];
+// Столовая Лены и мастерская Толика в городе (src/settlers.js), обстановка логова (src/basement.js) — тоже
+// грузятся сразу, смотрят прямо (кадр 0)
+const CITY_MODELS = ['prop_field_kitchen', 'prop_kitchen_table', 'prop_workbench', 'prop_gas_cylinders', 'prop_crate_stack',
+  'basement_shelf', 'basement_still', 'basement_stove', 'basement_sofa', 'basement_radio', 'basement_gym', 'basement_junk'];
 const ALWAYS_PZ_MODELS = [...BARRICADE_MODELS, ...CITY_MODELS];
 
 class ThreePropsManager {

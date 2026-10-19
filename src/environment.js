@@ -88,6 +88,14 @@ const PZ_MODELS = {
   prop_workbench: [2.0, 1.06, 1.52],
   prop_gas_cylinders: [0.84, 0.81, 1.6],
   prop_crate_stack: [1.35, 0.6, 1.14],
+  // Логово Василия (src/basement.js): обстановка подвала (Gemini -> Rodin)
+  basement_shelf: [1.3, 0.5, 1.8],
+  basement_still: [1.4, 0.6, 1.0],
+  basement_stove: [1.4, 0.9, 1.8],
+  basement_sofa: [2.0, 1.4, 0.9],
+  basement_radio: [0.6, 0.5, 1.2],
+  basement_gym: [1.8, 1.4, 1.1],
+  basement_junk: [1.2, 0.9, 0.7],
   container_boxcar: [14, 3.2, 4.9],
   container_gondola: [14, 3.2, 3.4],
   container_tankcar: [12, 2.9, 4.0],
@@ -109,7 +117,10 @@ const PZ_COLOR = {
   // Баррикады из Rodin светлее земли и ящиков рядом
   prop_sandbag_wall: 0.6, prop_pallet_barricade: 0.68,
   prop_field_kitchen: 0.75, prop_kitchen_table: 0.62,
-  prop_workbench: 0.85, prop_gas_cylinders: 0.85, prop_crate_stack: 0.85
+  prop_workbench: 0.85, prop_gas_cylinders: 0.85, prop_crate_stack: 0.85,
+  // Подвал тёмный: обстановка темнее, чем на улице
+  basement_shelf: 0.62, basement_still: 0.62, basement_stove: 0.62, basement_sofa: 0.62, basement_radio: 0.62,
+  basement_gym: 0.62, basement_junk: 0.6
 };
 // Тайники Промзоны: тип → модель и длина на карте, px (машины города ~40 px/м, вагоны чуть ужаты)
 const PZ_CONTAINERS = {
@@ -229,6 +240,11 @@ class EnvironmentRenderer {
     this.outskirts = null;
     this.bioPuddles = [];
     this.rails = id === 'promzona' ? this.promzonaRails() : [];
+    // Подвал (src/basement.js): ни улиц, ни дворов, ни фонарей — комната рисуется картинкой
+    if (id === 'basement') {
+      this.courtyardBuilt = true;
+      return;
+    }
     // Модели Промзоны (постройки и новые жабы) грузятся при первом заходе в неё, а не на старте города
     if (id === 'promzona' && window.threeProps) window.threeProps.loadPromzona();
     if (id === 'promzona' && window.threeEnemies) window.threeEnemies.loadPromzona();
@@ -1063,6 +1079,10 @@ class EnvironmentRenderer {
   }
 
   draw(ctx, camera, screenW, screenH, worldWidth, worldHeight, roads, buildings, containers, safeZone) {
+    if (this.location === 'basement') {
+      if (window.Basement) window.Basement.drawRoom(ctx);
+      return;
+    }
     this.ensurePatterns(ctx);
     this.ensureCourtyardLayout(buildings);
 
@@ -1190,6 +1210,7 @@ class EnvironmentRenderer {
   // Экран загрузки: запечь куски экрана и кольца вокруг заранее. Возвращает false, если ещё рано
   // (текстуры не загружены); тогда земля допечётся в игре
   prebakeGround(ctx, camera, screenW, screenH, worldW, worldH, roads, buildings, safeZone) {
+    if (this.location === 'basement') return;
     this.ensurePatterns(ctx);
     this.ensureCourtyardLayout(buildings);
     if (!this.groundReady()) return false;
@@ -1854,6 +1875,7 @@ class EnvironmentRenderer {
    * actors: [{x, y, h}] — точка ног и высота спрайта.
    */
   drawOccludingProps(ctx, actors, camera, screenW, screenH, buildings) {
+    if (this.location === 'basement') return;
     const items = [];
     const behind = (baseY, r) => actors.some(a => a.y < baseY && this.actorOverlaps(r, a));
 

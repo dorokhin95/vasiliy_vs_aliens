@@ -101,7 +101,7 @@ class ThreeCharacterManager {
     this.shotgunObj = null;
     this.drillObj = null;
     this.plasmaObj = null;
-    this.laserObj = null; // лазерный бластер (карта Долбильщика) — перекрашенная копия плазмагана
+    this.laserObj = null; // лазерный бластер (карта Долбильщика) — на месте плазмагана
     // Стволы мастерской Толика (src/workshop.js; модели — tools/finalize_weapons_blender.py)
     this.launcherObj = null; // гранатомёт — в руках на месте обреза
     this.arcObj = null;      // сварочный разрядник — на месте дрели
@@ -137,23 +137,11 @@ class ThreeCharacterManager {
         this.shotgunObj = this.model.getObjectByName('Vasiliy_Shotgun');
         this.drillObj = this.model.getObjectByName('Vasiliy_Drill');
         this.plasmaObj = this.model.getObjectByName('Vasiliy_Plasma');
-        // Лазерный бластер: своей модели нет — копия плазмагана в меди с красным свечением, в тех же руках
-        if (this.plasmaObj && this.plasmaObj.parent) {
-          this.laserObj = this.plasmaObj.clone(true);
-          this.laserObj.name = 'Vasiliy_Laser';
-          this.laserObj.traverse((o) => {
-            if (!o.isMesh || !o.material) return;
-            const tint = (m) => {
-              const c = m.clone();
-              if (c.color) c.color.multiply(new THREE.Color(1.5, 0.62, 0.42));
-              if (c.emissive && c.emissive.getHex() !== 0) c.emissive.setRGB(1.0, 0.16, 0.1);
-              return c;
-            };
-            o.material = Array.isArray(o.material) ? o.material.map(tint) : tint(o.material);
-          });
-          this.laserObj.visible = false;
-          this.plasmaObj.parent.add(this.laserObj);
-        }
+        // Лазерный бластер (weapon_laser.glb, Rodin) — в тех же руках, что плазмаган, той же длины
+        loader.load('assets/models/weapon_laser.glb?v=1', (g) => {
+          this.laserObj = this.fitLike(g.scene, this.plasmaObj);
+          this.setWeapon(this.currentWeaponId || 'bat');
+        });
         // Гранатомёт и разрядник: модель стволом вперёд (+Z glTF), встаёт на место обреза / дрели в тех же
         // руках — та же длина по стволу и та же середина (подгонка — fitLike, в осях модели Василия)
         loader.load('assets/models/weapon_launcher.glb?v=2', (g) => {
@@ -208,7 +196,7 @@ class ThreeCharacterManager {
             this.setWeapon(this.currentWeaponId || 'bat');
           });
           // Наган: рукоять там же, где у ПМ, ствол длиннее — 235 мм против 161
-          loader.load('assets/models/weapon_nagant.glb?v=1', (g) => {
+          loader.load('assets/models/weapon_nagant.glb?v=3', (g) => {
             this.nagantObj = this.fitLike(g.scene, this.makarovObj, 235 / 161);
             if (this.nagantObj) this.nagantTipZ = this.nagantObj.userData.extraZ;
             this.setWeapon(this.currentWeaponId || 'bat');

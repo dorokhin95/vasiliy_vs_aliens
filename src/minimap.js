@@ -108,11 +108,14 @@ window.Minimap = (() => {
     if (currentLocation === 'city' && bossRef) list.push([BOSS_HOME.x, BOSS_HOME.y, 'boss']);
     if (currentLocation === 'promzona' && pounderRef) list.push([POUNDER_HOME.x, POUNDER_HOME.y, 'boss']);
     if (window.Settlers && window.Settlers.places) window.Settlers.places().forEach(p => list.push([p.x, p.y, p.kind]));
+    // Логово (src/basement.js): своя дверь в городе, выход из подвала, радио «ВЭФ» в Промзоне
+    if (window.Basement) window.Basement.places().forEach(p => list.push([p.x, p.y, p.kind]));
     if (currentLocation === 'promzona' && window.Defense && window.Defense.stage !== 'done' && window.Defense.stage !== 'pending')
       list.push([window.Defense.center.x, window.Defense.center.y, 'defense']);
     return list;
   }
-  const ICON = { kiosk: '🏪', breach: '🚧', boss: '💀', post: '⛺', workshop: '🔧', canteen: '🍲', defense: '🛡' };
+  const ICON = { kiosk: '🏪', breach: '🚧', boss: '💀', post: '⛺', workshop: '🔧', canteen: '🍲', defense: '🛡',
+    lair: '🏠', exit: '🚪', radio: '📻' };
 
   let tick = 0;
   function drawMap(t) {

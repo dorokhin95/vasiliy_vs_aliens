@@ -51,11 +51,20 @@ MODELS = {
     # Столовая Лены в городе (src/settlers.js): котёл на треноге над костровищем, стол-ящик с мисками
     'prop_field_kitchen':     ([1.6, 1.6, 1.7], 'black cast-iron cauldron hanging on a chain from a steel-pipe tripod over a ring of stones with unlit firewood'),
     'prop_kitchen_table':     ([1.4, 0.8, 0.9], 'wooden ammo crates used as a kitchen table with enamel bowls, a ladle and bread'),
+    # Логово Василия, подвал (src/basement.js): обстановка подвала
+    'basement_still':         ([1.4, 0.6, 1.0], 'homemade moonshine still: milk can on an electric hotplate, copper coil in a bucket, glass jar, on ammo crates'),
+    'basement_shelf':         ([1.3, 0.5, 1.8], 'wooden storage rack with glass jars of pickles and tomatoes, cans of stewed meat, a sack of potatoes'),
+    'basement_stove':         ([1.1, 0.6, 1.4], 'homemade potbelly stove from a steel barrel on legs with a chimney pipe, a kettle on top, firewood'),
+    'basement_sofa':          ([2.0, 1.4, 0.9], 'old worn Soviet fold-out sofa with patterned upholstery, a checkered blanket, a pillow and a small rug'),
+    'basement_gym':           ([1.8, 1.4, 1.1], 'homemade gym corner on a rubber mat: two cast-iron kettlebells and a pipe barbell with flywheel weights on a rack'),
+    'basement_radio':         ([0.55, 0.45, 1.1], 'portable shortwave radio in a leather case with a telescopic antenna on a wooden stool with wires and a soldering iron'),
+    'basement_junk':          ([1.2, 0.9, 0.7], 'low pile of dusty basement junk: broken chair, cardboard boxes, bicycle wheel, jars and a bucket'),
     # Оружие мастерской Толика в руках Василия (tools/finalize_weapons_blender.py): концепт сбоку, ствол вправо
     'weapon_launcher':        ([0.95, 0.12, 0.3], 'homemade single-shot grenade launcher: steel pipe barrel, spring, wooden rifle stock'),
     'weapon_arc':             ([0.8, 0.14, 0.3], 'homemade welding arc discharger gun with copper coil, cables and electrode tip'),
     'weapon_emp':             ([0.1, 0.1, 0.16], 'homemade EMP grenade: soldered metal canister with circuit boards and a glowing blue core'),
     'weapon_nagant':          ([0.235, 0.035, 0.14], 'Soviet Nagant M1895 revolver: seven-round cylinder, long thin barrel, walnut grip'),
+    'weapon_laser':           ([1.0, 0.12, 0.35], 'laser blaster rifle: boxy steel housing with green screen, copper coil barrel, red lens emitter, wire stock'),
     # Жаба-снайпер: новая модель по старому концепту (assets/enemies/toad_sniper_perfect.png на белом), чтобы
     # винтовку можно было вскинуть — скелет, прицел и дуло собирает tools/build_promzona_toads_blender.py
     'toad_sniper':        ([1.3, 0.6, 1.85], 'full body game character, lean alien toad sniper in a ragged ghillie camouflage cloak and hood with a green night-vision monocle, holding a long sniper rifle diagonally across the body, rifle muzzle clearly away from the body'),

@@ -11,7 +11,8 @@
   weapons_ws — стволы мастерской Толика (гранатомёт, разрядник, ЭМИ-граната) из их концептов для Rodin,
              electronics — продвинутая электроника (лут сейфов);
   dishes — блюда столовой Лены и проба шлама (квест «Проба шлама»).
-  nagant — наган Зины, пропуск Коли и патроны к нагану (квест «Коля»); pipe — теплотрасса (квест «Труба»).
+  nagant — наган Зины, пропуск Коли и патроны к нагану (квест «Коля»); pipe — теплотрасса (квест «Труба»);
+  laser — лазерный бластер.
 
 Концепты — из того же чата Gemini, что и лут, тем же промтом: предметы в ряд на белом фоне.
 Лут висит над землёй как остальной 2D-лут
@@ -59,6 +60,8 @@ SETS = {
     'nagant': [('blender_assets/promzona_concepts/weapon_nagant.png', ['weapon_nagant'], 'assets/sprites/weapons', 160),
                (PERKS + 'nagant_items_concept.png', ['quest_kolya_pass', None], 'assets/sprites/quest'),
                (PERKS + 'nagant_items_concept.png', [None, 'ammo_762n'], 'assets/sprites/loot')],
+    # Лазерный бластер (карта Долбильщика) — из концепта модели, наискось, как длинные стволы мастерской
+    'laser': [('blender_assets/promzona_concepts/weapon_laser.png', ['weapon_laser'], 'assets/sprites/weapons', 160, 22)],
     # Квест Степаныча «Труба»: кусок теплотрассы — значок в журнале
     'pipe': (PERKS + 'foundry_pipe_concept.png', ['quest_foundry_pipe'], 'assets/sprites/quest'),
 }

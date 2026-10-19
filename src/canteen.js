@@ -65,6 +65,11 @@ window.Canteen = (function () {
       const t = Math.floor(Number(b[k]) || 0);
       if (t > 0) player.buffs[k] = Math.min(t, DUR[k]);
     });
+    // Отдых в логове: «Выспался», «Согрелся» (src/basement.js) — тоже здесь, счёт тот же
+    if (window.Basement) Object.keys(window.Basement.BUFF_NAMES).forEach(k => {
+      const t = Math.floor(Number(b[k]) || 0);
+      if (t > 0) player.buffs[k] = Math.min(t, window.Basement.BUFF_MAX);
+    });
     if (active('drops')) player.critChance += DROPS_CRIT;
     if (active('borscht')) player.maxHp += BORSCHT_HP;
   }
@@ -130,7 +135,8 @@ window.Canteen = (function () {
         player.hp = Math.min(player.hp, player.maxHp);
       }
       const d = byId[k];
-      if (d) addFloatingText(player.x, player.y - 46, L(`${T(d.short)} — всё`, `${T(d.short)} wore off`), '#94a3b8');
+      const nm = d ? T(d.short) : window.Basement && window.Basement.BUFF_NAMES[k] ? T(window.Basement.BUFF_NAMES[k]) : '';
+      if (nm) addFloatingText(player.x, player.y - 46, L(`${nm} — всё`, `${nm} wore off`), '#94a3b8');
       updateHUD(true);
     }
     // Похлёбка: выносливость не тратится — держится полной

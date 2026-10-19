@@ -61,6 +61,14 @@ MODELS = {
     # Столовая Лены в городе (src/settlers.js)
     'prop_field_kitchen':     (1.6, 3500),
     'prop_kitchen_table':     (1.4, 3000),
+    # Логово Василия, подвал (src/basement.js): длина — по ширине (X), не по высоте
+    'basement_still':         (1.4, 3500),
+    'basement_shelf':         (1.3, 3500),
+    'basement_stove':         (1.4, 3000),
+    'basement_sofa':          (2.0, 3000),
+    'basement_gym':           (1.8, 3000),
+    'basement_radio':         (0.6, 2500),
+    'basement_junk':          (1.2, 3000),
 }
 # Дома города (Rodin Regular: ~36 тыс. треугольников, текстуры 2048): на экране они до ~850 px, а рендерятся
 # один раз в кэш кадров — поэтому без Decimate (он ещё и рвёт карту нормалей: тёмные царапины) и с текстурой 1024.

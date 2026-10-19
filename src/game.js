@@ -943,6 +943,9 @@ const LANGS = {
     location_city: "НОВОХМУРИНСК",
     location_promzona: "ПРОМЗОНА",
     location_sub: "Пролом в заборе — дорога обратно",
+    location_basement: "ЛОГОВО ВАСИЛИЯ",
+    location_basement_sub: "Подвал: обустрой, запасись, отдохни. Наверх — по лестнице",
+    basement_hud: "🏠 Логово — здесь безопасно",
     boss_defeated: "🏆 ЗОЛОТОЙ МЯСНИК ПОВЕРЖЕН!",
     boss_adds: "🥚 Капсулы лопаются — подмога!",
     toads_left: "Жаб осталось",
@@ -1027,6 +1030,9 @@ const LANGS = {
     location_city: "NOVOKHMURINSK",
     location_promzona: "INDUSTRIAL ZONE",
     location_sub: "The fence breach is the way back",
+    location_basement: "VASILIY'S LAIR",
+    location_basement_sub: "The basement: furnish it, stock up, rest. Upstairs — by the stairs",
+    basement_hud: "🏠 Lair — safe here",
     boss_defeated: "🏆 THE GOLDEN BUTCHER IS DOWN!",
     boss_adds: "🥚 The pods burst — reinforcements!",
     toads_left: "Toads left",
@@ -1472,7 +1478,7 @@ const PROMZONA_DISTRICTS = {
     name_ru: '🟠 Ж/Д СОРТИРОВКА', name_en: '🟠 RAIL YARD',
     meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет, Тушёнка, Цветмет',
     meta_en: 'Threat: ★★☆☆ | Loot: Scrap, Stew, Non-ferrous',
-    pzLoot: [['nonferrous', 0.1]],
+    pzLoot: [['nonferrous', 0.2]],
     color: '#f97316', bottleMult: 1.4, scrapMult: 1.5
   },
   pz_depot: {
@@ -1480,7 +1486,7 @@ const PROMZONA_DISTRICTS = {
     name_ru: '🟠 АВТОБАЗА', name_en: '🟠 TRUCK DEPOT',
     meta_ru: 'Угроза: ★★☆☆ | Ресурс: Чермет ×1.5, Цветмет',
     meta_en: 'Threat: ★★☆☆ | Loot: Scrap ×1.5, Non-ferrous',
-    pzLoot: [['nonferrous', 0.12]],
+    pzLoot: [['nonferrous', 0.22]],
     color: '#f97316', bottleMult: 1.4, scrapMult: 1.6
   },
   pz_foundry: {
@@ -1488,7 +1494,7 @@ const PROMZONA_DISTRICTS = {
     name_ru: '🔴 ЛИТЕЙНЫЙ ЦЕХ', name_en: '🔴 FOUNDRY',
     meta_ru: 'Угроза: ★★★☆ | Ресурс: Чермет, Детали, Цветмет',
     meta_en: 'Threat: ★★★☆ | Loot: Scrap, Parts, Non-ferrous',
-    pzLoot: [['nonferrous', 0.2]],
+    pzLoot: [['nonferrous', 0.35]],
     color: '#ef4444', bottleMult: 2.0, scrapMult: 1.4
   },
   pz_workshops: {
@@ -1496,7 +1502,7 @@ const PROMZONA_DISTRICTS = {
     name_ru: '🔴 МЕХАНИЧЕСКИЕ ЦЕХА', name_en: '🔴 MACHINE SHOPS',
     meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Цветмет',
     meta_en: 'Threat: ★★★☆ | Loot: Parts, Non-ferrous',
-    pzLoot: [['nonferrous', 0.2]],
+    pzLoot: [['nonferrous', 0.35]],
     color: '#ef4444', bottleMult: 2.0, scrapMult: 1.3
   },
   pz_warehouses: {
@@ -1504,7 +1510,7 @@ const PROMZONA_DISTRICTS = {
     name_ru: '🔴 СКЛАДЫ ПРОДУКЦИИ', name_en: '🔴 WAREHOUSES',
     meta_ru: 'Угроза: ★★★☆ | Ресурс: Детали, Патроны, Цветмет',
     meta_en: 'Threat: ★★★☆ | Loot: Parts, Ammo, Non-ferrous',
-    pzLoot: [['nonferrous', 0.1], ['tech_spirit', 0.06]],
+    pzLoot: [['nonferrous', 0.18], ['tech_spirit', 0.06]],
     color: '#ef4444', bottleMult: 2.0, scrapMult: 1.2
   },
   pz_tankfarm: {
@@ -1551,6 +1557,7 @@ function getPromzonaDistrictAt(x, y) {
 
 function getDistrictAt(x, y) {
   if (currentLocation === 'promzona') return getPromzonaDistrictAt(x, y);
+  if (currentLocation === 'basement' && window.Basement) return window.Basement.DISTRICT; // логово (src/basement.js)
   if (Math.hypot(x - safeZone.x, y - safeZone.y) < 420) {
     return DISTRICTS.hub;
   }
@@ -1615,8 +1622,8 @@ function generateWorld() {
   cameraKickX = 0;
   cameraKickY = 0;
 
-  // Дороги — MAP.ROADS: проспект через центр и две кольцевые, по каждой оси
-  MAP.ROADS.forEach(r => {
+  // Дороги — MAP.ROADS: проспект через центр и две кольцевые, по каждой оси (в подвале их нет)
+  if (currentLocation !== 'basement') MAP.ROADS.forEach(r => {
     roads.push({ x: 0, y: r.pos, w: WORLD_WIDTH, h: r.size });
     roads.push({ x: r.pos, y: 0, w: r.size, h: WORLD_HEIGHT });
   });
@@ -1895,7 +1902,7 @@ function generateWorld() {
   // Бетонный забор ПО-2 по периметру карты: не выпускает ни Василия, ни жаб, пули в него упираются.
   // Рисует его EnvironmentRenderer.drawBorderFence; здесь — только коллизия (с запасом наружу)
   const out = 400;
-  [
+  if (currentLocation !== 'basement') [
     { x: -out, y: -out, w: WORLD_WIDTH + out * 2, h: out + 40 },
     { x: -out, y: WORLD_HEIGHT - 40, w: WORLD_WIDTH + out * 2, h: out + 40 },
     { x: -out, y: -out, w: out + 32, h: WORLD_HEIGHT + out * 2 },
@@ -1903,15 +1910,18 @@ function generateWorld() {
   ].forEach((r, i) => buildings.push(Object.assign({ type: 'border_fence', side: ['top', 'bottom', 'left', 'right'][i] }, r)));
   // Пролом: в городе — пролёт верхнего забора над логовом Мясника, цел, пока Василий его не проломит;
   // в Промзоне — тот же пролёт с её стороны, в нижнем заборе, открыт сразу (через него Василий и пришёл)
-  fenceBreach.side = currentLocation === 'city' ? 'top' : 'bottom';
-  fenceBreach.state = currentLocation === 'city' ? 'intact' : 'open';
+  // Подвал (src/basement.js): пролома нет — 'intact', как у ещё целого забора в городе
+  fenceBreach.side = currentLocation === 'promzona' ? 'bottom' : 'top';
+  fenceBreach.state = currentLocation === 'promzona' ? 'open' : 'intact';
   fenceBreach.cracks = 0;
   if (fenceBreach.state === 'open') openBreachCollision();
   lairCracks = [];
   shockwaves = [];
+  if (window.Basement) window.Basement.onWorld(); // стены комнаты подвала
 
   buildObstacles();
-  generateBioPuddles();
+  if (currentLocation === 'basement') bioPuddles = [];
+  else generateBioPuddles();
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   if (currentLocation === 'city') spawnBoss();
   else if (currentLocation === 'promzona') spawnPounder();
@@ -2844,6 +2854,7 @@ function startGame(save = null, loc = null) {
 
   // Локация, где Василий был при сохранении (новый забег — город)
   currentLocation = loc || (save && window.Menu ? window.Menu.locationOf(save) : 'city');
+  if (window.Basement) window.Basement.loadState(save ? save.basement : undefined);
   locationWorlds = {};
   autoScale.hold(6000);
   locationsVisited = new Set(['city', currentLocation]);
@@ -2858,8 +2869,8 @@ function startGame(save = null, loc = null) {
   if (window.Quests) window.Quests.loadState(save ? save.quests : undefined);
   // Мастерская Толика: новый забег — с чистого листа (сохранённую загружает Menu.applyRun до патронов)
   if (window.Workshop && !save) window.Workshop.loadState(undefined);
-  // В Промзоне купола Михалыча нет — после загрузки Василий у пролома
-  if (currentLocation !== 'city') placePlayerAtBreach();
+  // В Промзоне купола Михалыча нет — после загрузки Василий у пролома; в подвале — у лестницы
+  if (currentLocation !== 'city') placePlayersOnArrival(null);
   if (player.pendingCards) cardOfferTimer = 90; // карты за Мясника ещё не выбраны
   if (window.threeCharacter) window.threeCharacter.setWeapon(player.currentWeapon || 'none');
   applyHotbarOrder();
@@ -2985,6 +2996,7 @@ function handleInteract() {
     if (it.type === 'container' && !(window.Safes && window.Safes.isSafe(it.target))) scavengeContainer(it.target);
     else if (it.type === 'breach' && levelCleared) breakFence();
     else if (it.type === 'sample') window.Quests.takeSample();
+    else if (it.type === 'basement_door' || it.type === 'basement_exit') window.Basement.interact(it);
     else if (window.Net) window.Net.remoteInteract(player, it);
     return;
   }
@@ -2994,6 +3006,7 @@ function handleInteract() {
   }
   else if (nearbyInteractable.type === 'settler') window.Settlers.talk(nearbyInteractable.target);
   else if (nearbyInteractable.type === 'sample') window.Quests.takeSample();
+  else if (/^basement_/.test(nearbyInteractable.type)) window.Basement.interact(nearbyInteractable);
   else if (nearbyInteractable.type === 'container') {
     const c = nearbyInteractable.target;
     if (window.Safes && window.Safes.isSafe(c)) window.Safes.open(c);
@@ -3065,12 +3078,12 @@ function canReachContainer(c) {
 // Добыча из тайников Промзоны: [стеклотара от, до], [чермет от, до], бонусы с шансами.
 // Цветмет — из полувагонов с ломом, крытых вагонов и грузовиков (проводка, обмотки), техспирт — из цистерн и бочек
 const PZ_STASH_LOOT = {
-  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25], ['ammo_762n', 0.3], ['nonferrous', 0.3]] },
-  gondola: { bottles: [0, 1], scrap: [5, 8], bonus: [['mil_parts', 0.2], ['nonferrous', 0.55]] },
+  boxcar: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.6], ['ammo_9x18', 0.35], ['ammo_12g', 0.25], ['ammo_762n', 0.3], ['nonferrous', 0.5]] },
+  gondola: { bottles: [0, 1], scrap: [5, 8], bonus: [['mil_parts', 0.2], ['nonferrous', 0.9]] },
   tankcar: { bottles: [2, 3], scrap: [2, 3], bonus: [['vodka', 0.55], ['tech_spirit', 0.6]] },
-  kamaz: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.45], ['ammo_12g', 0.4], ['mil_parts', 0.2], ['nonferrous', 0.3]] },
-  zil: { bottles: [1, 2], scrap: [2, 4], bonus: [['bandage', 0.5], ['stew', 0.35], ['nonferrous', 0.2], ['tech_spirit', 0.15]] },
-  barrel: { bottles: [0, 1], scrap: [1, 2], bonus: [['vodka', 0.15], ['tech_spirit', 0.25]] }
+  kamaz: { bottles: [1, 2], scrap: [3, 5], bonus: [['stew', 0.45], ['ammo_12g', 0.4], ['mil_parts', 0.2], ['nonferrous', 0.5]] },
+  zil: { bottles: [1, 2], scrap: [2, 4], bonus: [['bandage', 0.5], ['stew', 0.35], ['nonferrous', 0.35], ['tech_spirit', 0.15]] },
+  barrel: { bottles: [0, 1], scrap: [1, 2], bonus: [['vodka', 0.15], ['tech_spirit', 0.35]] }
 };
 const rollRange = ([a, b]) => a + Math.floor(Math.random() * (b - a + 1));
 
@@ -3161,7 +3174,7 @@ function scavengeContainer(c) {
       c.x + Math.cos(spreadAngle) * dropDist,
       c.y + Math.sin(spreadAngle) * dropDist,
       itemType,
-      itemType === 'ammo_9x18' ? 8 : itemType === 'ammo_12g' ? 4 : itemType === 'ammo_762n' ? 7 : 1
+      itemType === 'ammo_9x18' ? 8 : itemType === 'ammo_12g' ? 4 : itemType === 'ammo_762n' ? 7 : itemType === 'nonferrous' ? 2 : 1
     );
   });
 
@@ -3279,7 +3292,7 @@ const SHOP_ARSENAL_ITEMS = [
     weaponKey: 'laser',
     cardOnly: true,
     slotKey: '[9]',
-    img: 'assets/sprites/weapons/weapon_laser.png?v=1',
+    img: 'assets/sprites/weapons/weapon_laser.png?v=2',
     name_ru: 'Лазерный бластер',
     name_en: 'Laser Blaster',
     desc_ru: 'Луч: высокая скорострельность, средний урон. 30 с огня, потом 5 с перезарядки накопителя (или R).',
@@ -4005,7 +4018,8 @@ function upg(id) {
 const UPG_DMG = { bat: 'bat_nails', makarov: 'pm_bore', drill: 'drill_bit', plasma: 'pl_overdrive' };
 const UPG_PEN = { makarov: ['pm_bore', 0.4], drill: ['drill_bit', 0.85] };
 function weaponDmg(key) {
-  return WEAPONS[key].dmg(player.baseDamage) * (UPG_DMG[key] && upg(UPG_DMG[key]) ? 1.2 : 1);
+  return WEAPONS[key].dmg(player.baseDamage) * (UPG_DMG[key] && upg(UPG_DMG[key]) ? 1.2 : 1) *
+    (window.Basement ? window.Basement.restDamage() : 1);
 }
 function weaponPen(weapon) {
   if (UPG_PEN[weapon] && upg(UPG_PEN[weapon][0])) return UPG_PEN[weapon][1];
@@ -6368,23 +6382,32 @@ function placePlayerAtBreach() {
   });
 }
 
+// Где встать, придя в локацию: в подвал — у лестницы, из подвала в город — у его двери, иначе — у пролома
+function placePlayersOnArrival(from) {
+  if (currentLocation === 'basement' && window.Basement) window.Basement.placeInside();
+  else if (currentLocation === 'city' && from === 'basement' && window.Basement) window.Basement.placeAtDoor();
+  else placePlayerAtBreach();
+}
+
 // Переход в другую локацию: мир текущей запоминается тем же снимком, что пишет сохранение,
 // другая строится заново и, если Василий там уже был, восстанавливается
 function travelTo(target) {
   if (window.Net) window.Net.onTravel(target);
   autoScale.hold(6000);
   if (window.Menu) locationWorlds[currentLocation] = window.Menu.snapshotWorld();
+  const from = currentLocation;
   currentLocation = target;
   locationsVisited.add(target);
   generateWorld();
   const saved = locationWorlds[target];
   delete locationWorlds[target];
   if (saved && window.Menu) window.Menu.applyWorld(saved);
-  placePlayerAtBreach();
+  placePlayersOnArrival(from);
   lastPlayerDistrictId = '';
   // Модели новой локации и её кадры — на экране загрузки, а не в игре; оборона — уже после неё
   Loading.start(() => {
-    showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
+    if (target === 'basement') showToast(t('location_basement'), t('location_basement_sub'));
+    else if (from !== 'basement') showToast(t(target === 'city' ? 'location_city' : 'location_promzona'), t('location_sub'));
     // Первый раз в Промзоне — оборона у пролома (src/defense.js)
     if (window.Defense) window.Defense.onEnter();
     if (window.Menu) window.Menu.requestSave();
@@ -7185,6 +7208,7 @@ function buildObstacles() {
   if (window.Defense) window.Defense.addObstacles();
   // Пост, мастерская и столовая спасённых в городе (src/settlers.js)
   if (window.Settlers) window.Settlers.addObstacles();
+  if (window.Basement) window.Basement.addObstacles();
 
   const env = window.environmentRenderer;
   if (!env) return;
@@ -7255,12 +7279,13 @@ function updateHUD(forceWeaponRefresh = false) {
   const bossStatus = currentLocation === 'promzona'
     ? (bossAlive ? t('pounder_alive') : t('pounder_dead'))
     : (bossAlive ? t('boss_alive') : t('boss_dead'));
-  const clearKey = levelCleared ? 'cleared' + currentLang : `${toadsLeft}/${levelEnemyTotal}/${bossAlive ? 1 : 0}/${currentLocation}/${currentLang}`;
+  const clearKey = currentLocation === 'basement' ? 'basement' + currentLang
+    : levelCleared ? 'cleared' + currentLang : `${toadsLeft}/${levelEnemyTotal}/${bossAlive ? 1 : 0}/${currentLocation}/${currentLang}`;
   if (_hudCache.clearKey !== clearKey) {
     _hudCache.clearKey = clearKey;
     const el = document.getElementById('clear-counter');
     el.classList.toggle('done', levelCleared);
-    el.textContent = levelCleared ? t('cleared_hud')
+    el.textContent = currentLocation === 'basement' ? t('basement_hud') : levelCleared ? t('cleared_hud')
       : `🐸 ${t('toads_left')}: ${toadsLeft} / ${levelEnemyTotal}  ·  ${bossStatus}`;
   }
   const cdPct = Math.ceil(player.itemCooldown / CONSUMABLE_COOLDOWN * 20) * 5;
@@ -7514,6 +7539,7 @@ function dropTrophies(x, y, eType, districtId) {
 
 function spawnLootDrop(enemyOrX, yOpt) {
   const isEnemyObj = (typeof enemyOrX === 'object' && enemyOrX !== null);
+  if (isEnemyObj && enemyOrX.noLoot) return; // повтор обороны у пролома (src/defense.js)
   const x = isEnemyObj ? enemyOrX.x : enemyOrX;
   const y = isEnemyObj ? enemyOrX.y : yOpt;
   const eType = isEnemyObj ? (enemyOrX.type || 'grunt') : 'grunt';
@@ -9601,7 +9627,7 @@ function updatePlayerSelf() {
 
   // Восстановление выносливости (медленнее, чтобы в бою на битах нужно было следить за дыханием и пить тушёнку!)
   if (!player.isRolling && player.stamina < player.maxStamina) {
-    const regenRate = player.hasPerk('slime_skin') ? 0.34 : 0.25;
+    const regenRate = (player.hasPerk('slime_skin') ? 0.34 : 0.25) * (window.Basement ? window.Basement.restStamina() : 1);
     player.stamina = Math.min(player.maxStamina, player.stamina + regenRate);
   }
 
@@ -9749,7 +9775,7 @@ function updatePlayerSelf() {
   }
   player.facingLeft = (angleDeg > 90 && angleDeg < 270);
 
-  const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
+  const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius || currentLocation === 'basement';
   player.inSafe = inSafe;
   if (shootCooldown > 0) shootCooldown--;
   if (mouseDown && !player.isRolling && !inSafe && !(player.stunTimer > 0)) {
@@ -9757,6 +9783,7 @@ function updatePlayerSelf() {
   }
 
   nearbyInteractable = null;
+  let basementNear = null;
   const distToShop = Math.hypot(player.x - safeZone.shopX, player.y - safeZone.shopY);
   const fallen = players.length > 1 && players.find(o => o.downT > 0 && Math.hypot(o.x - player.x, o.y - player.y) < REVIVE_RADIUS);
   if (fallen) {
@@ -9769,6 +9796,8 @@ function updatePlayerSelf() {
     nearbyInteractable = { type: 'settler', target: window.Settlers.nearest() };
   } else if (window.Quests && window.Quests.nearSample()) {
     nearbyInteractable = { type: 'sample' }; // квест Лены «Проба шлама» (src/quests.js)
+  } else if (window.Basement && (basementNear = window.Basement.nearest())) {
+    nearbyInteractable = basementNear; // дверь подвала, лестница, обстановка логова (src/basement.js)
   } else {
     for (let i = 0; i < containers.length; i++) {
       const c = containers[i];
@@ -9799,6 +9828,7 @@ function updatePlayerSelf() {
   // Баффы столовой и ЭМИ на самом Василии — у каждого свои (src/canteen.js, src/workshop.js)
   if (window.Canteen) window.Canteen.update();
   if (window.Workshop && window.Workshop.updatePlayer) window.Workshop.updatePlayer();
+  if (window.Basement) window.Basement.updatePlayer(); // ковёр и спортуголок логова
 }
 
 // Подсказка «E — …» над тем, что рядом со своим Василием (DOM — только у себя)
@@ -9808,9 +9838,10 @@ function updateInteractPrompt() {
     window.Safes.isSafe(nearbyInteractable.target) ? nearbyInteractable.target : null;
   const safePrompt = safeTarget ? window.Safes.prompt(safeTarget) : '';
   const settlerPrompt = nearbyInteractable && nearbyInteractable.type === 'settler' ? window.Settlers.prompt(nearbyInteractable.target) : '';
+  const basementPrompt = nearbyInteractable && /^basement_/.test(nearbyInteractable.type) ? window.Basement.prompt(nearbyInteractable) : '';
   const revivePrompt = nearbyInteractable && nearbyInteractable.type === 'revive'
     ? (currentLang === 'ru' ? `Держи E — поднять: ${nearbyInteractable.target.name}` : `Hold E — revive ${nearbyInteractable.target.name}`) : '';
-  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}_${settlerPrompt}_${revivePrompt}` : '';
+  const nextPromptKey = nearbyInteractable ? `${nearbyInteractable.type}_${currentLang}_${levelCleared}_${toadsLeft}_${safePrompt}_${settlerPrompt}_${revivePrompt}_${basementPrompt}` : '';
   if (_lastPromptKey !== nextPromptKey) {
     _lastPromptKey = nextPromptKey;
     const promptEl = document.getElementById('interact-prompt');
@@ -9821,7 +9852,7 @@ function updateInteractPrompt() {
         : type === 'shop' ? t('prompt_shop')
         : type === 'breach' ? (levelCleared ? t('prompt_breach') : t('prompt_breach_wait') + toadsLeft)
         : type === 'sample' ? window.Quests.samplePrompt()
-        : settlerPrompt || safePrompt || t('prompt_search');
+        : settlerPrompt || safePrompt || basementPrompt || t('prompt_search');
     } else {
       promptEl.style.display = 'none';
     }
@@ -9830,7 +9861,7 @@ function updateInteractPrompt() {
 
 
 // Состояния, в которых мир сетевого коопа живёт дальше: у игрока открыто меню, а остальные играют
-const NET_LIVE_STATES = new Set(['PLAYING', 'PAUSED', 'INVENTORY', 'SHOP', 'WORKSHOP', 'CANTEEN', 'DIALOG', 'CARDS']);
+const NET_LIVE_STATES = new Set(['PLAYING', 'PAUSED', 'INVENTORY', 'SHOP', 'WORKSHOP', 'CANTEEN', 'BASEMENT', 'DIALOG', 'CARDS']);
 function worldLive() {
   return gameState === 'PLAYING' || (!!window.Net && window.Net.started && NET_LIVE_STATES.has(gameState));
 }
@@ -10052,6 +10083,7 @@ function update() {
   updateFireGoo();
   if (window.Safes) window.Safes.update();
   if (window.Workshop) window.Workshop.update();
+  if (window.Basement) window.Basement.update(); // самогонка и закатки копят запас
   if (window.Defense) window.Defense.update();
   if (window.Settlers) window.Settlers.update();
   if (window.Quests) window.Quests.update();
@@ -10720,6 +10752,7 @@ function render() {
   drawPounderLair(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawLairCracks(ctx);
   drawBreachGround(ctx);
+  if (window.Basement) window.Basement.drawDoors(ctx); // двери подвалов на фасадах
   drawThrowTargets(ctx); // куда упадёт брошенное громилой
   if (window.Defense) window.Defense.drawGround(ctx); // баррикада у пролома — низкая, под фигурами
   if (window.Settlers) window.Settlers.drawGround(ctx); // мешки поста у пролома в городе
@@ -10739,6 +10772,7 @@ function render() {
   // 6.9. Выжившие обороны у пролома (src/defense.js); спасённые в городе — те, что за Василием (src/settlers.js)
   if (window.Defense) window.Defense.drawActors(ctx);
   if (window.Settlers) window.Settlers.drawActors(ctx, false);
+  if (window.Basement) window.Basement.drawActors(ctx, false); // обстановка логова за Василием
 
   // 7. Враги через ThreeEnemyManager (3D WebGL) + Лазерный прицел снайперов перед выстрелом
   for (let i = 0; i < enemies.length; i++) {
@@ -10942,6 +10976,7 @@ function render() {
   usePlayer(localPlayer);
   drawOnePlayer(ctx);
   if (window.Settlers) window.Settlers.drawActors(ctx, true); // спасённые и их места перед Василием
+  if (window.Basement) window.Basement.drawActors(ctx, true);
   drawDazeStars(ctx);
   if (pounderRef) drawPounderArena(ctx, pounderRef, true); // ближняя половина барьера — перед фигурами
 
@@ -10953,6 +10988,8 @@ function render() {
     // 9.3. Плафоны фонарей, ореолы и конусы света — поверх персонажей
     window.environmentRenderer.drawLampGlows(ctx, camera, viewW, viewH);
   }
+  // 9.4. Подвал: темнота к углам, лампочка, отсвет буржуйки
+  if (window.Basement) window.Basement.drawLight(ctx);
 
   // 9.5. Направленные дульные вспышки поверх среза ствола
   drawMuzzleFlashes(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);

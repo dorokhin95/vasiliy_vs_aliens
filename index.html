@@ -906,6 +906,13 @@
     /* Столовая Лены: та же лавка, рамка — зелень */
     .canteen-modal .shop-content { border-color: #15803d; box-shadow: 0 0 40px rgba(34, 197, 94, 0.25); }
     .canteen-modal .shop-title { color: #86efac; }
+    /* Логово Василия (src/basement.js): та же лавка, рамка — тёплая, как свет лампочки */
+    .basement-modal .shop-content { border-color: #b45309; box-shadow: 0 0 40px rgba(245, 158, 11, 0.25); }
+    .basement-modal .shop-title { color: #fcd34d; }
+    .basement-modal .shop-card-left canvas { flex: 0 0 64px; width: 64px; height: 64px; }
+    .bm-btns { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+    .shop-buy-btn.bm-act { background: #3f2d12; border-color: #b45309; color: #fde68a; }
+    .shop-card.bm-focus { border-color: #fbbf24; box-shadow: 0 0 0 1px #fbbf24 inset; }
     .shop-content {
       background: #151922;
       border: 2px solid #3b82f6;
@@ -1700,7 +1707,7 @@
       <div class="hotbar-slot" id="slot-w-laser" data-slot="laser" style="display:none;" title="Лазерный бластер: 30 с огня, 5 с перезарядки накопителя (R)">
         <span class="slot-key">[9]</span>
         <span class="slot-ammo" id="ammo-w-laser">100%</span>
-        <img class="slot-img" src="assets/sprites/weapons/weapon_laser.png?v=1" alt="Лазер">
+        <img class="slot-img" src="assets/sprites/weapons/weapon_laser.png?v=2" alt="Лазер">
         <div class="slot-bar-wrap" id="wrap-w-laser" style="display:block;"><div class="slot-bar-fill laser-fill" id="bar-w-laser" style="width:100%;"></div></div>
         <span class="slot-name" id="lbl-w-laser">Лазер</span>
       </div>
@@ -1790,6 +1797,21 @@
         <div class="ws-section" id="ws-h-craft">Новое оружие и боеприпасы</div>
         <div class="arsenal-grid" id="ws-craft"></div>
         <button class="shop-close-btn" id="ws-close">ЗАКРЫТЬ [ESC]</button>
+      </div>
+    </div>
+
+    <!-- Логово Василия (src/basement.js): обстановка подвала, запасы, отдых -->
+    <div id="basement-modal" class="shop-modal basement-modal">
+      <div class="shop-content">
+        <div class="shop-header">
+          <div>
+            <div class="shop-title" id="bm-title">ЛОГОВО ВАСИЛИЯ</div>
+            <div class="shop-sub" id="bm-sub"></div>
+          </div>
+          <div class="shop-wallet" id="bm-wallet"></div>
+        </div>
+        <div class="arsenal-grid" id="bm-list"></div>
+        <button class="shop-close-btn" id="bm-close">ЗАКРЫТЬ [ESC]</button>
       </div>
     </div>
 
@@ -1996,29 +2018,30 @@
   <script src="libs/three.min.js"></script>
   <script src="libs/GLTFLoader.js"></script>
   <script src="src/shadows.js?v=1135"></script>
-  <script src="src/environment.js?v=1188"></script>
-  <script src="src/three_character.js?v=1186"></script>
+  <script src="src/environment.js?v=1197"></script>
+  <script src="src/three_character.js?v=1196"></script>
   <script src="src/three_enemies.js?v=1182"></script>
-  <script src="src/three_props.js?v=1186"></script>
+  <script src="src/three_props.js?v=1197"></script>
   <script src="src/three_boss.js?v=1138"></script>
   <script src="src/three_survivors.js?v=1153"></script>
   <script src="src/perks_pz.js?v=1187"></script>
-  <script src="src/game.js?v=1194"></script>
+  <script src="src/game.js?v=1198"></script>
   <script src="src/coop.js?v=2"></script>
   <script src="src/sounds.js?v=1193"></script>
-  <script src="src/menu.js?v=1192"></script>
+  <script src="src/menu.js?v=1197"></script>
   <script src="src/comic.js?v=1190"></script>
   <script src="src/cards.js?v=1184"></script>
-  <script src="src/inventory.js?v=1188"></script>
-  <script src="src/workshop.js?v=1188"></script>
-  <script src="src/canteen.js?v=1188"></script>
-  <script src="src/safes.js?v=1188"></script>
-  <script src="src/defense.js?v=1193"></script>
+  <script src="src/inventory.js?v=1197"></script>
+  <script src="src/workshop.js?v=1198"></script>
+  <script src="src/canteen.js?v=1197"></script>
+  <script src="src/basement.js?v=1198"></script>
+  <script src="src/safes.js?v=1198"></script>
+  <script src="src/defense.js?v=1198"></script>
   <script src="src/settlers.js?v=1193"></script>
   <script src="src/dialog.js?v=1190"></script>
-  <script src="src/quests.js?v=1188"></script>
+  <script src="src/quests.js?v=1198"></script>
   <script src="src/practice.js?v=1141"></script>
-  <script src="src/net.js?v=10"></script>
-  <script src="src/minimap.js?v=7"></script>
+  <script src="src/net.js?v=11"></script>
+  <script src="src/minimap.js?v=8"></script>
 </body>
 </html>

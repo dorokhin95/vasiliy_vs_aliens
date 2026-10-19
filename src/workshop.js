@@ -19,25 +19,25 @@ window.Workshop = (function () {
 
   const UPGRADES = [
     { id: 'bat_nails', weapon: 'bat', name: ['Гвозди-сотки', 'Hundred-nails'],
-      desc: ['Урон биты +20%', 'Bat damage +20%'], cost: { nonferrous: 4, scrap: 6 } },
+      desc: ['Урон биты +20%', 'Bat damage +20%'], cost: { nonferrous: 3, scrap: 8 } },
     { id: 'bat_tape', weapon: 'bat', name: ['Обмотка изолентой', 'Tape grip'],
-      desc: ['Удар тратит на 30% меньше выносливости', 'Swings cost 30% less stamina'], cost: { nonferrous: 6, mil_parts: 1 } },
+      desc: ['Удар тратит на 30% меньше выносливости', 'Swings cost 30% less stamina'], cost: { nonferrous: 4, mil_parts: 1, blueprint: 1, alien_core: 1 } },
     { id: 'pm_mag', weapon: 'makarov', name: ['Магазин на 12', '12-round magazine'],
-      desc: ['Магазин ПМ: 8 → 12 патронов', 'Makarov magazine: 8 → 12 rounds'], cost: { nonferrous: 5, scrap: 6 } },
+      desc: ['Магазин ПМ: 8 → 12 патронов', 'Makarov magazine: 8 → 12 rounds'], cost: { nonferrous: 4, scrap: 8 } },
     { id: 'pm_bore', weapon: 'makarov', name: ['Расточка ствола', 'Bored barrel'],
-      desc: ['Урон ПМ +20%, лучше пробивает броню', 'Makarov damage +20%, better armor piercing'], cost: { nonferrous: 8, mil_parts: 2 } },
+      desc: ['Урон ПМ +20%, лучше пробивает броню', 'Makarov damage +20%, better armor piercing'], cost: { nonferrous: 6, mil_parts: 2, blueprint: 1, alien_core: 1 } },
     { id: 'drill_bit', weapon: 'drill', name: ['Победитовое сверло', 'Carbide bit'],
-      desc: ['Урон дрели +20%, броню почти не замечает', 'Drill damage +20%, nearly ignores armor'], cost: { nonferrous: 8, mil_parts: 2 } },
+      desc: ['Урон дрели +20%, броню почти не замечает', 'Drill damage +20%, nearly ignores armor'], cost: { nonferrous: 6, mil_parts: 2, blueprint: 1, alien_core: 1 } },
     { id: 'drill_coil', weapon: 'drill', name: ['Медная обмотка мотора', 'Copper motor winding'],
-      desc: ['Дрель тратит на 35% меньше выносливости', 'The drill uses 35% less stamina'], cost: { nonferrous: 6, scrap: 6 } },
+      desc: ['Дрель тратит на 35% меньше выносливости', 'The drill uses 35% less stamina'], cost: { nonferrous: 4, scrap: 8 } },
     { id: 'sg_choke', weapon: 'shotgun', name: ['Чок', 'Choke'],
-      desc: ['Дробь слабеет дальше: 250 → 330 px', 'Buckshot keeps its power further: 250 → 330 px'], cost: { nonferrous: 6, scrap: 6 } },
+      desc: ['Дробь слабеет дальше: 250 → 330 px', 'Buckshot keeps its power further: 250 → 330 px'], cost: { nonferrous: 4, scrap: 8 } },
     { id: 'sg_break', weapon: 'shotgun', name: ['Быстрый перелом', 'Quick break'],
-      desc: ['Перезарядка обреза на 35% быстрее', 'The shotgun reloads 35% faster'], cost: { nonferrous: 8, mil_parts: 2 } },
+      desc: ['Перезарядка обреза на 35% быстрее', 'The shotgun reloads 35% faster'], cost: { nonferrous: 6, mil_parts: 2, blueprint: 1, alien_core: 1 } },
     { id: 'pl_radiator', weapon: 'plasma', name: ['Медный радиатор', 'Copper radiator'],
-      desc: ['Греется медленнее: 16% → 11% за выстрел', 'Heats slower: 16% → 11% per shot'], cost: { nonferrous: 10, plasma_cell: 2 } },
+      desc: ['Греется медленнее: 16% → 11% за выстрел', 'Heats slower: 16% → 11% per shot'], cost: { nonferrous: 8, plasma_cell: 2 } },
     { id: 'pl_overdrive', weapon: 'plasma', name: ['Разгон ячейки', 'Cell overdrive'],
-      desc: ['Урон Плазмагана +20%', 'Plasma gun damage +20%'], cost: { nonferrous: 12, plasma_cell: 3, blueprint: 1 } }
+      desc: ['Урон Плазмагана +20%', 'Plasma gun damage +20%'], cost: { nonferrous: 10, plasma_cell: 3, blueprint: 1, alien_core: 1 } }
   ];
   const WEAPON_NAMES = {
     bat: ['Бита', 'Bat'], makarov: ['ПМ', 'Makarov'], drill: ['Дрель', 'Drill'], shotgun: ['Обрез', 'Shotgun'],
@@ -195,7 +195,7 @@ window.Workshop = (function () {
   function renderWallet() {
     const box = $('ws-wallet');
     box.innerHTML = '';
-    ['scrap', 'mil_parts', 'nonferrous', 'blueprint', 'plasma_cell', 'kvako_charge', 'electronics'].forEach(k => {
+    ['scrap', 'mil_parts', 'nonferrous', 'blueprint', 'alien_core', 'plasma_cell', 'kvako_charge', 'electronics'].forEach(k => {
       if (k === 'electronics' && !player.resources.electronics && !W().empMade) return;
       const d = RES_DISPLAY[k];
       const it = document.createElement('div');

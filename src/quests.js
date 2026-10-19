@@ -42,14 +42,14 @@ window.Quests = (function () {
       id: 'tolik_cable', giver: 'tolik', reward: 'freeUpgrade',
       title: ['Цветмет на кабель', 'Copper for cable'],
       item: ['Цветмет', 'Non-ferrous metal'],
-      where: ['Принести Толику 30 цветмета', 'Bring Tolik 30 non-ferrous metal'],
-      bring: { nonferrous: 30 },
+      where: ['Принести Толику 20 цветмета', 'Bring Tolik 20 non-ferrous metal'],
+      bring: { nonferrous: 20 },
       offer: [
         ['Аппарат гудит, а варить толком нечем: кабель весь порченый, жабы погрызли. Медь нужна — много меди.', 'The rig hums, but there\'s nothing proper to weld with: the cables are ruined, chewed by toads. I need copper — lots of copper.'],
-        ['Притащи цветмета штук тридцать — с катушек, с подстанции, с вагонов. За это первую доработку твоего ствола сделаю бесплатно.', 'Bring me about thirty pieces of non-ferrous metal — from cable drums, the substation, the wagons. In return I\'ll upgrade one of your guns for free.']
+        ['Притащи цветмета штук двадцать — с катушек, с подстанции, с вагонов. За это первую доработку твоего ствола сделаю бесплатно.', 'Bring me about twenty pieces of non-ferrous metal — from cable drums, the substation, the wagons. In return I\'ll upgrade one of your guns for free.']
       ],
       accepted: ['Медь — она везде, где ток был. Не надорвись только.', 'Copper is wherever there was current. Just don\'t break your back.'],
-      progress: ['Тридцать цветмета, Василий. Без меди обмотку не перемотаешь.', 'Thirty non-ferrous, Vasiliy. Can\'t rewind a coil without copper.'],
+      progress: ['Двадцать цветмета, Василий. Без меди обмотку не перемотаешь.', 'Twenty non-ferrous, Vasiliy. Can\'t rewind a coil without copper.'],
       turnIn: ['Вот цветмет', 'Here\'s the copper'],
       done: ['Вот это я понимаю! Выбирай любой ствол — первую доработку сделаю бесплатно.', 'Now that\'s what I\'m talking about! Pick any gun — the first upgrade is on me.']
     },
@@ -57,14 +57,14 @@ window.Quests = (function () {
       id: 'tolik_rockets', giver: 'tolik', reward: 'launcher',
       title: ['Ракетная начинка', 'Rocket filling'],
       item: ['Квако-заряды', 'Kvako charges'],
-      where: ['Принести Толику 5 квако-зарядов (с ракетчиков)', 'Bring Tolik 5 kvako charges (from rocketeers)'],
-      bring: { kvako_charge: 5 },
+      where: ['Принести Толику 3 квако-заряда (с ракетчиков)', 'Bring Tolik 3 kvako charges (from rocketeers)'],
+      bring: { kvako_charge: 3 },
       offer: [
         ['Видел у ракетчиков пусковые? Труба, пружина и жабья химия. Я такое из водопроводной трубы соберу — начинка только нужна.', 'Seen the rocketeers\' launchers? A pipe, a spring and toad chemistry. I can build one from a water pipe — I just need the filling.'],
-        ['Принеси пять квако-зарядов с ракетчиков. Соберу тебе гранатомёт, а из зарядов потом гранаты буду крутить.', 'Bring me five kvako charges from the rocketeers. I\'ll build you a grenade launcher, and later I\'ll make grenades out of the charges.']
+        ['Принеси три квако-заряда с ракетчиков. Соберу тебе гранатомёт, а из зарядов потом гранаты буду крутить.', 'Bring me three kvako charges from the rocketeers. I\'ll build you a grenade launcher, and later I\'ll make grenades out of the charges.']
       ],
       accepted: ['Ракетчика после залпа бей — он пустой ходит.', 'Hit a rocketeer right after a volley — he walks around empty.'],
-      progress: ['Пять квако-зарядов. С ракетчиков, больше неоткуда.', 'Five kvako charges. From rocketeers, nowhere else.'],
+      progress: ['Три квако-заряда. С ракетчиков, больше неоткуда.', 'Three kvako charges. From rocketeers, nowhere else.'],
       turnIn: ['Вот квако-заряды', 'Here are the kvako charges'],
       done: ['Держи. Труба, пружина, приклад от «Сайги» — и бахает как надо. Гранаты к нему — у меня в мастерской: заряд на три штуки.', 'Here you go. A pipe, a spring, a Saiga stock — and it bangs just right. Grenades are at my workshop: one charge makes three.']
     },
@@ -327,6 +327,7 @@ window.Quests = (function () {
   function onWorld() {
     pickups = [];
     prepared = false;
+    Object.keys(guardSeen).forEach(k => { guardSeen[k] = false; });
   }
 
   function prepare() {
@@ -343,7 +344,8 @@ window.Quests = (function () {
         // Тайник уже обыскан — предмет ждёт рядом
         if (c.searched) dropItem(q, k, c);
       });
-      if (q.guard && !isReady(q)) spawnGuard(q);
+      // Бригадир встаёт при каждом входе, пока жив: убитый — больше не появляется (иначе с него можно фармить)
+      if (q.guard && !isReady(q) && !state[q.id].guardDown) spawnGuard(q);
     });
   }
 
@@ -360,6 +362,7 @@ window.Quests = (function () {
   function spawnGuard(q) {
     const c = targets(q)[0];
     if (!c || enemies.some(e => e.questGuard === q.id)) return;
+    guardSeen[q.id] = true;
     const x = c.x + 90, y = c.y + 40;
     const hp = Math.round(900 * ENEMY_HP_SCALE);
     enemies.push({
@@ -413,8 +416,20 @@ window.Quests = (function () {
     });
   }
 
+  // Бригадир был в этом мире и пропал — убит: запомнить в состоянии квеста (сохраняется)
+  const guardSeen = {};
+  function watchGuards() {
+    QUESTS.forEach(q => {
+      if (!q.guard || !guardSeen[q.id] || !isActive(q)) return;
+      if (enemies.some(e => e.questGuard === q.id)) return;
+      state[q.id].guardDown = true;
+      guardSeen[q.id] = false;
+    });
+  }
+
   function update() {
     if (!prepared) prepare();
+    watchGuards();
     bossDrops();
     // Предмет квеста подбирает любой из игроков — квест общий
     for (let i = pickups.length - 1; i >= 0; i--) {
@@ -597,6 +612,9 @@ window.Quests = (function () {
     });
   }
 
+  // Радио «ВЭФ» в логове (src/basement.js): тайники, где ещё лежат предметы взятых квестов
+  const radioTargets = () => QUESTS.filter(isActive).flatMap(q => targets(q).filter((c, k) => !state[q.id].got[k] && !c.searched));
+
   return { saveState, loadState, netGet, netSet, refreshTracker: () => updateTracker(), flag, marker, topic, onWorld, onSearched, update, drawWorld, drawOverlay, drawBang, journal,
-    nearSample, samplePrompt, takeSample, sampleSpot: () => (sampleQuest() ? sampleSpot() : null) };
+    radioTargets, nearSample, samplePrompt, takeSample, sampleSpot: () => (sampleQuest() ? sampleSpot() : null) };
 })();

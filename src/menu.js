@@ -251,7 +251,7 @@ window.Menu = (() => {
   let saveRequested = false;
 
   const runActive = () => gameState === 'PLAYING' || gameState === 'SHOP' || gameState === 'PAUSED' || gameState === 'INVENTORY' ||
-    gameState === 'DIALOG' || gameState === 'WORKSHOP' || gameState === 'CANTEEN';
+    gameState === 'DIALOG' || gameState === 'WORKSHOP' || gameState === 'CANTEEN' || gameState === 'BASEMENT';
 
   // Бой — когда рядом есть враг, который гонится за Василием. Иначе можно было бы сохраниться
   // посреди драки и обновлением страницы сбежать к Михалычу со всем добытым в бою
@@ -271,6 +271,8 @@ window.Menu = (() => {
     // Мир той локации, где Василий, снимается сейчас; другой — каким он был, когда Василий оттуда ушёл
     const worlds = Object.assign({}, locationWorlds, { [currentLocation]: snapshotWorld() });
     const cBonus = window.Canteen ? window.Canteen.bonus() : { hp: 0, crit: 0 };
+    // Ковёр и спортуголок логова — тоже без надбавки (вернёт Basement.updatePlayer)
+    const bBonus = window.Basement ? window.Basement.applied(player) : { crit: 0, stamina: 0 };
     return {
       format: SAVE_FORMAT,
       savedAt: Date.now(),
@@ -286,15 +288,17 @@ window.Menu = (() => {
       workshop: window.Workshop ? window.Workshop.saveState() : undefined,
       // Столовая Лены: сколько ещё действуют блюда (src/canteen.js)
       canteen: window.Canteen ? window.Canteen.saveState() : undefined,
+      // Логово Василия: чей подвал, обстановка, запасы (src/basement.js)
+      basement: window.Basement ? window.Basement.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),
         // Борщ и капли прибавляют на время — сохраняется без надбавки, при загрузке её вернёт Canteen.loadState
         maxHp: player.maxHp - cBonus.hp,
         stamina: round2(player.stamina),
-        maxStamina: player.maxStamina,
+        maxStamina: player.maxStamina - bBonus.stamina,
         baseDamage: player.baseDamage,
-        critChance: round2(player.critChance - cBonus.crit),
+        critChance: round2(player.critChance - cBonus.crit - bBonus.crit),
         critMult: player.critMult,
         items: Object.assign({}, player.items),
         resources: Object.assign({}, player.resources),
@@ -352,7 +356,7 @@ window.Menu = (() => {
     (s.format >= 6 ? s.worlds && typeof s.worlds === 'object' : s.world));
 
   // Где Василий в сохранении: до формата 6 Промзоны не было — значит, в городе
-  const locationOf = s => (s && s.format >= 6 && s.location === 'promzona' ? 'promzona' : 'city');
+  const locationOf = s => (s && s.format >= 6 && (s.location === 'promzona' || s.location === 'basement') ? s.location : 'city');
 
   // Урны, которые громилы переставили: [список (0 — во дворах, 1 — на тротуарах), номер, x, y]
   function binLists() {
@@ -476,11 +480,11 @@ window.Menu = (() => {
       const worlds = s.worlds || {};
       w = worlds[currentLocation] || {};
       locationWorlds = {};
-      ['city', 'promzona'].forEach(id => {
+      ['city', 'promzona', 'basement'].forEach(id => {
         if (id !== currentLocation && worlds[id] && typeof worlds[id] === 'object') locationWorlds[id] = worlds[id];
       });
       (Array.isArray(s.visited) ? s.visited : []).forEach(id => {
-        if (id === 'city' || id === 'promzona') locationsVisited.add(id);
+        if (id === 'city' || id === 'promzona' || id === 'basement') locationsVisited.add(id);
       });
     } else if (s.format >= WORLD_FORMAT) {
       w = s.world || {};
@@ -869,6 +873,7 @@ window.Menu = (() => {
     else if (gameState === 'DIALOG') window.Dialog.close();
     else if (gameState === 'WORKSHOP') window.Workshop.close();
     else if (gameState === 'CANTEEN') window.Canteen.close();
+    else if (gameState === 'BASEMENT') window.Basement.close();
     else if (gameState === 'PLAYING') pause();
     else if (gameState === 'PAUSED') resume();
   }
