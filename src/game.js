@@ -930,6 +930,7 @@ const LANGS = {
     say_shield_melee: "Кажется, железкой этот щит не пробить…",
     say_plasma_armor: "Кажется, плазма плохо пробивает эту броню…",
     say_boss_invuln: "Его сейчас ничем не взять — переждать бы…",
+    say_breach: "Что это было? Будто рухнуло что-то…",
     say_coop_later: "Это окно в сетевом коопе пока не открывается — скоро",
     boss_invuln: "НЕУЯЗВИМ — берсерк",
     boss_shield_down: "⚡ ЩИТ ПРОБИТ!",
@@ -1017,6 +1018,7 @@ const LANGS = {
     say_shield_melee: "Looks like I can't smash through this shield…",
     say_plasma_armor: "Looks like plasma barely scratches this armor…",
     say_boss_invuln: "Nothing gets through to him right now — better wait it out…",
+    say_breach: "What was that? Sounded like something caved in…",
     say_coop_later: "This window doesn't open in network co-op yet — coming soon",
     boss_invuln: "INVULNERABLE — berserk",
     boss_shield_down: "⚡ SHIELD DOWN!",
@@ -7670,6 +7672,14 @@ function spawnLootDrop(enemyOrX, yOpt) {
   }
   if (isEnemyObj) {
     dropTrophies(x, y, eType, prof);
+    // Прорыв (spawnBreakthrough): громила несёт свою долю того, чего не хватает на Плазмаган
+    if (enemyOrX.bonusLoot) {
+      let i = 0;
+      for (const k in enemyOrX.bonusLoot) {
+        const a = Math.PI / 2 + (i++) * 0.9;
+        spawn3DLootItem(x + Math.cos(a) * 30, y + Math.sin(a) * 20 + 10, k === 'bottles' ? 'bottle' : k, enemyOrX.bonusLoot[k]);
+      }
+    }
     dropPromzonaLoot(x, y, eType, dist);
   }
 }
@@ -9136,6 +9146,87 @@ function spawnBossAdds() {
   if (spawned) addFloatingText(BOSS_HOME.x - 90, BOSS_HOME.y - 140, t('boss_adds'), '#84cc16');
 }
 
+// --- ПРОРЫВ: страховка на Плазмаган (docs/BALANCE.md, «Прорыв») ---
+// Щит Мясника снимает только плазма. Если в городе перебиты все жабы, Мясник жив, а Плазмагана нет и купить его
+// не на что (ядра потрачены на перки или не выпали), в одном из гнёзд — не в логове Мясника — лопается капсула:
+// дрожь земли, реплика Василия и пять элитных громил, с которых падает ровно то, чего не хватает на Плазмаган.
+// Без объявлений: к громилам ведут обычные стрелки к последним жабам. Повторяется, пока Плазмаган не по карману
+const BREACH_BRUTES = 5;
+const BREACH_DELAY = 60 * 12;   // проверка — через 12 с после последней жабы (и после загрузки)
+let breachTimer = 0;
+
+// Чего не хватает на Плазмаган — тому из живых, кому не хватает меньше всех (кооп: лут общий); null — хватает
+// или Плазмаган уже есть
+function plasmaShortfall() {
+  const item = SHOP_ARSENAL_ITEMS.find(i => i.id === 'plasma');
+  let best = null, bestSum = Infinity;
+  for (const p of players) {
+    if (p.dead || p.left) continue;
+    if (p.unlockedWeapons.plasma) return null;
+    const s = {};
+    let sum = 0;
+    for (const k in item.cost) {
+      const d = item.cost[k] - (p.resources[k] || 0);
+      if (d > 0) { s[k] = d; sum += d; }
+    }
+    if (sum < bestSum) { best = s; bestSum = sum; }
+  }
+  return best && bestSum > 0 ? best : null;
+}
+
+function updateBreakthrough() {
+  if (currentLocation !== 'city' || levelCleared) return;
+  if (enemies.some(e => e.type !== 'boss')) { breachTimer = 0; return; }   // жабы ещё есть (и громилы прорыва тоже)
+  if (!bossRef || bossRef.hp <= 0) return;                                  // Мясник побеждён — плазма не обязательна
+  if (++breachTimer < BREACH_DELAY) return;
+  breachTimer = 0;
+  const need = plasmaShortfall();
+  if (need) spawnBreakthrough(need);
+}
+
+function spawnBreakthrough(need) {
+  // Гнездо — любое из трёх, кроме северо-восточного: там логово Мясника
+  const a = MAP.RING_A, b = MAP.RING_B, s = MAP.SIZE;
+  const nests = [[120, 120, a - 120, a - 120], [120, b + 120, a - 120, s - 120], [b + 120, b + 120, s - 120, s - 120]];
+  const r = nests[Math.floor(Math.random() * nests.length)];
+  const spots = [];
+  for (let i = 0; i < 120 && spots.length < BREACH_BRUTES; i++) {
+    const x = r[0] + Math.random() * (r[2] - r[0]), y = r[1] + Math.random() * (r[3] - r[1]);
+    if (Math.hypot(x - safeZone.x, y - safeZone.y) < 520) continue;
+    if (checkWalkCollision(x, y, 37, FOOT_DY.brute)) continue;
+    if (spots.some(p => Math.hypot(p.x - x, p.y - y) < 90)) continue;
+    spots.push({ x, y });
+  }
+  if (!spots.length) return;
+  // Нехватка — по громилам, по штуке по кругу: убил всех — хватает ровно
+  const shares = spots.map(() => ({}));
+  let n = 0;
+  for (const k in need) {
+    for (let i = 0; i < need[k]; i++, n++) {
+      const sh = shares[n % spots.length];
+      sh[k] = (sh[k] || 0) + 1;
+    }
+  }
+  spots.forEach((p, i) => {
+    const hp = Math.round(680 * ENEMY_HP_SCALE);
+    enemies.push({
+      x: p.x, y: p.y, startX: p.x, startY: p.y, bounds: { x1: r[0], y1: r[1], x2: r[2], y2: r[3] },
+      districtId: 'nest', tier: 4, radius: 37, armor: 0.65, throwCooldown: 120 + Math.floor(Math.random() * 240),
+      hp, maxHp: hp, speed: 1.98, type: 'brute', color: '#a855f7', aggroRadius: 365, isAggroed: false, hitFlash: 0,
+      patrolAngle: Math.random() * Math.PI * 2, patrolTimer: Math.random() * 120 + 60, shootCooldown: 60,
+      bonusLoot: shares[i]
+    });
+    createParticles(p.x, p.y, '#a855f7', 18);
+    spawnDirectionalSparks(p.x, p.y - 10, -Math.PI / 2, Math.PI * 2, 14, '#c084fc', 3, 9, 14);
+  });
+  levelEnemyTotal += spots.length;
+  // Дрожь земли у всех, гул — у себя, реплика — каждому
+  if (window.Net && window.Net.shakeAll) window.Net.shakeAll(70, 9); else shakeScreen(70, 9);
+  SoundFX.bossFx('fence_break', localPlayer.x, localPlayer.y);
+  forEachPlayer(() => sayLine('say_breach'));
+  if (window.Menu) window.Menu.requestSave();
+}
+
 // Разовая крупная награда за Мясника (учтена в расчёте экономики, docs/BALANCE.md)
 const BOSS_REWARD = [
   ['alien_core', 3], ['alien_core', 3], ['mil_parts', 4], ['mil_parts', 4],
@@ -10176,6 +10267,7 @@ function update() {
     }
   }
   checkLevelCleared();
+  updateBreakthrough();
 
   const activeSimRadius = Math.max(viewW, viewH) * 0.72 + 220;
 

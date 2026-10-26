@@ -355,7 +355,8 @@ window.Menu = (() => {
         type: e.type, x: Math.round(e.x), y: Math.round(e.y), hp: Math.ceil(e.hp / (e.coopK || 1)), maxHp: e.maxHp / (e.coopK || 1),
         armor: e.armor || 0,
         radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
-        tier: e.tier, districtId: e.districtId, bounds: e.bounds
+        tier: e.tier, districtId: e.districtId, bounds: e.bounds,
+        bl: e.bonusLoot || undefined   // громила прорыва: его доля нехватки на Плазмаган (game.js)
       }))
     };
   }
@@ -584,6 +585,9 @@ window.Menu = (() => {
           bounds: { x1: num(b.x1, x - 300), y1: num(b.y1, y - 300), x2: num(b.x2, x + 300), y2: num(b.y2, y + 300) },
           districtId: typeof d.districtId === 'string' ? d.districtId : 'courtyards',
           tier: num(d.tier, 1, 0, 9),
+          bonusLoot: d.bl && typeof d.bl === 'object'
+            ? Object.fromEntries(Object.keys(d.bl).filter(k => k in player.resources && num(d.bl[k], 0, 0, 99) > 0).map(k => [k, Math.floor(num(d.bl[k], 0, 0, 99))]))
+            : undefined,
           radius: num(d.radius, 22, 8, 60),
           armor: num(d.armor, d.type === 'brute' ? 0.6 : 0, 0, 0.9),
           throwCooldown: 120 + Math.floor(Math.random() * 240),

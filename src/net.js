@@ -451,6 +451,11 @@ window.Net = (() => {
   function sayTo(p, key) {
     if (role === 'host' && started && p.netId) sendTo(p.netId, { t: 'say', key });
   }
+  // Дрожь земли у всех (прорыв, game.js): у хоста — сразу, товарищам — событием
+  function shakeAll(frames, amp) {
+    shakeScreen(frames, amp);
+    if (role === 'host' && started) byNet.forEach((p, net) => sendTo(net, { t: 'shake', f: frames, a: amp }));
+  }
 
   // Товарищ нажал E у лавки, выжившего или сейфа: окно открывается у него (действия придут как rpc)
   function remoteInteract(p, it) {
@@ -603,6 +608,7 @@ window.Net = (() => {
     }
     else if (m.t === 's') { queue.push(m); lastSnap = m; }
     else if (m.t === 'say') { const was = player; usePlayer(localPlayer); sayLine(m.key); usePlayer(was); }
+    else if (m.t === 'shake') shakeScreen(m.f, m.a);
     else if (m.t === 'ui') pendingUi = m;
     else if (m.t === 'travel') {
       queue.length = 0;
@@ -1004,7 +1010,7 @@ window.Net = (() => {
     get role() { return role; },
     isHost: () => role === 'host' && started,
     isClient: () => role === 'client' && started,
-    hostBegin, hostSend, hostBeforeUpdate, clientUpdate, sayTo, remoteInteract, onTravel, onGameOver, noteSoundAt, coopSnapshot,
+    hostBegin, hostSend, hostBeforeUpdate, clientUpdate, sayTo, shakeAll, remoteInteract, onTravel, onGameOver, noteSoundAt, coopSnapshot,
     rpc, optimistic,
     enc, dec,
     dbg: () => ({ q: queue.length, last: lastSnap, ids: [...enemyById.keys()].slice(0, 20), lastClose, ws: ws && ws.readyState })
