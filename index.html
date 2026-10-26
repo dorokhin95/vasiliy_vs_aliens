@@ -881,6 +881,7 @@
       cursor: grab;
       touch-action: none;
     }
+    .hotbar-slot.swap-target { outline: 2px solid #fbbf24; outline-offset: 2px; }
     .hotbar-slot.dragging {
       opacity: 0.6;
       cursor: grabbing;
@@ -1011,6 +1012,11 @@
       border-color: #22c55e;
       background: rgba(34, 197, 94, 0.08);
     }
+    /* «В ячейку [1] [2] [3]» у припасов и блюд (slotPickerEl, game.js) */
+    .slot-picker { margin-top: 5px; display: flex; gap: 4px; align-items: center; font: 600 11px Arial; color: #94a3b8; }
+    .slot-picker button { font: 700 11px Arial; padding: 1px 7px; border-radius: 4px; border: 1px solid #475569; background: #1f2937; color: #e5e7eb; cursor: pointer; }
+    .slot-picker button:hover { border-color: #94a3b8; }
+    .slot-picker button.on { background: #166534; border-color: #4ade80; color: #bbf7d0; }
     .shop-card-left {
       display: flex;
       align-items: center;
@@ -2034,15 +2040,15 @@
   <script src="src/three_boss.js?v=1138"></script>
   <script src="src/three_survivors.js?v=1153"></script>
   <script src="src/perks_pz.js?v=1187"></script>
-  <script src="src/game.js?v=1203"></script>
+  <script src="src/game.js?v=1206"></script>
   <script src="src/coop.js?v=3"></script>
   <script src="src/sounds.js?v=1200"></script>
-  <script src="src/menu.js?v=1203"></script>
+  <script src="src/menu.js?v=1204"></script>
   <script src="src/comic.js?v=1202"></script>
   <script src="src/cards.js?v=1202"></script>
   <script src="src/inventory.js?v=1197"></script>
   <script src="src/workshop.js?v=1198"></script>
-  <script src="src/canteen.js?v=1197"></script>
+  <script src="src/canteen.js?v=1205"></script>
   <script src="src/basement.js?v=1203"></script>
   <script src="src/safes.js?v=1198"></script>
   <script src="src/defense.js?v=1198"></script>

@@ -177,8 +177,8 @@ window.Canteen = (function () {
   function render() {
     if (player !== localPlayer) return; // блюдо товарища по сети — окно не наше
     $('cn-title').textContent = L('СТОЛОВАЯ ЛЕНЫ', 'LENA\'S CANTEEN');
-    $('cn-sub').textContent = L('Лена варит из жабьих трофеев: снадобья и бустеры. Готовое — в инвентарь, в ячейки хотбара 1–3 ставь в окне инвентаря (I).',
-      'Lena cooks toad trophies into remedies and boosters. They go to your inventory — put them into hotbar slots 1–3 in the inventory window (I).');
+    $('cn-sub').textContent = L('Лена варит из жабьих трофеев: снадобья и бустеры. Готовое — в инвентарь; в ячейку хотбара 1–3 — кнопкой у блюда или в окне инвентаря (I).',
+      'Lena cooks toad trophies into remedies and boosters. They go to your inventory; put them into hotbar slots 1–3 with the buttons on the dish or in the inventory window (I).');
     $('cn-close').textContent = L('ЗАКРЫТЬ [ESC]', 'CLOSE [ESC]');
     renderWallet();
     const box = $('cn-dishes');
@@ -194,6 +194,7 @@ window.Canteen = (function () {
       left.querySelector('.shop-card-title').textContent = `${T(d.name)} (${L('у тебя', 'have')} ${player.items[d.id] || 0})`;
       left.querySelector('.shop-card-desc').textContent = open ? T(d.desc)
         : L('Рецепт — в журнале проб, Лена ещё не разобрала. Спроси у неё работу.', 'The recipe is in the sample log, Lena hasn\'t worked it out yet. Ask her for work.');
+      if (open) left.querySelector('div').append(slotPickerEl(d.id, render));
       const b = document.createElement('button');
       b.className = 'shop-buy-btn';
       if (open) {

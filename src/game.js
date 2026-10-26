@@ -2672,9 +2672,48 @@ window.setConsumableSlot = function(i, id) {
   refreshConsumableSlots();
 };
 
+// Кнопки «В ячейку [1] [2] [3]» у припаса в лавке и у блюда в столовой: кладут его в ячейку хотбара прямо
+// оттуда (то же, что перетаскивание в инвентаре); ячейка, где он уже лежит, — зелёная
+function slotPickerEl(id, onChange) {
+  const row = document.createElement('div');
+  row.className = 'slot-picker';
+  row.append(currentLang === 'ru' ? 'В ячейку:' : 'Slot:');
+  HOTBAR_CONSUMABLES.forEach((_, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = `[${i + 1}]`;
+    if (consumableSlots && consumableSlots[i] === id) b.className = 'on';
+    b.onclick = (e) => { e.stopPropagation(); window.setConsumableSlot(i, id); if (onChange) onChange(); };
+    row.append(b);
+  });
+  return row;
+}
+
+// Кончился припас в ячейке — на его место сам встаёт следующий того же рода, что есть с собой: лечение (бинт,
+// компресс, студень), выносливость (тушёнка, похлёбка), бафф (водка, настойка, капли, борщ, мазь). Вернулись
+// бинты — обратно не прыгает: что стоит, то стоит
+const CONSUMABLE_KINDS = { heal: ['bandage', 'compress', 'jelly'], stamina: ['stew', 'soup'], buff: ['vodka', 'tincture', 'drops', 'borscht', 'ointment'] };
+function refillConsumableSlots() {
+  if (!consumableSlots || player !== localPlayer) return;
+  let changed = false;
+  consumableSlots.forEach((id, i) => {
+    if (!id || (player.items[id] || 0) > 0) return;
+    const kind = Object.keys(CONSUMABLE_KINDS).find(k => CONSUMABLE_KINDS[k].includes(id));
+    if (!kind) return;
+    const next = CONSUMABLE_KINDS[kind].find(x => x !== id && (player.items[x] || 0) > 0 && !consumableSlots.includes(x));
+    if (!next) return;
+    consumableSlots[i] = next;
+    changed = true;
+    const info = itemInfo(next);
+    if (info) addFloatingText(player.x - 30, player.y - 48, `[${i + 1}] → ${info.name}`, '#cbd5e1');
+  });
+  if (changed) { try { localStorage.setItem(CONSUMABLE_SLOTS_KEY, JSON.stringify(consumableSlots)); } catch (e) { /* не критично */ } }
+}
+
 // Картинка, подпись и счётчик в ячейках расходников
 function refreshConsumableSlots() {
   if (!consumableSlots) return;
+  refillConsumableSlots();
   HOTBAR_CONSUMABLES.forEach((slotId, i) => {
     const el = document.querySelector(`.hotbar-slot[data-slot="${slotId}"]`);
     if (!el) return;
@@ -2745,29 +2784,39 @@ function initHotbarDrag() {
     try { bar.setPointerCapture(e.pointerId); } catch (err) { /* указатель уже отпущен */ }
   });
 
+  // Перетаскивание — обмен местами: ствол встаёт в ячейку, на которую его бросили, а её ствол — на место взятого;
+  // остальные не сдвигаются. Ячейки расходников (1–3) меняются только между собой, стволы — между собой
+  const sameKind = (a, b) => HOTBAR_CONSUMABLES.includes(a) === HOTBAR_CONSUMABLES.includes(b);
+  const targetAt = (x, y) => [...bar.querySelectorAll('.hotbar-slot')].find(s => {
+    if (s === drag.slot || s.style.display === 'none' || !sameKind(s.dataset.slot, drag.slot.dataset.slot)) return false;
+    const r = s.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top - 20 && y <= r.bottom + 20;
+  });
+  const clearTarget = () => bar.querySelectorAll('.swap-target').forEach(s => s.classList.remove('swap-target'));
+
   bar.addEventListener('pointermove', (e) => {
     if (!drag) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < 6) return;
     drag.moved = true;
     drag.slot.classList.add('dragging');
-    // Ставим слот перед первым видимым соседом, чей центр правее курсора, иначе — сразу за последним видимым
-    const others = [...bar.querySelectorAll('.hotbar-slot')].filter(s => s !== drag.slot && s.style.display !== 'none');
-    if (others.length === 0) return;
-    const before = others.find(s => { const r = s.getBoundingClientRect(); return e.clientX < r.left + r.width / 2; });
-    const anchor = before || others[others.length - 1].nextElementSibling;
-    if (anchor !== drag.slot && drag.slot.nextElementSibling !== anchor) bar.insertBefore(drag.slot, anchor);
+    clearTarget();
+    const to = targetAt(e.clientX, e.clientY);
+    if (to) to.classList.add('swap-target');
   });
 
   const finish = (e) => {
     if (!drag) return;
     const { slot, moved } = drag;
+    const to = moved && e.type === 'pointerup' ? targetAt(e.clientX, e.clientY) : null;
     drag = null;
     slot.classList.remove('dragging');
-    if (moved) {
-      hotbarOrder = consumablesFirst([...bar.querySelectorAll('.hotbar-slot')].map(s => s.dataset.slot));
+    clearTarget();
+    if (to) {
+      const i = hotbarOrder.indexOf(slot.dataset.slot), j = hotbarOrder.indexOf(to.dataset.slot);
+      if (i >= 0 && j >= 0) [hotbarOrder[i], hotbarOrder[j]] = [hotbarOrder[j], hotbarOrder[i]];
       saveHotbarOrder();
       applyHotbarOrder();
-    } else if (e.type === 'pointerup') {
+    } else if (!moved && e.type === 'pointerup') {
       activateHotbarSlot(slot.dataset.slot);
     }
   };
@@ -3554,6 +3603,7 @@ function renderArsenalAndSupplies() {
           <div class="shop-card-desc">${currentLang === 'ru' ? sup.desc_ru : sup.desc_en}</div>
         </div>
       `;
+      left.querySelector('div').append(slotPickerEl(sup.id, renderArsenalAndSupplies));
 
       const btn = document.createElement('button');
       btn.className = 'shop-buy-btn';
