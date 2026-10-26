@@ -36,7 +36,7 @@ window.Quests = (function () {
       accepted: ['Вот и договорились. С громилой осторожнее — он в броне, со спины бей.', 'Deal. Careful with the brute — he\'s armored, hit him from behind.'],
       progress: ['Аппарат в кузове ЗИЛа, в механических цехах. Без него никак.', 'The rig is in the ZIL truck bed, in the machine shops. Can\'t do without it.'],
       turnIn: ['Вот твой аппарат', 'Here\'s your rig'],
-      done: ['Живой! И аппарат живой! Дай мне его настроить — и мастерская заработает.', 'You\'re alive! And so is the rig! Let me set it up — and the workshop will be open.']
+      done: ['Жив{ой|ая}! И аппарат живой! Дай мне его настроить — и мастерская заработает.', 'You\'re alive! And so is the rig! Let me set it up — and the workshop will be open.']
     },
     {
       id: 'tolik_cable', giver: 'tolik', reward: 'freeUpgrade',
@@ -60,7 +60,7 @@ window.Quests = (function () {
       where: ['Принести Толику 3 квако-заряда (с ракетчиков)', 'Bring Tolik 3 kvako charges (from rocketeers)'],
       bring: { kvako_charge: 3 },
       offer: [
-        ['Видел у ракетчиков пусковые? Труба, пружина и жабья химия. Я такое из водопроводной трубы соберу — начинка только нужна.', 'Seen the rocketeers\' launchers? A pipe, a spring and toad chemistry. I can build one from a water pipe — I just need the filling.'],
+        ['Видел{|а} у ракетчиков пусковые? Труба, пружина и жабья химия. Я такое из водопроводной трубы соберу — начинка только нужна.', 'Seen the rocketeers\' launchers? A pipe, a spring and toad chemistry. I can build one from a water pipe — I just need the filling.'],
         ['Принеси три квако-заряда с ракетчиков. Соберу тебе гранатомёт, а из зарядов потом гранаты буду крутить.', 'Bring me three kvako charges from the rocketeers. I\'ll build you a grenade launcher, and later I\'ll make grenades out of the charges.']
       ],
       accepted: ['Ракетчика после залпа бей — он пустой ходит.', 'Hit a rocketeer right after a volley — he walks around empty.'],
@@ -107,7 +107,7 @@ window.Quests = (function () {
         ['Шлам этот жжёт, как кислота, а жабы в нём купаются. Значит, его можно обратить — мазь сделать.', 'That sludge burns like acid, yet the toads bathe in it. So it can be turned around — made into an ointment.'],
         ['Набери мне пробу на шлам-прудах, на западе завода. Вот пробирка. Только в луже долго не стой.', 'Take a sample for me at the sludge ponds in the west of the plant. Here\'s a test tube. Just don\'t stand in the puddle too long.']
       ],
-      accepted: ['Набрал — и сразу назад. И не нюхай!', 'Fill it and come straight back. And don\'t sniff it!'],
+      accepted: ['Набрал{|а} — и сразу назад. И не нюхай!', 'Fill it and come straight back. And don\'t sniff it!'],
       progress: ['Проба шлама с прудов. Без неё мазь не сварю.', 'A sludge sample from the ponds. No ointment without it.'],
       turnIn: ['Вот проба', 'Here\'s the sample'],
       done: ['Светится… Отлично. Мазь будет — шлам перестанет жечь. Заходи, сварю.', 'It glows… Perfect. You\'ll get an ointment — the sludge won\'t burn anymore. Drop by, I\'ll cook it.']
@@ -154,7 +154,7 @@ window.Quests = (function () {
       accepted: ['Сейф тяжёлый, кассовый. Не спеши — пять цифр подобрать надо.', 'It\'s a heavy vault. Don\'t rush — five digits to work out.'],
       progress: ['Кассовый сейф в заводоуправлении. Журнал караула там.', 'The vault in the admin building. The guard log is in there.'],
       turnIn: ['Вот журнал караула', 'Here\'s the guard log'],
-      done: ['Последняя запись Колина: «Ушёл к градирням, там свет. Буду к утру». Не пришёл… На, держи — это из нашей заначки. Заслужил.', 'Kolya\'s last entry: "Went to the cooling towers, there\'s a light. Back by morning." He never came… Here, take this — from our stash. You\'ve earned it.']
+      done: ['Последняя запись Колина: «Ушёл к градирням, там свет. Буду к утру». Не пришёл… На, держи — это из нашей заначки. Заслужил{|а}.', 'Kolya\'s last entry: "Went to the cooling towers, there\'s a light. Back by morning." He never came… Here, take this — from our stash. You\'ve earned it.']
     },
     {
       id: 'zina_kolya', giver: 'zina', reward: 'nagant', boss: true, icon: 'quest_kolya_pass',
@@ -162,7 +162,7 @@ window.Quests = (function () {
       item: ['Пропуск Коли', 'Kolya\'s pass'],
       where: ['Логово у градирен: одолеть Долбильщика, забрать пропуск', 'The lair by the cooling towers: defeat the Pounder, take the pass'],
       offer: [
-        ['Видел того, у градирен? Здоровый, с кувалдой. А на плече — наша нашивка, ВОХР. Я её Коле сама пришивала.', 'Have you seen the one by the cooling towers? Huge, with a sledgehammer. And on his shoulder — our guard patch. I sewed it on for Kolya myself.'],
+        ['Видел{|а} того, у градирен? Здоровый, с кувалдой. А на плече — наша нашивка, ВОХР. Я её Коле сама пришивала.', 'Have you seen the one by the cooling towers? Huge, with a sledgehammer. And on his shoulder — our guard patch. I sewed it on for Kolya myself.'],
         ['Это Коля, Василий. Был Коля. Отпусти его… А пропуск его принеси — он всегда в нагрудном кармане носил. Хочу, чтобы хоть что-то осталось.', 'That\'s Kolya, Vasiliy. Used to be. Let him go… And bring me his pass — he always kept it in his breast pocket. I want something of him to remain.']
       ],
       accepted: ['Он и раньше был самый сильный в карауле. Бинтов возьми побольше.', 'He was the strongest in the guard even before. Take plenty of bandages.'],
@@ -355,7 +355,7 @@ window.Quests = (function () {
     if (player.unlockedWeapons.shotgun) drop.push(['ammo_12g', 8]);
     if (player.unlockedWeapons.nagant) drop.push(['ammo_762n', 7]);
     drop.forEach(([type, val], i) => spawn3DLootItem(5555 - 40 + i * 40, 300, type, val));
-    addFloatingText(5480, 260, L('Степаныч: «Бери, заслужил»', 'Stepanych: "Take it, you earned it"'), '#fde68a');
+    addFloatingText(5480, 260, L('Степаныч: «Бери, заслужил{|а}»', 'Stepanych: "Take it, you earned it"'), '#fde68a');
   }
 
   // Громила-«Бригадир» у ЗИЛа с аппаратом: элитный, в броне. Не сохраняется — встаёт при каждом входе

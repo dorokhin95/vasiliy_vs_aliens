@@ -109,7 +109,8 @@ window.Settlers = (function () {
     if (!greeted && ++greetT > 60 * 3) {
       greeted = true;
       showToast(L('НОВОХМУРИНСК ОЖИЛ', 'NOVOKHMURINSK IS ALIVE'),
-        L('Спасённые обжились: пост у пролома, мастерская Толика, столовая Лены.', 'The rescued settled in: a post at the breach, Tolik\'s workshop, Lena\'s canteen.'));
+        L('Спасённые обжились: пост у пролома, мастерская Толика, столовая Лены. У жилых домов открылись подвалы — выбирай, где устроить логово.',
+          'The rescued settled in: a post at the breach, Tolik\'s workshop, Lena\'s canteen. The basements of the apartment blocks are open — pick one for your lair.'));
       if (window.Menu) window.Menu.requestSave();
     }
     updateCrawlers();

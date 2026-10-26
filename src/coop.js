@@ -9,19 +9,23 @@
  */
 window.Coop = (() => {
   const BOT_NAMES = ['Петя', 'Серёга', 'Коля'];
+  const BOT_HEROES = ['bruiser', 'punk', 'kid'];   // боты — разными героями (src/heroes.js)
   const bots = new Set();
 
   // Свой Василий: имя и 3D-модель (родной цвет ватника — та, что уже грузится)
   localPlayer.name = 'Василий';
+  localPlayer.hero = 'vasiliy';
   localPlayer.char = window.threeCharacter;
   localPlayer.char.owner = localPlayer;
 
-  function addPlayer(name, color) {
+  // hero — кем играет (src/heroes.js): своя модель
+  function addPlayer(name, color, hero = 'vasiliy') {
     const p = makePlayer();
     p.id = players.length;
     p.name = name;
     p.color = color;
-    p.char = new ThreeCharacterManager(color);
+    p.hero = hero;
+    p.char = new ThreeCharacterManager(color, hero);
     p.char.owner = p;
     players.push(p);
     return p;
@@ -29,7 +33,7 @@ window.Coop = (() => {
 
   function addBot() {
     const i = players.length - 1;
-    const p = addPlayer(BOT_NAMES[i % BOT_NAMES.length], players.length % 4);
+    const p = addPlayer(BOT_NAMES[i % BOT_NAMES.length], players.length % 4, BOT_HEROES[i % BOT_HEROES.length]);
     p.bot = { slot: i, shootT: 0 };
     bots.add(p);
     return p;

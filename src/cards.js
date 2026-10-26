@@ -61,7 +61,7 @@ window.BossCards = (function () {
     kicker: { ru: 'ТРОФЕЙ ЗОЛОТОГО МЯСНИКА', en: 'GOLDEN BUTCHER\'S TROPHY' },
     kicker_pounder: { ru: 'ТРОФЕЙ МЕЖПРОСТРАНСТВЕННОГО ДОЛБИЛЬЩИКА', en: 'THE INTERDIMENSIONAL POUNDER\'S TROPHY' },
     remember: { ru: 'Запомни карты…', en: 'Remember the cards…' },
-    ready: { ru: 'Запомнил? Кликни мышью — Михалыч начнёт тасовать', en: 'Got them? Click to let Mikhalych shuffle' },
+    ready: { ru: 'Запомнил{|а}? Кликни мышью — Михалыч начнёт тасовать', en: 'Got them? Click to let Mikhalych shuffle' },
     shuffle: { ru: 'Михалыч тасует…', en: 'Mikhalych shuffles…' },
     pick: { ru: 'Тяни одну карту', en: 'Draw one card' },
     accept: { ru: 'ПРИНЯТЬ', en: 'ACCEPT' }
@@ -172,7 +172,7 @@ window.BossCards = (function () {
     (async () => {
       // Карты легли — ждём, пока игрок запомнит и кликнет (раньше 0,8 с клик не считается: мог остаться от боя)
       await wait(800);
-      $('cards-sub').textContent = tx('ready');
+      $('cards-sub').textContent = gendered(tx('ready'));
       await waitClick();
       $('cards-sub').textContent = '';
       els.forEach(el => el.classList.add('flipped'));

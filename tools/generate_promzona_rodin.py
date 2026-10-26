@@ -27,7 +27,12 @@ KEY = os.environ.get('RODIN_API_KEY', 'vibecoding')
 sys.path.insert(0, os.path.dirname(__file__))
 from rodin_download import download  # noqa: E402
 
-# имя: (габарит [длина, глубина, высота] — как PZ_MODELS в src/environment.js, подсказка)
+# Настройки качества: tier Rodin, граней в quad-сетке, предел картинки в КБ (14 — для рабочей сети, где длинные
+# загрузки обрываются; больше — если сеть позволяет, иначе после трёх попыток уходит маленькая)
+DEFAULT_Q = ('Regular', 18000, 14)
+HERO_Q = ('Detail', 40000, 150)
+
+# имя: (габарит [длина, глубина, высота] — как PZ_MODELS в src/environment.js, подсказка[, качество])
 MODELS = {
     'building_foundry':       ([70, 35, 28], 'abandoned Soviet foundry hall with sawtooth skylight roof'),
     'building_mech_workshop': ([55, 25, 15], 'abandoned Soviet brick mechanical workshop with large windows'),
@@ -75,6 +80,13 @@ MODELS = {
     'survivor_tolik':     ([1.0, 0.5, 1.78], 'full body game character, wiry welder with a welding mask on his forehead holding a flare pistol and a crowbar pointing down, A-pose'),
     'survivor_lena':      ([0.8, 0.45, 1.66], 'full body game character, young female lab assistant in a white lab coat with a red first-aid bag, A-pose'),
     'survivor_seryoga':   ([0.8, 0.45, 1.75], 'full body game character, young skinny mechanic in blue overalls with a bandaged leg, A-pose'),
+    # Герои коопа (docs/COOP.md, «Герои»): Т-поза с пустыми руками — руки отрезаются, тело садится на скелет и руки
+    # Василия (tools/build_heroes_blender.py). Качество выше обычного: tier Detail, 40 тыс. граней, картинка до 150 КБ
+    'hero_bruiser':  ([1.9, 0.6, 1.95], 'full body game character, huge heavy man with shaved head in a dark blue tracksuit with white stripes, flat cap, gold chain, strict T-pose with arms straight out to the sides, open empty hands', HERO_Q),
+    'hero_kid':      ([1.8, 0.45, 1.82], 'full body game character, lanky teenage boy in an oversized grey hoodie, baggy jeans, backwards cap, headphones around the neck, strict T-pose with arms straight out to the sides, open empty hands', HERO_Q),
+    'hero_punk':     ([1.6, 0.4, 1.62], 'full body game character, small goth girl in a black cat-ear hat, black hair, choker, leather corset over fishnet, black mini skirt with chains, fishnet tights, platform boots, strict T-pose with arms straight out to the sides, open empty hands', HERO_Q),
+    'hero_skier':    ([1.75, 0.45, 1.78], 'full body game character, athletic young woman in a fitted red ski jacket, white knit hat with pompon, long dark braid, black leggings, ski boots, strict T-pose with arms straight out to the sides, open empty hands', HERO_Q),
+    'hero_sergeant': ([1.75, 0.45, 1.76], 'full body game character, young woman police sergeant in a grey-blue Soviet militia winter jacket with shoulder boards, peaked cap with red band, blond bob, radio on the shoulder, holster belt, boots, strict T-pose with arms straight out to the sides, open empty hands', HERO_Q),
 }
 
 
@@ -86,14 +98,14 @@ def curl_json(args, timeout=60):
         return {'error': res.stdout[:300] or res.stderr[:300]}
 
 
-def prep(name):
-    webp = os.path.join(CONCEPTS, name + '_14k.webp')
+def prep(name, kb=14):
+    webp = os.path.join(CONCEPTS, name + f'_{kb}k.webp')
     if not os.path.exists(webp):
         from PIL import Image
         src = os.path.join(CONCEPTS, name + '.png')
         w, h = Image.open(src).size  # концепт целиком (кадр из Gemini бывает не 1024)
         subprocess.run([sys.executable, os.path.join(ROOT, 'tools', 'prep_rodin_concept.py'),
-                        src, CONCEPTS, name, str(w), str(h)], check=True)
+                        src, CONCEPTS, name, str(w), str(h), str(kb)], check=True)
     return webp
 
 
@@ -102,19 +114,20 @@ def submit(name):
     if os.path.exists(task_path):
         with open(task_path, encoding='utf-8') as f:
             return json.load(f)
-    (length, depth, height), prompt = MODELS[name]
+    (length, depth, height), prompt = MODELS[name][:2]
+    tier, faces, kb = MODELS[name][2] if len(MODELS[name]) > 2 else DEFAULT_Q
     # Rodin принимает только целые: пропорции в долях наибольшей стороны ×100
     big = max(length, depth, height)
     bbox = [max(1, round(v / big * 100)) for v in (length, height, depth)]
-    webp = prep(name)
     for attempt in range(5):
+        webp = prep(name, kb if attempt < 3 else 14)   # большая картинка не ушла — пробуем маленькую
         data = curl_json(['-X', 'POST', f'{API}/rodin', '-H', f'Authorization: Bearer {KEY}',
-                          '-F', f'images=@{webp}', '-F', 'tier=Regular', '-F', 'material=PBR',
-                          '-F', 'mesh_mode=Quad', '-F', 'quality_override=18000',
-                          '-F', f'bbox_condition={json.dumps(bbox)}', '-F', f'prompt={prompt}'])
+                          '-F', f'images=@{webp}', '-F', f'tier={tier}', '-F', 'material=PBR',
+                          '-F', 'mesh_mode=Quad', '-F', f'quality_override={faces}',
+                          '-F', f'bbox_condition={json.dumps(bbox)}', '-F', f'prompt={prompt}'], timeout=180)
         if data.get('uuid') and data.get('jobs', {}).get('subscription_key'):
-            task = {'uuid': data['uuid'], 'subscription_key': data['jobs']['subscription_key'], 'tier': 'Regular',
-                    'bbox': bbox}
+            task = {'uuid': data['uuid'], 'subscription_key': data['jobs']['subscription_key'], 'tier': tier,
+                    'bbox': bbox, 'faces': faces, 'image': os.path.basename(webp)}
             with open(task_path, 'w', encoding='utf-8') as f:
                 json.dump(task, f, indent=2)
             print(f'[sent] {name}: {task["uuid"]} bbox {bbox}', flush=True)

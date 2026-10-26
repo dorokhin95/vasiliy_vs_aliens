@@ -1100,9 +1100,19 @@ function nameForms(name) {
   return NAME_FORMS[name];
 }
 
-// Текст для своего игрока: в коопе со своим именем — «Василий» в нём меняется на это имя в нужном падеже
+// Род в тексте под героя игрока (src/heroes.js): «нашёл{|а}» — мужской|женский вариант; who — о ком текст
+function gendered(text, who) {
+  if (typeof text !== 'string' || text.indexOf('{') < 0) return text;
+  let fem = false;
+  try { fem = typeof heroDef === 'function' && heroDef((who || localPlayer).hero).f; } catch (e) { /* игрок ещё не создан */ }
+  return text.replace(/\{([^{}|]*)\|([^{}|]*)\}/g, (m, a, b) => (fem ? b : a));
+}
+
+// Текст для своего игрока: род — под его героя, в коопе со своим именем — «Василий» в нём меняется на это
+// имя в нужном падеже
 function personalize(text) {
   if (typeof text !== 'string') return text;
+  text = gendered(text);
   let name, many;
   try { name = (localPlayer.name || '').trim(); many = players.length > 1; } catch (e) { return text; } // игрок ещё не создан
   if (!name || name === 'Василий' || name === 'Vasiliy' || !many) return text;
@@ -2489,7 +2499,7 @@ function playerDown() {
   player.isMoving = false;
   player.isRolling = false;
   player.reloadingWeapon = null;
-  addFloatingText(player.x - 30, player.y - 60, currentLang === 'ru' ? `${player.name || 'Василий'} упал!` : `${player.name || 'Vasiliy'} is down!`, '#ef4444');
+  addFloatingText(player.x - 30, player.y - 60, currentLang === 'ru' ? gendered(`${player.name || 'Василий'} упал{|а}!`, player) : `${player.name || 'Vasiliy'} is down!`, '#ef4444');
   checkAllDown();
 }
 
@@ -2525,7 +2535,7 @@ function updateDowned() {
     me.downT = 0;
     me.dead = true;
     me.helpCall = false;
-    addFloatingText(me.x - 30, me.y - 60, currentLang === 'ru' ? `${me.name || 'Василий'} погиб` : `${me.name || 'Vasiliy'} is dead`, '#94a3b8');
+    addFloatingText(me.x - 30, me.y - 60, currentLang === 'ru' ? gendered(`${me.name || 'Василий'} погиб{|ла}`, me) : `${me.name || 'Vasiliy'} is dead`, '#94a3b8');
     checkAllDown();
   }
 }
@@ -3764,7 +3774,7 @@ window.dropItem = netAction('drop', function(kind, id, all) {
     dropLoot('weapon:' + id, 1, { img: weaponImg(id), ammo: clip });
     applyHotbarOrder();
   }
-  addFloatingText(player.x - 30, player.y - 50, currentLang === 'ru' ? 'Выкинул' : 'Dropped', '#94a3b8');
+  addFloatingText(player.x - 30, player.y - 50, currentLang === 'ru' ? gendered('Выкинул{|а}') : 'Dropped', '#94a3b8');
   updateHUD(true);
 });
 
@@ -10696,7 +10706,8 @@ function drawPlayerTag(ctx, p) {
   const lying = p.downT > 0 || p.dead;
   if (p !== localPlayer) {
     const label = p.dead ? `✝ ${p.name}` : p.name;
-    const ly = p.y - (lying ? 58 : 82);
+    const hk = p.char && p.char.k ? p.char.k.height / 1.9 : 1;   // герой выше Василия — подпись выше
+    const ly = p.y - (lying ? 58 : 82 * hk);
     ctx.strokeText(label, p.x, ly);
     ctx.fillStyle = p.dead ? '#94a3b8' : color;
     ctx.fillText(label, p.x, ly);

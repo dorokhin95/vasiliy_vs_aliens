@@ -18,6 +18,7 @@ window.Net = (() => {
   const RU = () => currentLang === 'ru';
   const L = (ru, en) => (RU() ? ru : en);
   const NAME_KEY = 'vasiliy.coopName';
+  const HERO_KEY = 'vasiliy.coopHero';   // кем играть (src/heroes.js)
   const VIEW_R = 1700;          // жабы и эффекты дальше от Василия клиента ему не шлются
 
   let ws = null;
@@ -25,7 +26,7 @@ window.Net = (() => {
   let myNet = -1;               // id соединения на сервере (хост — 0)
   let started = false;
   let recording = false;        // хост: идёт update() — звуки и рывки моделей пишутся для клиентов
-  const lobby = [];             // [{ net, name, color }]
+  const lobby = [];             // [{ net, name, color, hero }]
   const byNet = new Map();      // net id → игрок (хост)
   const sent = new Map();       // net id → { key → строка поля }: что клиент уже знает
   const queue = [];             // клиент: снимки, пришедшие с прошлого кадра
@@ -188,9 +189,12 @@ window.Net = (() => {
       myNet = m.id;
       if (role === 'host') {
         lobby.length = 0;
-        lobby.push({ net: 0, name: myName(), color: 0 });
+        lobby.push({ net: 0, name: myName(), color: 0, hero: myHero() });
         renderLobby();
-      } else if (!m.host) setStatus(L('Хоста пока нет — подожди, пока кто-то создаст игру', 'No host yet — wait for someone to create a game'));
+      } else {
+        send({ t: 'hero', hero: myHero() });   // кем хочу играть — хосту, он проверит, что свободен
+        if (!m.host) setStatus(L('Хоста пока нет — подожди, пока кто-то создаст игру', 'No host yet — wait for someone to create a game'));
+      }
       return;
     }
     if (role === 'host') hostMessage(m);
@@ -206,7 +210,13 @@ window.Net = (() => {
       // Одинаковые имена — с номером: по имени игрок потом находит своего Василия в сохранении
       let name = (m.name || 'Василий').slice(0, 16);
       for (let k = 2; lobby.some(x => x.name === name); k++) name = `${(m.name || 'Василий').slice(0, 13)} ${k}`;
-      lobby.push({ net: m.from, name, color: [0, 1, 2, 3].find(c => !used.has(c)) });
+      lobby.push({ net: m.from, name, color: [0, 1, 2, 3].find(c => !used.has(c)), hero: freeHero(null, lobby.map(x => x.hero)) });
+      broadcastLobby();
+    } else if (m.t === 'hero') {
+      // Игрок выбрал героя в лобби: если свободен — его; в идущей игре героя не сменить
+      const x = lobby.find(e => e.net === m.from);
+      if (started || !x || !HEROES.some(h => h.id === m.hero) || lobby.some(e => e !== x && e.hero === m.hero)) return;
+      x.hero = m.hero;
       broadcastLobby();
     } else if (m.t === 'leave') {
       const i = lobby.findIndex(x => x.net === m.from);
@@ -218,7 +228,7 @@ window.Net = (() => {
         p.dead = true;
         p.left = true;
         p.netId = null;
-        addFloatingText(p.x - 40, p.y - 70, L(`${p.name} отключился`, `${p.name} left`), '#94a3b8');
+        addFloatingText(p.x - 40, p.y - 70, L(gendered(`${p.name} отключил{ся|ась}`, p), `${p.name} left`), '#94a3b8');
         byNet.delete(m.from);
       }
       sent.delete(m.from);
@@ -257,12 +267,12 @@ window.Net = (() => {
       if (players.some(x => !x.left && x.name === name)) { sendTo(m.from, { t: 'full', msg: 'name' }); return; }
       if (players.filter(x => !x.left).length >= 4) { sendTo(m.from, { t: 'full', msg: 'full' }); return; }
       const used = new Set(players.filter(x => !x.left).map(x => x.color));
-      p = window.Coop.addPlayer(name, [0, 1, 2, 3].find(c => !used.has(c)));
+      p = window.Coop.addPlayer(name, [0, 1, 2, 3].find(c => !used.has(c)), freeHero(null, players.filter(x => !x.left).map(x => x.hero)));
       p.id = players.indexOf(p);
       withPlayer(p, () => {
         resetPlayerState();
         const rec = savedRecs[name];
-        if (rec) { applyRecord(rec); delete savedRecs[name]; } else p.wasDead = false;
+        if (rec) { applyRecord(rec); reskin(p, rec.hero); delete savedRecs[name]; } else p.wasDead = false;
       });
     }
     p.left = false;
@@ -279,7 +289,16 @@ window.Net = (() => {
     sendTo(m.from, { t: 'start', you: p.id, list, loc: currentLocation });
     byNet.forEach((o, net) => { if (net !== m.from) sendTo(net, { t: 'roster', list }); });
   }
-  const rosterList = () => players.map(p => ({ id: p.id, name: p.name, color: p.color }));
+  const rosterList = () => players.map(p => ({ id: p.id, name: p.name, color: p.color, hero: p.hero }));
+
+  // Герой из сохранения (он там свой у каждого имени): другая модель
+  function reskin(p, hero) {
+    if (!hero || hero === p.hero || !HEROES.some(h => h.id === hero)) return;
+    p.hero = hero;
+    p.char = new ThreeCharacterManager(p.color, hero);
+    p.char.owner = p;
+    if (p === localPlayer) window.threeCharacter = p.char;
+  }
 
   // --- Сохранение коопа (Menu.saveRun у хоста): общий мир + игроки по именам ---
   let savedRecs = {};   // из загруженного сохранения — кого пока нет в игре
@@ -289,7 +308,7 @@ window.Net = (() => {
     players.forEach(p => withPlayer(p, () => {
       const r = snap();
       recs[p.name] = {
-        name: p.name, color: p.color, dead: p.left ? !!p.wasDead : !!p.dead, freeUpgrade: !!p.freeUpgrade,
+        name: p.name, color: p.color, hero: p.hero, dead: p.left ? !!p.wasDead : !!p.dead, freeUpgrade: !!p.freeUpgrade,
         run: { player: r.player, workshop: r.workshop, canteen: r.canteen }
       };
     }));
@@ -508,11 +527,12 @@ window.Net = (() => {
     me.id = 0;
     me.name = lobby[0].name;
     me.color = lobby[0].color;
+    reskin(me, lobby[0].hero);
     players.push(me);
     if (window.Coop) window.Coop.bots.clear();
     byNet.clear();
     lobby.slice(1).forEach(x => {
-      const p = window.Coop.addPlayer(x.name, x.color);
+      const p = window.Coop.addPlayer(x.name, x.color, x.hero);
       p.id = players.indexOf(p);
       p.netId = x.net;
       byNet.set(x.net, p);
@@ -528,7 +548,7 @@ window.Net = (() => {
       players.forEach(p => withPlayer(p, () => {
         resetPlayerState();
         const rec = savedRecs[p.name];
-        if (rec) { applyRecord(rec); delete savedRecs[p.name]; }
+        if (rec) { applyRecord(rec); reskin(p, rec.hero); delete savedRecs[p.name]; }
       }));
       if (currentLocation !== 'city') placePlayersOnArrival(null);
       if (localPlayer.pendingCards) cardOfferTimer = 90;
@@ -578,7 +598,7 @@ window.Net = (() => {
       // Кто-то вошёл в идущую игру
       m.list.forEach(x => {
         let p = players[x.id];
-        if (!p) { p = window.Coop.addPlayer(x.name, x.color); p.id = x.id; }
+        if (!p) { p = window.Coop.addPlayer(x.name, x.color, x.hero); p.id = x.id; }
       });
     }
     else if (m.t === 's') { queue.push(m); lastSnap = m; }
@@ -601,14 +621,15 @@ window.Net = (() => {
         p = me;
         p.name = x.name;
         p.color = x.color;
-        if (x.color !== 0) {
-          p.char = new ThreeCharacterManager(x.color);
+        p.hero = x.hero || 'vasiliy';
+        if (x.color !== 0 || p.hero !== 'vasiliy') {
+          p.char = new ThreeCharacterManager(x.color, p.hero);
           p.char.owner = p;
           window.threeCharacter = p.char;
         }
         players.push(p);
       } else {
-        p = window.Coop.addPlayer(x.name, x.color);
+        p = window.Coop.addPlayer(x.name, x.color, x.hero);
       }
       p.id = x.id;
     });
@@ -796,6 +817,30 @@ window.Net = (() => {
   function setName(n) {
     try { localStorage.setItem(NAME_KEY, n); } catch (e) { /* не сохранится — не страшно */ }
   }
+  function myHero() {
+    let h = '';
+    try { h = localStorage.getItem(HERO_KEY) || ''; } catch (e) { /* без хранилища — Василий */ }
+    return HEROES.some(x => x.id === h) ? h : 'vasiliy';
+  }
+  function setMyHero(h) {
+    try { localStorage.setItem(HERO_KEY, h); } catch (e) { /* не сохранится — не страшно */ }
+  }
+  // Герой новому в лобби или в игре: кого хочет, если никто не взял, иначе первый свободный
+  function freeHero(want, taken) {
+    const used = new Set(taken);
+    if (want && !used.has(want) && HEROES.some(x => x.id === want)) return want;
+    return (HEROES.find(x => !used.has(x.id)) || HEROES[0]).id;
+  }
+  // Выбор героя в лобби: хост — себе и всем в список, клиент — просьбой хосту; до входа — просто запоминаем
+  function pickHero(id) {
+    setMyHero(id);
+    if (role === 'host' && lobby[0] && !started) {
+      if (lobby.some(x => x !== lobby[0] && x.hero === id)) return;
+      lobby[0].hero = id;
+      broadcastLobby();
+    } else if (role === 'client' && ws) send({ t: 'hero', hero: id });
+    else renderLobby();
+  }
 
   let panel = null;
   function buildLobby() {
@@ -816,6 +861,7 @@ window.Net = (() => {
       <div class="coop-box">
         <h2>${L('Кооп по локальной сети', 'LAN co-op')}</h2>
         <label class="coop-row">${L('Имя', 'Name')} <input id="coop-name" maxlength="16" autocomplete="off"></label>
+        <div class="coop-heroes" id="coop-heroes"></div>
         <div class="coop-row coop-buttons">
           <button class="btn-action" id="coop-host">${L('Создать игру', 'Host a game')}</button>
           <button class="btn-action" id="coop-join">${L('Подключиться', 'Join')}</button>
@@ -835,6 +881,10 @@ window.Net = (() => {
     nameEl.value = myName();
     nameEl.addEventListener('input', () => setName(nameEl.value.trim().slice(0, 16)));
     nameEl.addEventListener('keydown', e => e.stopPropagation());
+    panel.querySelector('#coop-heroes').addEventListener('click', e => {
+      const card = e.target.closest('.coop-hero');
+      if (card && !card.classList.contains('taken')) pickHero(card.dataset.hero);
+    });
     panel.querySelector('#coop-host').addEventListener('click', () => { if (!ws) { setStatus(L('Создаём…', 'Creating…')); connect('host'); } });
     panel.querySelector('#coop-join').addEventListener('click', () => { if (!ws) { setStatus(L('Подключаемся…', 'Joining…')); connect('client'); } });
     panel.querySelector('#coop-start').addEventListener('click', () => hostStart(null));
@@ -905,7 +955,16 @@ window.Net = (() => {
   function renderLobby() {
     if (!panel) return;
     const list = panel.querySelector('#coop-list');
-    list.innerHTML = lobby.map(x => `<div class="coop-player"><span class="coop-dot" style="background:${COOP_COLORS[x.color]}"></span>${escapeHtml(x.name)}${x.net === myNet ? L(' (ты)', ' (you)') : ''}${x.net === 0 ? L(' — хост', ' — host') : ''}</div>`).join('');
+    list.innerHTML = lobby.map(x => `<div class="coop-player"><span class="coop-dot" style="background:${COOP_COLORS[x.color]}"></span>${escapeHtml(x.name)} <span class="coop-who">${L(heroDef(x.hero).ru, heroDef(x.hero).en)}</span>${x.net === myNet ? L(' (ты)', ' (you)') : ''}${x.net === 0 ? L(' — хост', ' — host') : ''}</div>`).join('');
+    // Герои (src/heroes.js): карточки; занятые другими — серые, с именем, кто взял
+    const mine = lobby.find(x => x.net === myNet);
+    const want = mine ? mine.hero : myHero();
+    panel.querySelector('#coop-heroes').innerHTML = HEROES.map(h => {
+      const by = lobby.find(x => x.hero === h.id && x !== mine);
+      const tip = L(h.about_ru, h.about_en) + (by ? ` — ${by.name}` : '');
+      return `<div class="coop-hero${h.id === want ? ' mine' : ''}${by ? ' taken' : ''}" data-hero="${h.id}" title="${escapeHtml(tip)}">` +
+        `<img src="assets/sprites/heroes/${h.id}.webp?v=1" alt="" onerror="this.style.visibility='hidden'"><span>${L(h.ru, h.en)}</span></div>`;
+    }).join('');
     panel.querySelector('#coop-start').style.display = role === 'host' ? '' : 'none';
     // Сохранённый сетевой забег (у хоста): кто в нём был
     const save = role === 'host' && window.Menu ? window.Menu.loadCoop() : null;

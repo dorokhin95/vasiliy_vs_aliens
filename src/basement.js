@@ -207,8 +207,16 @@ window.Basement = (function () {
 
   // --- Что рядом с Василием (game.js: nearbyInteractable) ---
   const near = (pt, r) => Math.hypot(player.x - pt.x, player.y + FOOT_DY.player - pt.y) < r;
+  // Логово — часть Новохмуринска после спасения (docs/LEVEL2_PROMZONA.md, раздел 7): двери подвалов появляются,
+  // когда выжившие ушли в город через пролом (оборона пройдена), вместе с постом, мастерской и столовой.
+  // Экономика города на обстановку не рассчитана — её первые уровни идут из запаса Промзоны (docs/BALANCE.md)
+  function unlocked() {
+    return !!(window.Defense && window.Defense.stage === 'done');
+  }
+
   function nearest() {
     if (currentLocation === 'city') {
+      if (!unlocked()) return null;
       if (state.house !== null) {
         const d = myDoor();
         return d && near({ x: d.x, y: d.y + 14 }, 58) ? { type: 'basement_door', door: d.i } : null;
@@ -338,7 +346,7 @@ window.Basement = (function () {
     const got = [];
     if (lv('sofa') >= 2) { b.rested = dur; got.push(T(BUFF_NAMES.rested)); }
     if (lv('stove') >= 1) { b.warm = dur; got.push(T(BUFF_NAMES.warm)); }
-    addFloatingText(player.x - 60, player.y - 56, L('Отдохнул', 'Rested') + (got.length ? `: ${got.join(', ')}` : ''), '#86efac');
+    addFloatingText(player.x - 60, player.y - 56, L(gendered('Отдохнул{|а}'), 'Rested') + (got.length ? `: ${got.join(', ')}` : ''), '#86efac');
     createParticles(player.x, player.y - 10, '#bbf7d0', 14);
     updateHUD(true);
     if (window.Menu) window.Menu.requestSave();
@@ -434,7 +442,7 @@ window.Basement = (function () {
       if (f.id === 'sofa' && n) {
         const b = document.createElement('button');
         b.className = 'shop-buy-btn bm-act';
-        b.textContent = player.basementRested ? L('Уже отдохнул', 'Already rested') : L('Отдохнуть', 'Rest');
+        b.textContent = player.basementRested ? L(gendered('Уже отдохнул{|а}'), 'Already rested') : L('Отдохнуть', 'Rest');
         b.disabled = !!player.basementRested;
         b.onclick = () => rest();
         btns.append(b);
@@ -549,7 +557,7 @@ window.Basement = (function () {
 
   // Двери подвалов на фасадах (город, после домов): у своей — лампа и надпись
   function drawDoors(ctx) {
-    if (currentLocation !== 'city') return;
+    if (currentLocation !== 'city' || !unlocked()) return;
     const ds = doors();
     const vx0 = camera.x - 60, vx1 = camera.x + viewW + 60, vy0 = camera.y - 60, vy1 = camera.y + viewH + 60;
     ds.forEach(d => {
@@ -602,7 +610,7 @@ window.Basement = (function () {
   function places() {
     const out = [];
     if (currentLocation === 'city') {
-      const d = myDoor();
+      const d = unlocked() ? myDoor() : null;
       if (d) out.push({ x: d.x, y: d.y, kind: 'lair' });
     } else if (currentLocation === 'basement') {
       const e = exitPoint();

@@ -16,8 +16,10 @@ const COOP_VATNIK = [null, [0.55, 0.95, 2.6], [1.9, 0.45, 0.45], [3.0, 1.45, 0.3
 const COOP_COLORS = ['#a3b18a', '#60a5fa', '#f87171', '#fb923c'];
 
 class ThreeCharacterManager {
-  constructor(color = 0) {
+  // hero — кто это (src/heroes.js): модель hero_<id>.glb и мерки; Василий — vasiliy.glb с перекраской ватника
+  constructor(color = 0, hero = 'vasiliy') {
     this.color = color;
+    this.hero = hero;
     this.isLoaded = false;
     this.loadFailed = false;
     this.width = 160;
@@ -117,6 +119,11 @@ class ThreeCharacterManager {
     this.loadModel();
   }
 
+  // Мерки героя относительно Василия: рост, ширина (kx) и высота плеч (kz, dz) — src/heroes.js
+  get k() {
+    return typeof heroMetrics === 'function' ? heroMetrics(this.hero) : { height: 1.9, kx: 1, kz: 1, dz: 0 };
+  }
+
   loadModel() {
     if (typeof THREE.GLTFLoader === 'undefined') {
       setTimeout(() => this.loadModel(), 200);
@@ -124,12 +131,15 @@ class ThreeCharacterManager {
     }
 
     const loader = new THREE.GLTFLoader();
-    const modelUrl = 'assets/models/vasiliy.glb?v=1030';
+    const modelUrl = this.hero === 'vasiliy' ? 'assets/models/vasiliy.glb?v=1030' : `assets/models/hero_${this.hero}.glb?v=1`;
     loader.load(
       modelUrl,
       (gltf) => {
         this.model = gltf.scene;
 
+        // Пояс героя — по его росту: вокруг него крутится перекат
+        this.pivotHeight = 0.90 * this.k.kz;
+        this.rollPivot.position.set(0, this.pivotHeight, 0);
         // Offset model down by pivotHeight inside rollPivot so feet remain at world Y=0 when upright
         this.model.position.set(0, -this.pivotHeight, 0);
 
@@ -243,7 +253,7 @@ class ThreeCharacterManager {
         }
 
         this.rollPivot.add(this.model);
-        if (COOP_VATNIK[this.color]) this.tintVatnik(COOP_VATNIK[this.color]);
+        if (this.hero === 'vasiliy' && COOP_VATNIK[this.color]) this.tintVatnik(COOP_VATNIK[this.color]);
 
         // Initial weapon setup (default spiked bat)
         this.setWeapon('bat');
@@ -731,6 +741,12 @@ class ThreeCharacterManager {
       tipY = 1.215;
       tipZ = 1.140;
     }
+
+    // Герой другого роста и ширины: руки и стволы растянуты на kx (ширина и вперёд) и kz (рост), плечи выше на dz
+    const km = this.k;
+    tipX *= km.kx;
+    tipZ *= km.kx;
+    tipY = tipY * km.kz + km.dz;
 
     // 1. Rotate tip by Vasily's characterRoot rotation (targetRotation = -player.angle + Math.PI / 2)
     const rotY = -player.angle + Math.PI / 2;

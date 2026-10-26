@@ -14,7 +14,7 @@ window.Comic = (() => {
     },
     {
       img: 'assets/comic/intro_02.webp',
-      ru: 'Когда-то Василий был инженером НИИ. Он чертил будущее.',
+      ru: 'Когда-то Василий был{|а} инженером НИИ. Он{|а} чертил{|а} будущее.',
       en: 'Once, Vasiliy was an engineer at a research institute. He drew the future.'
     },
     {
@@ -54,7 +54,7 @@ window.Comic = (() => {
     },
     {
       img: 'assets/comic/intro_10.webp',
-      ru: 'Жабий яд валил с ног любого. Но не того, кто тридцать лет пил «Тройной» одеколон.',
+      ru: 'Жабий яд валил с ног любого. Но не т{ого|у}, кто тридцать лет пил{|а} «Тройной» одеколон.',
       en: 'Toad venom brought down anyone. Anyone but a man who\'d been drinking cheap cologne for thirty years.'
     },
     {
@@ -64,14 +64,14 @@ window.Comic = (() => {
     },
     {
       img: 'assets/comic/intro_12.webp',
-      ru: 'Новохмуринск ещё не сдался. Пока жив хозяин теплотрассы.',
+      ru: 'Новохмуринск ещё не сдался. Пока жив{|а} {хозяин|хозяйка} теплотрассы.',
       en: 'Novokhmurinsk hasn\'t given up yet. Not while the master of the heating main still lives.'
     }
   ];
   const PROMZONA = [
     {
       img: 'assets/comic/promzona_01.webp',
-      ru: 'Забор, который держал жаб в городе, треснул. Василий доломал его сам.',
+      ru: 'Забор, который держал жаб в городе, треснул. Василий доломал{|а} его сам{|а}.',
       en: 'The fence that kept the toads in town had cracked. Vasiliy finished the job himself.'
     },
     {
@@ -81,7 +81,7 @@ window.Comic = (() => {
     },
     {
       img: 'assets/comic/promzona_03.webp',
-      ru: 'Жаб здесь хватало. После Мясника — мелочь, но патроны Василий берёг.',
+      ru: 'Жаб здесь хватало. После Мясника — мелочь, но патроны Василий берёг{|ла}.',
       en: 'There were plenty of toads here. Small fry after the Butcher, but Vasiliy was saving his ammo.'
     },
     {
@@ -101,12 +101,12 @@ window.Comic = (() => {
     },
     {
       img: 'assets/comic/promzona_07.webp',
-      ru: '— За забором чисто, я город зачистил. Уходите к пролому. Я прикрою.',
+      ru: '— За забором чисто, я город зачистил{|а}. Уходите к пролому. Я прикрою.',
       en: '"It\'s clear beyond the fence, I cleaned up the town. Head for the hole in the wall. I\'ll cover you."'
     },
     {
       img: 'assets/comic/promzona_08.webp',
-      ru: 'Жабы шли со всего завода. Хозяин теплотрассы встал за баррикаду.',
+      ru: 'Жабы шли со всего завода. {Хозяин|Хозяйка} теплотрассы встал{|а} за баррикаду.',
       en: 'Toads were coming from all over the factory. The master of the heating main took his place at the barricade.'
     }
   ];

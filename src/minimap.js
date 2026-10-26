@@ -223,14 +223,14 @@ window.Minimap = (() => {
     panel.style.display = show ? 'block' : 'none';
     if (!show) return;
     if (me.dead) {
-      panel.querySelector('h3').textContent = L('ТЫ ПОГИБ', 'YOU DIED');
+      panel.querySelector('h3').textContent = L(gendered('ТЫ ПОГИБ{|ЛА}'), 'YOU DIED');
       panel.querySelector('#down-time').textContent = L('Смотришь, как дерутся товарищи.', 'You are watching your teammates.');
       panel.querySelector('#down-what').textContent = '';
       helpBtn.style.display = 'none';
       return;
     }
     helpBtn.style.display = '';
-    panel.querySelector('h3').textContent = L('ТЫ УПАЛ', 'YOU ARE DOWN');
+    panel.querySelector('h3').textContent = L(gendered('ТЫ УПАЛ{|А}'), 'YOU ARE DOWN');
     const sec = Math.ceil(me.downT / 60);
     panel.querySelector('#down-time').textContent = me.reviving
       ? L('Тебя поднимают… таймер стоит', 'You are being revived… timer paused')

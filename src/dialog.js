@@ -92,7 +92,7 @@ window.Dialog = (function () {
     lena: {
       role: ['Лаборантка · столовая', 'Lab assistant · canteen'],
       greet: [
-        ['Василий! Цел? Дай посмотрю… Ладно, живой.', 'Vasiliy! In one piece? Let me look… Fine, you\'ll live.'],
+        ['Василий! Цел{|а}? Дай посмотрю… Ладно, жив{ой|ая}.', 'Vasiliy! In one piece? Let me look… Fine, you\'ll live.'],
         ['Котёл кипит. Проголодаешься — скажи.', 'The pot is boiling. Get hungry — just say.']
       ],
       about: [
@@ -117,11 +117,11 @@ window.Dialog = (function () {
       ],
       about: [
         ['Слесарь я. Был. Год как из ПТУ — и на тебе, жабы.', 'I\'m a fitter. Was. A year out of trade school — and then, toads.'],
-        ['Кислотой ногу обожгло, когда из механического выбирались. Если б не ты — там бы и остался. Спасибо, что перевязал.', 'Acid burned my leg when we were getting out of the machine shop. If not for you, I\'d have stayed there. Thanks for patching me up.']
+        ['Кислотой ногу обожгло, когда из механического выбирались. Если б не ты — там бы и остался. Спасибо, что перевязал{|а}.', 'Acid burned my leg when we were getting out of the machine shop. If not for you, I\'d have stayed there. Thanks for patching me up.']
       ],
       stories: [
         ['Я в ночную видел: градирня светилась фиолетовым. Думал — мерещится. А Коля, начальник караула, пошёл проверить…', 'On a night shift I saw a cooling tower glowing purple. Thought I was seeing things. And Kolya, the head guard, went to check…'],
-        ['Михалыч говорит, ты Мясника битой уложил. Правда, что ли?', 'Mikhalych says you took down the Butcher with a bat. For real?'],
+        ['Михалыч говорит, ты Мясника битой уложил{|а}. Правда, что ли?', 'Mikhalych says you took down the Butcher with a bat. For real?'],
         ['Степаныч ворчит, а сам по ночам жаб считает — не спит.', 'Stepanych grumbles, but he counts toads all night — never sleeps.'],
         ['Говорят, у Михалыча в ларьке есть всё. Даже то, чего нет.', 'They say Mikhalych\'s kiosk has everything. Even things that don\'t exist.']
       ]
