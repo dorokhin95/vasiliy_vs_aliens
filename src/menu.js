@@ -106,7 +106,7 @@ window.Menu = (() => {
         ['4–9', 'Оружие (перетащи на другую ячейку — поменяются местами)'],
         ['ПКМ', 'Способность: горючая жижа / рывок / гиперрегенерация'],
         ['F', 'Сменить способность на ПКМ'],
-        ['M', 'Миникарта'],
+        ['M', 'Карта локации: туман, метки, радар'],
         ['H', 'Кооп: упал — позвать на помощь'],
         ['I', 'Инвентарь'],
         ['C', 'Персонаж: характеристики, перки, карты'],
@@ -177,7 +177,7 @@ window.Menu = (() => {
         ['4–9', 'Weapons (drag onto another slot to swap them)'],
         ['RMB', 'Ability: burning goo / dash / hyper-regeneration'],
         ['F', 'Switch the RMB ability'],
-        ['M', 'Minimap'],
+        ['M', 'Location map: fog, markers, radar'],
         ['H', 'Co-op: downed — call for help'],
         ['I', 'Inventory'],
         ['C', 'Character: stats, perks, cards'],
@@ -298,6 +298,8 @@ window.Menu = (() => {
       canteen: window.Canteen ? window.Canteen.saveState() : undefined,
       // Логово Василия: чей подвал, обстановка, запасы (src/basement.js)
       basement: window.Basement ? window.Basement.saveState() : undefined,
+      // Карта: открытые клетки тумана по локациям и метки игрока (src/worldmap.js)
+      worldmap: window.WorldMap ? window.WorldMap.saveState() : undefined,
       worlds,
       player: {
         hp: round2(player.hp),
@@ -882,6 +884,7 @@ window.Menu = (() => {
     if (settingsOpen()) closeSettings();
     else if (gameState === 'SHOP') closeShop();
     else if (gameState === 'INVENTORY') window.CharacterPanel.close();
+    else if (gameState === 'MAP') window.WorldMap.close();
     else if (gameState === 'DIALOG') window.Dialog.close();
     else if (gameState === 'WORKSHOP') window.Workshop.close();
     else if (gameState === 'CANTEEN') window.Canteen.close();

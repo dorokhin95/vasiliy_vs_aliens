@@ -5,7 +5,7 @@
  *    дороги и дома рядом, свой Василий в середине (куда смотрит), товарищи — точками своего цвета, упавшие —
  *    красным кольцом, погибшие — крестиком; важные места: ларёк Михалыча, пролом, логово босса, пост,
  *    мастерская и столовая спасённых, оборона у пролома. Кто и что дальше края — на ободе, в свою сторону.
- *    M — крупнее (и дальше видно) / спрятать / снова мелко (запоминается).
+ *    Мелко / крупно (и дальше видно) / спрятана — кнопкой в окне карты (M, src/worldmap.js); запоминается.
  *  - Свой Василий упал: панель внизу — сколько осталось, что делать товарищу, кнопка «Позвать на помощь» (H).
  *  - Товарищ позвал: у остальных — окно «Петя зовёт на помощь — 120 м» со стрелкой и стрелка у края экрана.
  *
@@ -110,12 +110,14 @@ window.Minimap = (() => {
     if (window.Settlers && window.Settlers.places) window.Settlers.places().forEach(p => list.push([p.x, p.y, p.kind]));
     // Логово (src/basement.js): своя дверь в городе, выход из подвала, радио «ВЭФ» в Промзоне
     if (window.Basement) window.Basement.places().forEach(p => list.push([p.x, p.y, p.kind]));
+    // Метки игрока с карты (src/worldmap.js)
+    if (window.WorldMap) window.WorldMap.markers().forEach(p => list.push([p.x, p.y, p.kind]));
     if (currentLocation === 'promzona' && window.Defense && window.Defense.stage !== 'done' && window.Defense.stage !== 'pending')
       list.push([window.Defense.center.x, window.Defense.center.y, 'defense']);
     return list;
   }
   const ICON = { kiosk: '🏪', breach: '🚧', boss: '💀', post: '⛺', workshop: '🔧', canteen: '🍲', defense: '🛡',
-    lair: '🏠', exit: '🚪', radio: '📻' };
+    lair: '🏠', exit: '🚪', radio: '📻', mark: '📍' };
 
   let tick = 0;
   function drawMap(t) {
@@ -125,7 +127,7 @@ window.Minimap = (() => {
     if (!size || gameState === 'MENU') return;
     if (canvas.width !== size) { canvas.width = canvas.height = size; canvas.style.width = canvas.style.height = size + 'px'; }
     hint.style.top = (15 + size + 4) + 'px';
-    hint.textContent = L(`M — ${mode === 0 ? 'крупнее' : 'спрятать'}`, `M — ${mode === 0 ? 'bigger' : 'hide'}`);
+    hint.textContent = L('M — карта', 'M — map');
     const key = `${currentLocation}|${buildings.length}|${roads.length}`;
     if (key !== staticKey) { staticKey = key; staticCanvas = buildStatic(); }
 
@@ -340,5 +342,12 @@ window.Minimap = (() => {
     updateCalls();
   }
 
-  return { frame, toggle };
+  // Подложка всей локации (1 px = 1/STATIC_K мира) и места — для окна карты (src/worldmap.js)
+  function staticImage() {
+    const key = `${currentLocation}|${buildings.length}|${roads.length}`;
+    if (key !== staticKey) { staticKey = key; staticCanvas = buildStatic(); }
+    return staticCanvas;
+  }
+
+  return { frame, toggle, mode: () => mode, staticImage, places, ICON };
 })();

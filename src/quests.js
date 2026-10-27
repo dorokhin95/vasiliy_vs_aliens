@@ -580,6 +580,10 @@ window.Quests = (function () {
       (document.getElementById('game-container') || document.body).appendChild(tracker);
     }
     const list = gameState === 'PLAYING' ? lines() : [];
+    // Под полосками здоровья и выносливости (и брони, когда она есть), а не поверх них
+    const hud = document.querySelector('.hud');
+    const top = hud ? hud.offsetTop + hud.offsetHeight + 8 : 96;
+    if (tracker._top !== top) { tracker._top = top; tracker.style.top = top + 'px'; }
     const key = currentLang + list.map(l => l.title + l.text).join('|');
     tracker.style.display = list.length ? 'block' : 'none';
     if (tracker.dataset.key === key) return;

@@ -2562,6 +2562,11 @@ window.addEventListener('keydown', (e) => {
     else if (gameState === 'SHOP') closeShop();
   }
 
+  // M — карта локации с метками и туманом (src/worldmap.js); та же клавиша закрывает
+  if (e.code === 'KeyM' && window.WorldMap && (gameState === 'PLAYING' || gameState === 'MAP')) {
+    window.WorldMap.toggle();
+    return;
+  }
   // I — инвентарь, C — персонаж, J — журнал заданий (src/inventory.js); та же клавиша закрывает
   const panelTab = { KeyI: 'inventory', KeyC: 'stats', KeyJ: 'quests' }[e.code];
   if (panelTab && window.CharacterPanel && (gameState === 'PLAYING' || gameState === 'INVENTORY')) {
@@ -2575,7 +2580,6 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'KeyQ') cycleWeapon();
     if (e.code === 'KeyF') cycleRmbAbility();
     if (e.code === 'KeyH') callForHelp();          // кооп: упал — позвать товарищей
-    if (e.code === 'KeyM' && window.Minimap) window.Minimap.toggle();
     // Цифры 1–9 — видимые слоты хотбара по порядку (порядок игрок меняет перетаскиванием)
     const digit = /^Digit[1-9]$/.test(e.code) ? Number(e.code.slice(5)) : 0;
     if (digit) {
@@ -2931,6 +2935,8 @@ function startGame(save = null, loc = null) {
   }
   if (window.Settlers) window.Settlers.loadState(save ? save.settlers : undefined);
   if (window.Quests) window.Quests.loadState(save ? save.quests : undefined);
+  // Карта: что открыто и метки (src/worldmap.js)
+  if (window.WorldMap) window.WorldMap.loadState(save ? save.worldmap : undefined);
   // Мастерская Толика: новый забег — с чистого листа (сохранённую загружает Menu.applyRun до патронов)
   if (window.Workshop && !save) window.Workshop.loadState(undefined);
   // В Промзоне купола Михалыча нет — после загрузки Василий у пролома; в подвале — у лестницы
@@ -10078,7 +10084,7 @@ function updateInteractPrompt() {
 
 
 // Состояния, в которых мир сетевого коопа живёт дальше: у игрока открыто меню, а остальные играют
-const NET_LIVE_STATES = new Set(['PLAYING', 'PAUSED', 'INVENTORY', 'SHOP', 'WORKSHOP', 'CANTEEN', 'BASEMENT', 'DIALOG', 'CARDS']);
+const NET_LIVE_STATES = new Set(['PLAYING', 'PAUSED', 'INVENTORY', 'SHOP', 'WORKSHOP', 'CANTEEN', 'BASEMENT', 'DIALOG', 'CARDS', 'MAP']);
 function worldLive() {
   return gameState === 'PLAYING' || (!!window.Net && window.Net.started && NET_LIVE_STATES.has(gameState));
 }
@@ -11273,6 +11279,7 @@ function render() {
   drawLastEnemyMarkers();
   drawBreachMarker();
   if (window.Minimap) window.Minimap.frame(ctx); // миникарта, зов на помощь (src/minimap.js)
+  if (window.WorldMap) window.WorldMap.frame(ctx); // туман открывается, флажки и стрелки к меткам, окно карты (src/worldmap.js)
 }
 
 // Когда жаб осталось мало, у края экрана стрелки показывают, где они: иначе последнюю
