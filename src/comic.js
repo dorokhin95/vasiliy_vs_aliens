@@ -116,9 +116,9 @@ window.Comic = (() => {
   const POUNDER = [
     {
       img: 'assets/comic/pounder_intro.webp',
-      // Это Коля, начальник караула ВОХР (docs/LEVEL2_PROMZONA.md, «Разговоры и квесты»): имя называет Зина, не кадр
-      ru: 'Межпространственный Долбильщик. Когда-то — начальник караула ВОХР. Он первым пошёл к градирням на фиолетовый свет.',
-      en: 'The Interdimensional Pounder. Once the head of the plant guard. He was the first to walk toward the purple light at the cooling towers.'
+      // Это Санька, слесарь ПГТО 3 разряда (docs/LEVEL2_PROMZONA.md, «Разговоры и квесты»); бушлат ВОХР ему отдала Зина
+      ru: 'Межпространственный Долбильщик. Когда-то — Санька, слесарь ПГТО 3 разряда. Он первым пошёл к градирням на фиолетовый свет.',
+      en: 'The Interdimensional Pounder. Once Sanka, a grade-3 turbine fitter. He was the first to walk toward the purple light at the cooling towers.'
     }
   ];
   const SETS = {

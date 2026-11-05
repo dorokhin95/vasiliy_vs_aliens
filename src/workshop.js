@@ -52,7 +52,7 @@ window.Workshop = (function () {
   const EMP_MAX = 2;                 // больше электроники на карте нет
   const EMP_R = 650;                 // накрывает всю арену Долбильщика (барьер — 600 px)
   const EMP_FRAMES = 60 * 60;
-  const ARC_CELL = 60 * 12;          // кадров дуги на одну плазменную ячейку
+  const ARC_CELL = 60 * 8;           // кадров дуги на одну плазменную ячейку (было 12 с — одной хватало на всех)
   const LAUNCHER_RANGE = 450, LAUNCHER_BLAST = 90;
   const EMP_RANGE = 420;
 

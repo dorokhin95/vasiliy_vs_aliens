@@ -159,7 +159,7 @@ window.CharacterPanel = (function () {
     if (player.unlockedWeapons.shotgun || sg.reserve > 0) {
       ammo.push(withDrop(cell('assets/sprites/loot/ammo_12g.png', L('Патроны 12 калибра', '12-gauge shells'), `${sg.clip} + ${sg.reserve}`), 'ammo', 'shotgun'));
     }
-    // Наган Зины (квест «Коля»)
+    // Наган Зины (квест «Санька»)
     if (player.unlockedWeapons.nagant || player.ammo.nagant.reserve > 0) {
       const ng = player.ammo.nagant;
       ammo.push(withDrop(cell('assets/sprites/loot/ammo_762n.png?v=1', L('Патроны 7,62 к нагану', '7.62 Nagant rounds'), `${ng.clip} + ${ng.reserve}`), 'ammo', 'nagant'));

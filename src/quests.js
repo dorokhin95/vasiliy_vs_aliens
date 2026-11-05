@@ -148,29 +148,30 @@ window.Quests = (function () {
       where: ['Заводоуправление, кассовый сейф', 'Plant administration, the vault'],
       find: { district: 'pz_admin', types: ['safe_vault'], n: 1 },
       offer: [
-        ['Оружейка наша, ВОХРовская, — кассовый сейф в заводоуправлении, мы его туда от проходной перенесли. Патроны, аптечка, журнал караула. Ключи у Коли были, а Коли нет.', 'Our guard armory is a vault in the admin building — we moved it there from the gate. Ammo, a first-aid kit, the guard log. Kolya had the keys, and Kolya\'s gone.'],
+        ['Оружейка наша, ВОХРовская, — кассовый сейф в заводоуправлении, мы его туда от проходной перенесли. Патроны, аптечка, журнал караула. Ключи у начальника караула были, а его с первого дня не видно.', 'Our guard armory is a vault in the admin building — we moved it there from the gate. Ammo, a first-aid kit, the guard log. The head of the guard had the keys, and he\'s been gone since day one.'],
         ['Замок кодовый, пять цифр. Вскроешь — патроны и бинты твои. Мне только журнал принеси.', 'It\'s a combination lock, five digits. Crack it — the ammo and bandages are yours. Just bring me the log.']
       ],
       accepted: ['Сейф тяжёлый, кассовый. Не спеши — пять цифр подобрать надо.', 'It\'s a heavy vault. Don\'t rush — five digits to work out.'],
       progress: ['Кассовый сейф в заводоуправлении. Журнал караула там.', 'The vault in the admin building. The guard log is in there.'],
       turnIn: ['Вот журнал караула', 'Here\'s the guard log'],
-      done: ['Последняя запись Колина: «Ушёл к градирням, там свет. Буду к утру». Не пришёл… На, держи — это из нашей заначки. Заслужил{|а}.', 'Kolya\'s last entry: "Went to the cooling towers, there\'s a light. Back by morning." He never came… Here, take this — from our stash. You\'ve earned it.']
+      done: ['Последняя запись — моей рукой: «02:40. Слесарь ПГТО Санька — к градирням, проверить свет». Обратно не отмечен… На, держи — это из нашей заначки. Заслужил{|а}.', 'The last entry is in my hand: "02:40. Turbine fitter Sanka — to the cooling towers, check the light." Never signed back in… Here, take this — from our stash. You\'ve earned it.']
     },
     {
+      // id и иконка — с тех пор, как Долбильщиком был Коля: id хранят сохранения
       id: 'zina_kolya', giver: 'zina', reward: 'nagant', boss: true, icon: 'quest_kolya_pass',
-      title: ['Коля', 'Kolya'],
-      item: ['Пропуск Коли', 'Kolya\'s pass'],
+      title: ['Санька', 'Sanka'],
+      item: ['Пропуск Саньки', 'Sanka\'s pass'],
       where: ['Логово у градирен: одолеть Долбильщика, забрать пропуск', 'The lair by the cooling towers: defeat the Pounder, take the pass'],
       offer: [
-        ['Видел{|а} того, у градирен? Здоровый, с кувалдой. А на плече — наша нашивка, ВОХР. Я её Коле сама пришивала.', 'Have you seen the one by the cooling towers? Huge, with a sledgehammer. And on his shoulder — our guard patch. I sewed it on for Kolya myself.'],
-        ['Это Коля, Василий. Был Коля. Отпусти его… А пропуск его принеси — он всегда в нагрудном кармане носил. Хочу, чтобы хоть что-то осталось.', 'That\'s Kolya, Vasiliy. Used to be. Let him go… And bring me his pass — he always kept it in his breast pocket. I want something of him to remain.']
+        ['Видел{|а} того, у градирен? Здоровый, с кувалдой. А на плече — наша нашивка, ВОХР. Это мой бушлат запасной, я его Саньке отдала, нашивку сама пришивала.', 'Have you seen the one by the cooling towers? Huge, with a sledgehammer. And on his shoulder — our guard patch. That\'s my spare jacket, I gave it to Sanka — sewed the patch on myself.'],
+        ['Это Санька, Василий. Был Санька, слесарь ПГТО 3 разряда. Отпусти его… А пропуск его принеси — он всегда в нагрудном кармане носил. Хочу, чтобы хоть что-то осталось.', 'That\'s Sanka, Vasiliy. Used to be — turbine fitter, grade 3. Let him go… And bring me his pass — he always kept it in his breast pocket. I want something of him to remain.']
       ],
-      accepted: ['Он и раньше был самый сильный в карауле. Бинтов возьми побольше.', 'He was the strongest in the guard even before. Take plenty of bandages.'],
+      accepted: ['Он и раньше в цеху самый сильный был — фланцы на турбине в одиночку тянул. Бинтов возьми побольше.', 'He was the strongest in the shop even before — tightened turbine flanges on his own. Take plenty of bandages.'],
       // Долбильщик уже побеждён, когда Зина просит
       acceptedDown: ['Ты его уже… Значит, отмучился. Пропуск там, у логова, поищи.', 'You already… So his suffering is over. Look for the pass there, by the lair.'],
       progress: ['Логово у градирен. Пропуск — при нём.', 'His lair is by the cooling towers. The pass is on him.'],
-      turnIn: ['Вот Колин пропуск', 'Here\'s Kolya\'s pass'],
-      done: ['…Рябов Николай Петрович, начальник караула. На фото ещё с усами… Спасибо, Василий. Держи мой наган — пристрелянный. Мне из оружейки ТТ хватит. А ты береги себя.', '…Ryabov, Nikolai Petrovich, head of the guard. Still with his mustache in the photo… Thank you, Vasiliy. Take my Nagant — it\'s well zeroed. A TT from the armory is enough for me. And you take care of yourself.']
+      turnIn: ['Вот Санькин пропуск', 'Here\'s Sanka\'s pass'],
+      done: ['…Рябов Александр Петрович, слесарь ПГТО, третий разряд. На фото ещё с усами… Спасибо, Василий. Держи мой наган — пристрелянный. Мне из оружейки ТТ хватит. А ты береги себя.', '…Ryabov, Alexander Petrovich, turbine fitter, grade 3. Still with his mustache in the photo… Thank you, Vasiliy. Take my Nagant — it\'s well zeroed. A TT from the armory is enough for me. And you take care of yourself.']
     }
   ];
   const byId = {};

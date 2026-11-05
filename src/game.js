@@ -1313,7 +1313,7 @@ function makePlayer() {
     launcher: false,
     arc: false,
     emp: false,
-    nagant: false   // наган Зины — награда квеста «Коля» (src/quests.js)
+    nagant: false   // наган Зины — награда квеста «Санька» (src/quests.js)
   },
   ammo: {
     makarov: { clip: 8, maxClip: 8, reserve: 16, reloadTime: 80 },
@@ -2156,8 +2156,17 @@ function generatePromzonaLayout({ tryAddBuilding, placeContainer, pendingSpawns 
 // Респауна нет, врагов на локации меньше (69 вместо 83) — зато каждый крепче
 const ENEMY_HP_SCALE = 1.3;
 // Промзона — уровень 2: Василий приходит с перками, плазмой и мастерской (базовый урон 36–56, +20%),
-// поэтому жабы там крепче городских того же тира — время убийства как в городе (docs/BALANCE.md, «Бой в Промзоне»)
-const PZ_HP_SCALE = 1.5;
+// поэтому жабы там в 2,5 раза крепче городских того же тира и бьют в 1,5 раза сильнее — должно быть потно,
+// как в начале игры (docs/BALANCE.md, «Бой в Промзоне»). Боссов и жаб обороны у пролома не касается
+const PZ_HP_SCALE = 2.5;
+const PZ_DMG_SCALE = 1.5;
+
+// Множитель урона жабы e по Василию: рядовые жабы Промзоны бьют на PZ_DMG_SCALE, остальные — как есть
+function enemyDmgK(e) {
+  if (currentLocation !== 'promzona' || !e) return 1;
+  if (e.type === 'boss' || e.type === 'pounder' || e.defense) return 1;
+  return PZ_DMG_SCALE;
+}
 
 function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
   for (let attempt = 0; attempt < 30; attempt++) {
@@ -3396,7 +3405,7 @@ const SHOP_ARSENAL_ITEMS = [
     desc_en: 'Homemade from research-institute boards. Jams all electronics around for a minute — yours too.',
     zone_ru: '🔧 Мастерская Толика', zone_en: '🔧 Tolik\'s workshop', cost: {}
   },
-  // Наган Зины — награда квеста «Коля» (src/quests.js): здесь — только взять с собой или оставить
+  // Наган Зины — награда квеста «Санька» (src/quests.js): здесь — только взять с собой или оставить
   {
     id: 'nagant', type: 'weapon', weaponKey: 'nagant', cardOnly: true,
     img: 'assets/sprites/weapons/weapon_nagant.png?v=1',
@@ -4090,10 +4099,11 @@ const WEAPONS = {
   // Мастерская Толика (src/workshop.js): гранатомёт — урон взрыва в середине; разрядник — урон дуги за тик,
   // range — до первой жабы, chain — на сколько ещё перескакивает, chainR — как далеко
   launcher: { dmg: b => b * 1.5 + 54, cooldown: 30, pen: 1.0 },
-  // Наган Зины (квест «Коля»): сильнее и медленнее ПМ, пуля прошивает первую жабу (pierce) и бьёт следующую
+  // Наган Зины (квест «Санька»): сильнее и медленнее ПМ, пуля прошивает первую жабу (pierce) и бьёт следующую
   // слабее (pierceMult); барабан заряжается по патрону — player.ammo.nagant.reloadTime кадров на штуку
   nagant: { dmg: b => b * 1.4 + 28, cooldown: 24, pen: 0.5, pierce: 1, pierceMult: 0.75 },
-  arc: { dmg: b => b * 0.3 + 4, cooldown: 6, pen: 0.6, range: 150, chain: 2, chainR: 120 },
+  // Разрядник сварочный: достаёт ближе языка пехотинца (TONGUE_REACH 128) — жаба успевает ударить первой
+  arc: { dmg: b => b * 0.3 + 4, cooldown: 6, pen: 0.6, range: 100, chain: 2, chainR: 90 },
   chain: { pen: 1.0 },  // цепная молния перка «Аккумулятор от КАМАЗа»
   shock: { pen: 0.5 },  // ударная волна переката перка «Рука-перфоратор»
   thrown: { pen: 1.0 }  // предмет, брошенный громилой (бьёт и по своим)
@@ -5803,6 +5813,198 @@ const ST_SPREAD = 0.07;
 const ST_DAMAGE = { 2: 6, 3: 8, 4: 10 };
 const ST_STRAFE = 0.65;            // доля скорости, с которой ходит боком
 
+// --- УКРЫТИЕ И ПРИКЛАД: штурмовик на перегреве и ракетчик на перезарядке не стоят столбом ---
+// Ищут точку рядом, которую от Василия закрывает дом (пули сквозь дома не летят — checkBuildingCollision)
+// и куда можно дойти по прямой или обогнув один угол дома, и сидят там, пока оружие не готово. Негде прятаться
+// или Василий подошёл вплотную — бегут на него и бьют прикладом. Состояние — в e.cv, сбрасывается, когда
+// оружие снова готово
+const COVER_R = 360;                       // где искать укрытие вокруг жабы
+const COVER_STEP = 40;                     // шаг сетки точек-кандидатов
+const COVER_MIN_FROM_PLAYER = 160;         // ближе к Василию не прячется
+const COVER_PICK = 6;                      // из скольких найденных выбирать лучшее
+const COVER_CORNERS = 8;                   // ближайших углов домов, через которые можно обойти
+const COVER_RECHECK = 30;                  // кадров: проверить, что укрытие ещё закрывает от Василия
+const COVER_CORNERED = 120;                // Василий ближе — укрытие не спасёт, в ближний бой
+const BUTT_REACH = 12;                     // + радиусы обоих: удар прикладом
+const BUTT_DAMAGE = 9;                     // × PZ_DMG_SCALE в Промзоне (enemyDmgK)
+const BUTT_COOLDOWN = 60;
+const BUTT_KNOCK = 22;
+const CHARGE_SPEED = 1.2;                  // доля скорости при беге в ближний бой
+
+// Между (x1, y1) и (x2, y2) стоит дом (координаты — по земле, у жабы это e.y + footDY).
+// walls — дома, среди которых искать (coverRects: габарит и прямоугольники силуэта); без них — все дома карты
+function wallBetween(x1, y1, x2, y2, walls = null) {
+  const n = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 18));
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t;
+    if (!walls) {
+      if (checkBuildingCollision(x, y, 3)) return true;
+      continue;
+    }
+    for (let j = 0; j < walls.length; j++) {
+      const w = walls[j], bb = w.box;
+      if (x + 3 <= bb.x || x - 3 >= bb.x + bb.w || y + 3 <= bb.y || y - 3 >= bb.y + bb.h) continue;
+      for (let k = 0; k < w.rects.length; k++) {
+        const r = w.rects[k];
+        if (x + 3 > r.x && x - 3 < r.x + r.w && y + 3 > r.y && y - 3 < r.y + r.h) return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Дома вокруг жабы и Василия — поиск укрытия смотрит только их, а не всю карту
+function coverRects(e) {
+  checkBuildingCollision(-1e5, -1e5, 1);   // силуэты домов (b.cols) считаются при первой проверке
+  const x1 = Math.min(e.x - COVER_R, player.x) - 60, x2 = Math.max(e.x + COVER_R, player.x) + 60;
+  const y1 = Math.min(e.y - COVER_R, player.y) - 60, y2 = Math.max(e.y + COVER_R, player.y) + 60;
+  const out = [];
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    if (b.noCollide) continue;
+    const bb = b.colBox || b.col || b;
+    if (bb.x > x2 || bb.x + bb.w < x1 || bb.y > y2 || bb.y + bb.h < y1) continue;
+    out.push({ box: bb, rects: b.cols || [b.col || b] });
+  }
+  return out;
+}
+
+// Углы домов рядом с жабой (с отступом, чтобы прошла), ближайшие COVER_CORNERS — через них обходят дом
+function nearCorners(e) {
+  const pad = e.radius + 10, fy = footDY(e);
+  const out = [];
+  for (let i = 0; i < buildings.length; i++) {
+    const b = buildings[i];
+    if (b.noCollide) continue;
+    const bb = b.colBox || b.col || b;
+    if (Math.abs(bb.x + bb.w / 2 - e.x) > 500 || Math.abs(bb.y + bb.h / 2 - e.y) > 500) continue;
+    const rects = b.cols || [b.col || b];
+    for (const r of rects) {
+      for (let k = 0; k < 4; k++) {
+        const sx = k & 1 ? 1 : -1, sy = k & 2 ? 1 : -1;
+        const x = (sx < 0 ? r.x : r.x + r.w) + sx * pad, y = (sy < 0 ? r.y : r.y + r.h) + sy * pad - fy;
+        if (!checkWalkCollision(x, y, e.radius, fy)) out.push({ x, y, d: Math.hypot(x - e.x, y - e.y) });
+      }
+    }
+  }
+  out.sort((p, q) => p.d - q.d);
+  return out.slice(0, COVER_CORNERS);
+}
+
+// Укрытие для жабы e от текущего игрока: путь (список точек) к точке, которую от Василия закрывает дом —
+// по прямой или через один угол. Кандидаты — сетка вокруг жабы, от ближних к дальним; из первых COVER_PICK
+// найденных — с самым коротким путём, подальше от Василия — чуть лучше. null — прятаться негде
+function findCover(e) {
+  const fy = footDY(e);
+  const walls = coverRects(e);
+  const cand = [];
+  for (let dy = -COVER_R; dy <= COVER_R; dy += COVER_STEP) {
+    for (let dx = -COVER_R; dx <= COVER_R; dx += COVER_STEP) {
+      const r = Math.hypot(dx, dy);
+      if (r < COVER_STEP || r > COVER_R) continue;
+      const x = e.x + dx, y = e.y + dy;
+      if (x < 60 || y < 60 || x > WORLD_WIDTH - 60 || y > WORLD_HEIGHT - 60) continue;
+      if (Math.hypot(player.x - x, player.y - y) < COVER_MIN_FROM_PLAYER) continue;
+      cand.push({ x, y, r });
+    }
+  }
+  cand.sort((p, q) => p.r - q.r);
+  let corners = null, best = null, bs = Infinity, found = 0;
+  for (const c of cand) {
+    if (checkWalkCollision(c.x, c.y, e.radius, fy)) continue;
+    if (!wallBetween(player.x, player.y, c.x, c.y + fy, walls)) continue;
+    let path = null, len = Infinity;
+    if (!wallBetween(e.x, e.y + fy, c.x, c.y + fy, walls)) {
+      path = [{ x: c.x, y: c.y }];
+      len = c.r;
+    } else {
+      if (!corners) corners = nearCorners(e);
+      for (const k of corners) {
+        const l = k.d + Math.hypot(c.x - k.x, c.y - k.y);
+        if (l >= len || l > COVER_R * 1.8) continue;
+        if (wallBetween(e.x, e.y + fy, k.x, k.y + fy, walls) || wallBetween(k.x, k.y + fy, c.x, c.y + fy, walls)) continue;
+        path = [{ x: k.x, y: k.y }, { x: c.x, y: c.y }];
+        len = l;
+      }
+    }
+    if (!path) continue;
+    const score = len - Math.hypot(player.x - c.x, player.y - c.y) * 0.25;
+    if (score < bs) { bs = score; best = path; }
+    if (++found >= COVER_PICK) break;
+  }
+  return best;
+}
+
+// Ход жабы, пока оружие не готово: прячется за дом или бежит в ближний бой
+function hideOrCharge(e, distToPlayer, angle, eSpeed) {
+  const C = e.cv || (e.cv = { mode: null, path: null, t: 0, butt: 0, stuck: 0 });
+  if (C.butt > 0) C.butt--;
+  e.gunPose = 'rest';
+  if (!C.mode) {
+    const path = findCover(e);
+    if (path) { C.mode = 'cover'; C.path = path; C.t = COVER_RECHECK; }
+    else C.mode = 'charge';
+  }
+  if (C.mode === 'cover') {
+    if (distToPlayer < COVER_CORNERED) {
+      C.mode = 'charge';
+    } else {
+      if (--C.t <= 0) {
+        C.t = COVER_RECHECK;
+        // Василий обошёл — укрытие больше не закрывает: искать новое
+        const goal = C.path[C.path.length - 1];
+        if (!wallBetween(player.x, player.y, goal.x, goal.y + footDY(e))) {
+          const path = findCover(e);
+          if (path) C.path = path; else C.mode = 'charge';
+        }
+      }
+      if (C.mode === 'cover') {
+        const to = C.path[0];
+        const dx = to.x - e.x, dy = to.y - e.y, d = Math.hypot(dx, dy);
+        if (d > 4) {
+          e.angle = Math.atan2(dy, dx);
+          const k = Math.min(eSpeed * 1.1, d) / d;
+          const bx = e.x, by = e.y;
+          slideMove(e, dx * k, dy * k, e.radius, true);
+          // Упёрся — путь не годится: искать заново
+          if (Math.hypot(e.x - bx, e.y - by) < eSpeed * 0.15) {
+            if (++C.stuck > 20) {
+              C.stuck = 0;
+              const path = findCover(e);
+              if (path) C.path = path; else C.mode = 'charge';
+            }
+          } else C.stuck = 0;
+        } else if (C.path.length > 1) {
+          C.path.shift();
+        } else {
+          e.angle = angle;   // сидит за углом, смотрит в сторону Василия
+        }
+        if (C.mode === 'cover') return;
+      }
+    }
+  }
+  // Ближний бой: бежит на Василия и бьёт прикладом
+  e.angle = angle;
+  const reach = player.radius + e.radius + BUTT_REACH;
+  if (distToPlayer > reach) {
+    slideMove(e, Math.cos(angle) * eSpeed * CHARGE_SPEED, Math.sin(angle) * eSpeed * CHARGE_SPEED, e.radius, true);
+  } else if (C.butt <= 0) {
+    C.butt = BUTT_COOLDOWN;
+    if (!player.isRolling && !playerDodged()) {
+      const dmg = Math.round(BUTT_DAMAGE * enemyDmgK(e));
+      player.hp -= armorAbsorb(dmg, 'melee');
+      addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
+      createParticles(player.x, player.y - 14, '#f472b6', 6);
+      slideMove(player, Math.cos(angle) * BUTT_KNOCK, Math.sin(angle) * BUTT_KNOCK, player.radius);
+      SoundFX.batSwing('flesh');
+      if (player.hp <= 0) gameOver();
+    } else {
+      SoundFX.batSwing(false);
+    }
+  }
+}
+
 function updateStormtrooper(e, distToPlayer, angle, eSpeed) {
   if (e.heat === undefined) {
     e.heat = 0;
@@ -5825,12 +6027,12 @@ function updateStormtrooper(e, distToPlayer, angle, eSpeed) {
   }
 
   if (e.overheat > 0) {
-    // Остывает: автомат опущен, пар из радиаторов, от Василия пятится
-    e.gunPose = 'rest';
+    // Остывает: автомат опущен, пар из радиаторов; прячется за дом или бежит бить прикладом (hideOrCharge)
     e.overheat--;
     if (e.overheat % 4 === 0) spawnSteam(gunMuzzle(e));
-    if (distToPlayer < ST_RANGE_MIN + 40) slideMove(e, -cos * eSpeed * 0.6, -sin * eSpeed * 0.6, e.radius, true);
+    hideOrCharge(e, distToPlayer, angle, eSpeed);
     if (e.overheat === 0) {
+      e.cv = null;
       e.heat = 0;
       e.burstLeft = ST_BURST;
       e.shootCooldown = 20;
@@ -5897,7 +6099,7 @@ function stormtrooperShot(e) {
     x: m.x, y: m.y,
     vx: Math.cos(a) * ST_BULLET_SPEED, vy: Math.sin(a) * ST_BULLET_SPEED,
     angle: a, radius: 5, kind: 'plasma',
-    damage: ST_DAMAGE[e.tier] || ST_DAMAGE[3]
+    damage: Math.round((ST_DAMAGE[e.tier] || ST_DAMAGE[3]) * enemyDmgK(e))
   });
   muzzleFlashes.push({ x: m.x, y: m.y, angle: a, type: 'toad_plasma', life: 3, maxLife: 3, scale: 0.8 });
   spawnDirectionalSparks(m.x, m.y, a, 0.5, 3, '#f0abfc', 3, 7, 8);
@@ -5980,18 +6182,13 @@ function updateRocketeer(e, distToPlayer, angle, eSpeed) {
   if (e.fireKick > 0) e.fireKick--;
 
   if (R.phase === 'reload') {
-    // Пусковая пуста: опускает её и уходит от Василия
-    e.gunPose = 'rest';
+    // Пусковая пуста: прячется за дом или, если прижали, бьёт прикладом (hideOrCharge)
     if (--R.t <= 0) {
       R.phase = 'ready';
       R.t = 30;
+      e.cv = null;
     }
-    if (distToPlayer < RK_RANGE_MAX + 150) {
-      e.angle = angle + Math.PI;
-      slideMove(e, -cos * eSpeed, -sin * eSpeed, e.radius, true);
-    } else {
-      e.angle = angle;
-    }
+    hideOrCharge(e, distToPlayer, angle, eSpeed);
     return;
   }
 
@@ -6060,7 +6257,7 @@ function launchRocket(e, target) {
     mx: m.x, my: m.y, fx, fy, tx: target.x, ty: target.y,
     t: 0, T: Math.round(26 + d / 12), peak: 50 + d * 0.18,
     x: m.x, y: m.y, prevX: m.x, prevY: m.y, gx: fx, gy: fy,
-    dmg: RK_DAMAGE[e.tier] || RK_DAMAGE[3]
+    dmg: Math.round((RK_DAMAGE[e.tier] || RK_DAMAGE[3]) * enemyDmgK(e))
   });
   const a = Math.atan2(target.y - m.y, target.x - m.x);
   muzzleFlashes.push({ x: m.x, y: m.y, angle: a, type: 'shotgun', life: 4, maxLife: 4, scale: 0.7 });
@@ -6890,7 +7087,7 @@ function updateGruntTongue(e, distToPlayer, angle, slowed) {
     if (distToSegment(tg.x, tg.y, m.x, m.y, tipX, tipY) < player.radius + 4) {
       L.hit = true;
       if (playerDodged()) return true;
-      const dmg = Math.round(TONGUE_DAMAGE + (e.tier || 1) * 1.6);
+      const dmg = Math.round((TONGUE_DAMAGE + (e.tier || 1) * 1.6) * enemyDmgK(e));
       player.hp -= armorAbsorb(dmg, 'melee');
       addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
       createParticles(player.x, player.y - 14, '#f472b6', 8);
@@ -7210,13 +7407,14 @@ function landThrowable(f) {
   placeObstacleFor(o, f.kind);
 
   const hitR = def.radius + 26;
+  const dmg = Math.round(def.dmg * enemyDmgK(f.thrower));
   forEachPlayer(() => {
     if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR && !playerDodged()) {
-      player.hp -= armorAbsorb(def.dmg, 'melee');
+      player.hp -= armorAbsorb(dmg, 'melee');
       const a = Math.atan2(player.y - y, player.x - x);
       slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
       createParticles(player.x, player.y, '#ef4444', 12);
-      addFloatingText(player.x, player.y - 30, `-${def.dmg}`, '#ef4444');
+      addFloatingText(player.x, player.y - 30, `-${dmg}`, '#ef4444');
       if (player.hp <= 0) gameOver();
     }
   });
@@ -10419,7 +10617,7 @@ function update() {
         const facing = Math.abs(angleDelta(angle, e.angle)) < 1.3;
         if (facing && !e.throwState && distToPlayer < player.radius + e.radius && !player.isRolling) {
           const tierMult = 1 + (e.tier || 1) * 0.22;
-          player.hp -= armorAbsorb(1.65 * tierMult, 'melee');
+          player.hp -= armorAbsorb(1.65 * tierMult * enemyDmgK(e), 'melee');
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
         }
@@ -10432,7 +10630,7 @@ function update() {
         if (distToPlayer < player.radius + e.radius && !player.isRolling) {
           // Усиленный контактный урон по тирам зоны!
           const tierMult = 1 + (e.tier || 1) * 0.22;
-          const dmg = 0.78 * tierMult;
+          const dmg = 0.78 * tierMult * enemyDmgK(e);
           player.hp -= armorAbsorb(dmg, 'melee');
           createParticles(player.x, player.y, '#ef4444', 3);
           if (player.hp <= 0) gameOver();
@@ -10476,7 +10674,7 @@ function update() {
           const m = gunMuzzle(e);
           const shotA = Math.atan2(player.y - 12 - m.y, player.x - m.x);
           const ebSpeed = e.tier >= 3 ? 10.8 : 9.6;
-          const shotDmg = e.tier >= 4 ? 38 : (e.tier === 3 ? 30 : 22);
+          const shotDmg = Math.round((e.tier >= 4 ? 38 : (e.tier === 3 ? 30 : 22)) * enemyDmgK(e));
           enemyBullets.push({
             x: m.x,
             y: m.y,

@@ -108,7 +108,7 @@ class ThreeCharacterManager {
     this.launcherObj = null; // гранатомёт — в руках на месте обреза
     this.arcObj = null;      // сварочный разрядник — на месте дрели
     this.empObj = null;      // ЭМИ-граната — в руке, где пистолет
-    this.nagantObj = null;   // наган Зины (квест «Коля») — на месте ПМ, длиннее его по стволу
+    this.nagantObj = null;   // наган Зины (квест «Санька») — на месте ПМ, длиннее его по стволу
     this.nagantTipZ = 0;     // насколько дуло нагана дальше дула ПМ (getMuzzlePosition)
     this.armLDown = null;
     this.armRPistol = null;

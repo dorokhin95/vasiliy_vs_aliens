@@ -4,7 +4,7 @@
 // варианты ответа (1–9 или мышью). ESC — закрыть.
 // Темы: «Расскажи о себе» (несколько страниц), «Что слышно на заводе?» (подсказки, по одной за раз, по кругу),
 // «Есть работа?» (выдача и сдача квестов — src/quests.js), у Толика и Лены — мастерская и столовая,
-// у Зины после оружейки — «Про Колю», «Бывай». У Серёги работы нет — он рассказывает истории.
+// у Зины после оружейки — «Про Саньку», «Бывай». У Серёги работы нет — он рассказывает истории.
 // Портреты — нарисованы в Gemini по листу выживших, у каждого свой фон (tools/make_survivor_portraits.py).
 // Скрипты обычные, без модулей: gameState, keys, mouseDown, currentLang — из game.js.
 window.Dialog = (function () {
@@ -54,7 +54,7 @@ window.Dialog = (function () {
       about: [
         ['Двадцать лет на проходной. Пропуска, досмотр, несунов ловила — всех знаю, кто тут работал.', 'Twenty years at the gate. Passes, searches, catching thieves — I know everyone who ever worked here.'],
         ['Наган мне от деда достался. В ВОХРе другой выдали, а я свой носила — привычнее.', 'The revolver was my granddad\'s. The guard service issued me another, but I carried mine — feels right.'],
-        ['Напарник у меня был, Коля. Начальник караула. Как градирни засветились — пошёл посмотреть. С тех пор не видела.', 'I had a partner, Kolya. Head of the guard. When the cooling towers lit up, he went to take a look. Haven\'t seen him since.']
+        ['Санька у нас был, слесарь ПГТО 3 разряда. Каждую смену ко мне на проходную чай пить заходил. Как градирни засветились — пошёл посмотреть, это ж его хозяйство. С тех пор не видела.', 'We had Sanka, a turbine fitter, grade 3. Came by my gate for tea every shift. When the cooling towers lit up, he went to take a look — they were his patch. Haven\'t seen him since.']
       ],
       rumors: [
         ['Снайперы ихние на рампах складов сидят. По открытому не бегай — перебежками.', 'Their snipers sit on the warehouse ramps. Don\'t run across open ground — dash from cover to cover.'],
@@ -63,10 +63,10 @@ window.Dialog = (function () {
       ],
       work: true,
       // Открывается, когда сдана «Оружейка ВОХР»
-      extra: ['armory', ['Про Колю', 'About Kolya'], [
-        ['Коля начальником караула был. Здоровый, громкий — на проходной его все боялись. А я знала: добрый он.', 'Kolya was head of the guard. Big, loud — everyone at the gate was scared of him. But I knew: he was kind.'],
-        ['Как градирни засветились, он один пошёл. Сказал: «Проверю, Зин, и назад». Не вернулся.', 'When the cooling towers lit up, he went alone. Said: "I\'ll check it out, Zin, and come right back." He never did.'],
-        ['Серёга говорит, по заводу теперь ходит кто-то с молотом. В бушлате нашем, ВОХРовском, с полосами… Не хочу думать, что это он.', 'Seryoga says someone with a hammer walks the plant now. In our guard jacket, with the stripes… I don\'t want to think it\'s him.']
+      extra: ['armory', ['Про Саньку', 'About Sanka'], [
+        ['Санька слесарем на ПГТО был, третий разряд. Здоровый, громкий — в цеху его все боялись. А я знала: добрый он.', 'Sanka was a turbine fitter, grade 3. Big, loud — everyone in the shop was scared of him. But I knew: he was kind.'],
+        ['Как градирни засветились, он один пошёл. Сказал: «Гляну, Зин, и назад». Не вернулся.', 'When the cooling towers lit up, he went alone. Said: "I\'ll take a look, Zin, and come right back." He never did.'],
+        ['Серёга говорит, по заводу теперь ходит кто-то с молотом. В бушлате нашем, ВОХРовском, с полосами… Я Саньке свой запасной отдала — мёрз он в цеху. Не хочу думать, что это он.', 'Seryoga says someone with a hammer walks the plant now. In our guard jacket, with the stripes… I gave Sanka my spare one — he was always cold in the shop. I don\'t want to think it\'s him.']
       ]]
     },
     tolik: {
@@ -120,7 +120,7 @@ window.Dialog = (function () {
         ['Кислотой ногу обожгло, когда из механического выбирались. Если б не ты — там бы и остался. Спасибо, что перевязал{|а}.', 'Acid burned my leg when we were getting out of the machine shop. If not for you, I\'d have stayed there. Thanks for patching me up.']
       ],
       stories: [
-        ['Я в ночную видел: градирня светилась фиолетовым. Думал — мерещится. А Коля, начальник караула, пошёл проверить…', 'On a night shift I saw a cooling tower glowing purple. Thought I was seeing things. And Kolya, the head guard, went to check…'],
+        ['Я в ночную видел: градирня светилась фиолетовым. Думал — мерещится. А Санька, слесарь ПГТО 3 разряда, пошёл проверить — градирни ж его хозяйство…', 'On a night shift I saw a cooling tower glowing purple. Thought I was seeing things. And Sanka, our turbine fitter, went to check — the towers were his patch…'],
         ['Михалыч говорит, ты Мясника битой уложил{|а}. Правда, что ли?', 'Mikhalych says you took down the Butcher with a bat. For real?'],
         ['Степаныч ворчит, а сам по ночам жаб считает — не спит.', 'Stepanych grumbles, but he counts toads all night — never sleeps.'],
         ['Говорят, у Михалыча в ларьке есть всё. Даже то, чего нет.', 'They say Mikhalych\'s kiosk has everything. Even things that don\'t exist.']
