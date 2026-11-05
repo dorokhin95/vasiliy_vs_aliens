@@ -3358,8 +3358,8 @@ const SHOP_ARSENAL_ITEMS = [
     img: 'assets/sprites/weapons/weapon_plasma.png?v=1026',
     name_ru: 'Трофейный Плазмаган «Тесла»',
     name_en: 'Trophy Alien Plasma Rifle',
-    desc_ru: 'Урон: 48 | Боезапас бесконечен! Нагревается (+16%/выстр.), при 100% — клин на 3 сек.',
-    desc_en: 'DMG: 48 | Infinite ammo! Builds heat (+16%/shot), overheats at 100% for 3s.',
+    desc_ru: 'Урон: 48 | Боезапас бесконечен! Бьёт на 11 м. Нагревается (+16%/выстр.), при 100% — клин на 3 сек.',
+    desc_en: 'DMG: 48 | Infinite ammo! Range 11 m. Builds heat (+16%/shot), overheats at 100% for 3s.',
     zone_ru: '🟣 Нужны Квако-ядра из угловых Квако-Гнёзд и жабьи глаза с печенью!',
     zone_en: '🟣 Requires Alien Cores from corner Toad Nests plus toad eyes and liver!',
     cost: { bottles: 30, scrap: 35, mil_parts: 6, alien_core: 5, toad_eye: 3, toad_liver: 2 }
@@ -4082,6 +4082,7 @@ function startReload() {
 // dmg(b) — урон за удар / выстрел / тик дрели от базового урона Василия b (у обреза — за одну дробину).
 // cooldown — кадры между атаками. pen — пробитие брони (0 — броня гасит всё, 1 — броня не мешает).
 // Те же числа показывает таблица баланса (F4), так что править — только здесь
+const PLASMA_LIFE = 20;      // кадров полёта заряда Плазмагана при скорости 22 — ~440 px
 const WEAPONS = {
   bat: { dmg: b => b + 2, cooldown: 22, pen: 0.2 },
   makarov: { dmg: b => b + 12, cooldown: 14, pen: 0.25 },
@@ -5079,8 +5080,10 @@ function shootPlayerWeapon() {
       isCrit: isCrit,
       weaponType: 'plasma',
       trailLen: 34,
-      life: 44,
-      maxLife: 44,
+      // ~440 px (11 м), дальше заряд гаснет: раньше летел ~970 px, как наган, и самое сильное оружие клало жаб
+      // раньше, чем они замечали Василия (агро 250–420 px). Ракетчик теперь бьёт дальше плазмы
+      life: PLASMA_LIFE,
+      maxLife: PLASMA_LIFE,
       color: isCrit ? '#f43f5e' : '#38bdf8'
     });
 
@@ -10409,6 +10412,8 @@ function update() {
     if (b.life !== undefined) {
       b.life--;
       if (b.life <= 0) {
+        // Заряд Плазмагана на излёте рассыпается искрами — видно, где кончается дальность
+        if (b.weaponType === 'plasma') spawnDirectionalSparks(b.x, b.y, Math.atan2(b.vy, b.vx), 1.2, 6, b.color, 2, 6, 10);
         bullets.splice(i, 1);
         continue;
       }
