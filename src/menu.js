@@ -350,6 +350,8 @@ window.Menu = (() => {
       enemyTotal: levelEnemyTotal,
       // Стаи рарников в Промзоне уже расставлены (src/elites.js): перебитые заново не появятся
       elites: currentLocation === 'promzona' ? 1 : undefined,
+      // Сила жаб Промзоны, под которую посчитано их здоровье (game.js PZ_BALANCE): старые подтягиваются при загрузке
+      pzBal: currentLocation === 'promzona' ? PZ_BALANCE : undefined,
       // Долбильщик есть только в Промзоне, как Мясник — только в городе
       pounderDefeated: currentLocation === 'promzona' && !pounderRef,
       pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp / (pounderRef.coopK || 1)), phase: pounderRef.phase, snipers: !!pounderRef.snipersCalled } : null,
@@ -609,6 +611,15 @@ window.Menu = (() => {
           shootCooldown: Math.random() * 70 + 45
         };
         if (d.el && window.Elites) window.Elites.restore(ne, d.el);
+        if (currentLocation === 'promzona') {
+          // Сохранение со старой силой жаб (до PZ_BALANCE) — здоровье подтягивается; защита по виду — заново
+          if (!(w.pzBal >= PZ_BALANCE)) {
+            const k = pzHpK(ne.type) / PZ_HP_SCALE_V1;
+            ne.maxHp = Math.round(ne.maxHp * k);
+            ne.hp = Math.round(ne.hp * k);
+          }
+          applyPzDefense(ne);
+        }
         enemies.push(ne);
       });
       levelEnemyTotal = Math.round(num(w.enemyTotal, enemies.length, 0, 1000));

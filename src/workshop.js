@@ -11,6 +11,7 @@
 //   - ЭМИ-граната (emp) — только из продвинутой электроники: она лежит в определённых сейфах Промзоны, её ровно
 //     на EMP_MAX гранат. Взрыв EMP_R: на EMP_FRAMES глохнут жабы с плазменным и лазерным оружием (снайперы,
 //     штурмовики) — e.empT, и у Василия Плазмаган, лазер и разрядник — player.empT. Зачем она — не говорится.
+//     Заодно гасит силовые поля жаб Промзоны (e.fieldOff, game.js applyPzDefense) и маскировку снайперов.
 // Скрипты обычные, без модулей: player, enemies, rockets, mouseWorld, SoundFX и прочее — из game.js.
 window.Workshop = (function () {
   const $ = id => document.getElementById(id);
@@ -479,8 +480,13 @@ window.Workshop = (function () {
     cameraKickY += (Math.random() - 0.5) * 10;
     let n = 0;
     enemies.forEach(e => {
-      if (e.hp <= 0 || !empTarget(e)) return;
-      if (!inGroundEllipse(e.x, e.y + footDY(e), x, y, EMP_R)) return;
+      if (e.hp <= 0 || !inGroundEllipse(e.x, e.y + footDY(e), x, y, EMP_R)) return;
+      // Силовое поле Промзоны (game.js applyPzDefense) гаснет и минуту не встаёт — у ракетчиков тоже
+      if (e.fieldMax) {
+        if (e.field > 0) breakPzField(e, -Math.PI / 2);
+        e.fieldOff = EMP_FRAMES;
+      }
+      if (!empTarget(e)) return;
       e.empT = EMP_FRAMES;
       e.gunPose = 'rest';
       n++;

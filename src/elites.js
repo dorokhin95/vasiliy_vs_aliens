@@ -208,6 +208,9 @@ let eliteHazards = [];   // лужи, облака, икринки в полёт
     // это главный выбор Промзоны (docs/BALANCE.md), раньше стаи добавляли ~38 к ~78 — открывалось почти всё.
     // Свита роняет как обычные жабы
     if (role === 'leader') e.bonusLoot = { nonferrous: 2, mil_parts: 2, [LEADER_TROPHY[e.type] || 'toad_leg']: 2 };
+    // Броня Промзоны (game.js applyPzDefense) — и свите; снайпер стаи не маскируется: стаю видно издалека
+    delete e.cloakV;
+    if (typeof applyPzDefense === 'function') applyPzDefense(e);
   }
 
   // Сохранение (src/menu.js): что записать о рарнике — и как поднять его из записи (данные — с проверкой)

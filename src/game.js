@@ -2159,8 +2159,290 @@ const ENEMY_HP_SCALE = 1.3;
 // Промзона — уровень 2: Василий приходит с перками, плазмой и мастерской (базовый урон 36–56, +20%),
 // поэтому жабы там в 2,5 раза крепче городских того же тира и бьют в 1,5 раза сильнее — должно быть потно,
 // как в начале игры (docs/BALANCE.md, «Бой в Промзоне»). Боссов и жаб обороны у пролома не касается
-const PZ_HP_SCALE = 2.5;
-const PZ_DMG_SCALE = 1.5;
+// Было ×2,5 и ×1,5 — тестеры проходили всю Промзону без прокачки после города. Теперь — ×4 и ×2,3,
+// и у каждого вида своя защита (applyPzDefense): одним стволом всех не взять
+const PZ_HP_SCALE = 4;
+const PZ_DMG_SCALE = 2.3;
+// Версия силы жаб в сохранении Промзоны (src/menu.js): жабы старых сохранений при загрузке подтягиваются
+const PZ_BALANCE = 2;
+const PZ_HP_SCALE_V1 = 2.5;
+// Громил держит броня, ракетчиков — поле: здоровья им поменьше (×3), иначе один громила — сотня выстрелов
+const PZ_HP_TYPE = { brute: 0.75, rocketeer: 0.75 };
+const pzHpK = type => PZ_HP_SCALE * (PZ_HP_TYPE[type] || 1);
+
+// --- Защита жаб Промзоны ---
+// Броня спереди (со спины — полный урон и ещё BACKSTAB_MULT): у пехотинцев каска и нагрудник, у громил — плиты
+const PZ_ARMOR = { grunt: 0.4, brute: 0.8 };
+// Силовое поле штурмовиков и ракетчиков — доля их здоровья поверх него. Плазма, лазер и разряды в поле
+// вязнут (PZ_FIELD_ENERGY), пули, дробь, бита, дрель и взрывы снимают его как есть. Не трогают 4 с — за 2 с
+// поле встаёт заново. ЭМИ-граната снимает поле и на 60 с не даёт ему встать (src/workshop.js)
+const PZ_FIELD = { stormtrooper: 0.6, rocketeer: 0.4 };
+const PZ_FIELD_ENERGY = 0.2;
+const PZ_FIELD_WEAK = new Set(['plasma', 'laser', 'arc', 'chain']);
+const PZ_FIELD_DELAY = 240;
+const PZ_FIELD_REGEN = 120;
+// Плазма по броне Промзоны пробивает плохо (в городе — 0,8); разгон ячейки у Толика — лучше
+const PZ_PLASMA_PEN = 0.3, PZ_PLASMA_PEN_UPG = 0.55;
+// Снайперы Промзоны маскируются: не в бою их почти не видно, в бою проявляются, только когда целятся
+// (лазер) и сразу после выстрела, потом снова исчезают и перебегают. Стреляют реже, но больнее
+const SN_CLOAK = { cooldown: 150, reveal: 24, hitReveal: 40, alpha: 0.08, fade: 0.12, strafe: 1.25 };
+
+function isPzSniperCloaky(e) {
+  return currentLocation === 'promzona' && e.type === 'sniper' && !e.summon && !e.defense && !e.elite;
+}
+
+// Защита по виду жабы — при расстановке и при загрузке (src/menu.js), у рарников — после повышения (src/elites.js).
+// Жаб обороны у пролома, призванных и боссов не касается
+function applyPzDefense(e) {
+  if (currentLocation !== 'promzona' || e.defense || e.summon || e.type === 'boss' || e.type === 'pounder') return;
+  if (PZ_ARMOR[e.type] !== undefined) e.armor = Math.max(e.armor || 0, PZ_ARMOR[e.type]);
+  if (PZ_FIELD[e.type]) {
+    e.fieldMax = Math.round(e.maxHp * PZ_FIELD[e.type]);
+    e.field = e.fieldMax;
+    e.fieldHitT = PZ_FIELD_DELAY;
+  }
+  if (isPzSniperCloaky(e)) e.cloakV = 0;
+}
+
+// Поле: восстановление после передышки; ЭМИ не даёт встать
+function updatePzField(e) {
+  // Таймеры отрисовки (drawPzField): вспышка попадания, разлёт снятого поля, рост встающего
+  if (e.fieldFlash > 0) e.fieldFlash--;
+  if (e.fieldBreakT > 0) e.fieldBreakT--;
+  if (e.fieldUp > 0) e.fieldUp--;
+  if (e.fieldHitT < 1e4) e.fieldHitT++;
+  if (e.fieldOff > 0) { e.fieldOff--; return; }
+  if (e.field >= e.fieldMax || e.fieldHitT < PZ_FIELD_DELAY) return;
+  const was = e.field;
+  e.field = Math.min(e.fieldMax, e.field + e.fieldMax / PZ_FIELD_REGEN);
+  if (was <= 0) e.fieldUp = 24;   // поле встаёт — растёт от земли
+}
+
+// Силовое поле: сотовый пузырь вокруг всей фигуры, к кромке ярче (как стекло на просвет), у земли — светящееся
+// кольцо. Соты рисуются один раз в спрайт (pzFieldSprite), каждый кадр — только движение: развёртка снизу вверх,
+// блик по кромке, рябь от попадания, мерцание, когда поля мало; снятое — разлетается, встающее — растёт от земли
+const pzFieldSprites = new Map();
+const PZ_FIELD_COLORS = { stormtrooper: [103, 232, 249], rocketeer: [251, 191, 36] };
+
+function pzFieldShape(e) {
+  const rx = Math.round(e.radius * 1.85), ry = 52;
+  return { rx, ry, cx: e.x, cy: e.y + footDY(e) - 44 };
+}
+
+function pzFieldSprite(rx, ry, col) {
+  const key = rx + '|' + ry + '|' + col.join(',');
+  let c = pzFieldSprites.get(key);
+  if (c) return c;
+  const pad = 4, w = rx * 2 + pad * 2, h = ry * 2 + pad * 2;
+  c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const g = c.getContext('2d');
+  const rgba = a => `rgba(${col[0]}, ${col[1]}, ${col[2]}, ${a})`;
+  g.translate(w / 2, h / 2);
+  g.save();
+  g.beginPath();
+  g.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+  g.clip();
+  // Толща поля: прозрачная середина, к кромке — гуще
+  g.save();
+  g.scale(1, ry / rx);
+  const body = g.createRadialGradient(-rx * 0.2, -rx * 0.25, rx * 0.15, 0, 0, rx);
+  body.addColorStop(0, rgba(0.02));
+  body.addColorStop(0.6, rgba(0.07));
+  body.addColorStop(0.88, rgba(0.2));
+  body.addColorStop(1, rgba(0.42));
+  g.fillStyle = body;
+  g.fillRect(-rx, -rx, rx * 2, rx * 2);
+  g.restore();
+  // Соты: у кромки чёткие, к середине тают
+  const s = 6.5, hw = s * Math.sqrt(3);
+  g.lineWidth = 1;
+  const rows = Math.ceil(ry / (s * 1.5)) + 1, cols = Math.ceil(rx / hw) + 1;
+  for (let row = -rows; row <= rows; row++) {
+    const y = row * s * 1.5;
+    for (let cl = -cols; cl <= cols; cl++) {
+      const x = cl * hw + (row & 1 ? hw / 2 : 0);
+      const d = Math.hypot(x / rx, y / ry);
+      if (d > 1.05) continue;
+      const a = 0.05 + 0.55 * Math.pow(Math.min(1, d), 3);
+      g.strokeStyle = rgba(a.toFixed(3));
+      g.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const an = Math.PI / 6 + k * Math.PI / 3;
+        const px = x + Math.cos(an) * s * 0.92, py = y + Math.sin(an) * s * 0.92;
+        if (k === 0) g.moveTo(px, py); else g.lineTo(px, py);
+      }
+      g.closePath();
+      g.stroke();
+    }
+  }
+  // Блик сверху слева
+  const hl = g.createRadialGradient(-rx * 0.38, -ry * 0.5, 0, -rx * 0.38, -ry * 0.5, rx * 0.5);
+  hl.addColorStop(0, 'rgba(255, 255, 255, 0.32)');
+  hl.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  g.fillStyle = hl;
+  g.fillRect(-rx, -ry, rx * 2, ry * 2);
+  g.restore();
+  // Кромка: цветная и тонкая белая внутри
+  g.strokeStyle = rgba(0.9);
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.ellipse(0, 0, rx - 0.8, ry - 0.8, 0, 0, Math.PI * 2);
+  g.stroke();
+  g.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.ellipse(0, 0, rx - 3, ry - 3, 0, Math.PI * 1.05, Math.PI * 1.6);
+  g.stroke();
+  pzFieldSprites.set(key, c);
+  return c;
+}
+
+function drawPzField(ctx, e) {
+  const col = PZ_FIELD_COLORS[e.type] || PZ_FIELD_COLORS.stormtrooper;
+  const rgba = a => `rgba(${col[0]}, ${col[1]}, ${col[2]}, ${Math.max(0, Math.min(1, a))})`;
+  const { rx, ry, cx, cy } = pzFieldShape(e);
+  const fy = e.y + footDY(e);
+  const now = performance.now() / 1000;
+
+  // Снятое поле разлетается: кромка рвётся наружу и гаснет
+  if (!(e.field > 0)) {
+    const b = (e.fieldBreakT || 0) / 16;
+    if (b <= 0) return;
+    const s = 1 + (1 - b) * 0.45;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = rgba(0.9 * b);
+    ctx.lineWidth = 3 * b;
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = (1 - b) * 40;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx * s, ry * s, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.6 * b;
+    ctx.drawImage(pzFieldSprite(rx, ry, col), cx - (rx + 4) * s, cy - (ry + 4) * s, (rx + 4) * 2 * s, (ry + 4) * 2 * s);
+    ctx.restore();
+    return;
+  }
+
+  const k = Math.max(0, Math.min(1, e.field / e.fieldMax));
+  const flash = (e.fieldFlash || 0) / 8;
+  const up = (e.fieldUp || 0) / 24;
+  // Поля мало — мерцает, вот-вот погаснет
+  const flicker = k < 0.3 ? 0.55 + 0.45 * Math.abs(Math.sin(now * 23 + e.x)) : 1;
+  const alpha = (0.5 + 0.5 * k) * flicker;
+
+  ctx.save();
+  // Встающее поле растёт от земли вверх
+  if (up > 0) {
+    const top = cy + ry - (1 - up) * ry * 2.1;
+    ctx.beginPath();
+    ctx.rect(cx - rx - 6, top, rx * 2 + 12, cy + ry - top + 8);
+    ctx.clip();
+  }
+
+  // Кольцо на земле, где поле её касается
+  ctx.save();
+  ctx.translate(cx, fy + 2);
+  ctx.scale(1, GROUND_SQUASH * 0.7);
+  const gr = ctx.createRadialGradient(0, 0, rx * 0.55, 0, 0, rx * 1.08);
+  gr.addColorStop(0, rgba(0));
+  gr.addColorStop(0.8, rgba(0.28 * alpha));
+  gr.addColorStop(1, rgba(0));
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.arc(0, 0, rx * 1.08, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Сам пузырь
+  ctx.globalAlpha = Math.min(1, alpha + flash * 0.4);
+  ctx.drawImage(pzFieldSprite(rx, ry, col), cx - rx - 4, cy - ry - 4);
+  ctx.globalAlpha = 1;
+
+  // Всё живое — внутри пузыря
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.globalCompositeOperation = 'lighter';
+  // Развёртка: полоса снизу вверх
+  const scanP = (now * 0.7 + e.x * 0.003) % 1;
+  const sy = cy + ry - scanP * ry * 2;
+  const sg = ctx.createLinearGradient(0, sy - 10, 0, sy + 10);
+  sg.addColorStop(0, rgba(0));
+  sg.addColorStop(0.5, rgba(0.32 * alpha));
+  sg.addColorStop(1, rgba(0));
+  ctx.fillStyle = sg;
+  ctx.fillRect(cx - rx, sy - 10, rx * 2, 20);
+  // Рябь от попадания: кольцо бежит по поверхности от места удара
+  if (e.fieldHitA !== undefined && e.fieldHitT < 22) {
+    const p = e.fieldHitT / 22;
+    const hx = cx + Math.cos(e.fieldHitA) * rx * 0.85, hy = cy + Math.sin(e.fieldHitA) * ry * 0.7;
+    const rr = 6 + p * rx * 1.4;
+    const rg = ctx.createRadialGradient(hx, hy, rr * 0.6, hx, hy, rr);
+    rg.addColorStop(0, rgba(0));
+    rg.addColorStop(0.75, rgba(0.6 * (1 - p)));
+    rg.addColorStop(1, rgba(0));
+    ctx.fillStyle = rg;
+    ctx.beginPath();
+    ctx.arc(hx, hy, rr, 0, Math.PI * 2);
+    ctx.fill();
+    if (p < 0.35) {
+      const core = ctx.createRadialGradient(hx, hy, 0, hx, hy, 14);
+      core.addColorStop(0, `rgba(255, 255, 255, ${0.8 * (1 - p / 0.35)})`);
+      core.addColorStop(1, rgba(0));
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 14, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // Блик бежит по кромке
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const sw = (now * 1.3 + e.y * 0.01) % (Math.PI * 2);
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.35 * alpha})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx - 1, ry - 1, 0, sw, sw + 0.5);
+  ctx.stroke();
+  if (up > 0) {
+    ctx.strokeStyle = rgba(up);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Снайпер Промзоны проявляется или прячется: cloakV — насколько виден (0..1); на переходе — искры маскировки
+function updateSniperCloak(e, shown) {
+  if (e.revealT > 0) e.revealT--;
+  if (!e.cloakDir) e.cloakDir = Math.random() < 0.5 ? 1 : -1;
+  const v = e.cloakV || 0;
+  e.cloakV = shown ? Math.min(1, v + SN_CLOAK.fade) : Math.max(0, v - SN_CLOAK.fade);
+  if (shown !== !!e.cloakShown) {
+    e.cloakShown = shown;
+    createParticles(e.x, e.y - 26, '#a5f3fc', 6);
+  }
+}
+
+function breakPzField(e, a) {
+  e.field = 0;
+  e.fieldHitT = 0;
+  e.fieldBreakT = 16;
+  const c = e.type === 'rocketeer' ? ['#fbbf24', '#fde68a'] : ['#67e8f9', '#a5f3fc'];
+  const { cx, cy } = pzFieldShape(e);
+  spawnDirectionalSparks(cx, cy, a, Math.PI * 2, 22, c[0], 3, 12, 16);
+  createParticles(cx, cy, c[1], 12);
+  addFloatingText(e.x - 30, e.y - 80, currentLang === 'ru' ? 'ПОЛЕ СНЯТО' : 'FIELD DOWN', '#67e8f9');
+  SoundFX.ricochet();
+}
 
 // Множитель урона жабы e по Василию: рядовые жабы Промзоны бьют на PZ_DMG_SCALE, остальные — как есть.
 // Стаи рарников (src/elites.js) — ещё сильнее: e.elite.dmg
@@ -2254,9 +2536,9 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
     // Ступни этого типа тоже должны стоять на свободном месте (см. footDY)
     if (checkWalkCollision(ex, ey, radius, FOOT_DY[type])) continue;
     if (insideFactoryShape(ex, ey + FOOT_DY[type])) continue;
-    hp = Math.round(hp * ENEMY_HP_SCALE * (currentLocation === 'promzona' ? PZ_HP_SCALE : 1));
+    hp = Math.round(hp * ENEMY_HP_SCALE * (currentLocation === 'promzona' ? pzHpK(type) : 1));
 
-    enemies.push({
+    const ne = {
       x: ex,
       y: ey,
       // Громилы в железе: спереди броня гасит большую часть урона (см. damageEnemy)
@@ -2279,7 +2561,9 @@ function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
       patrolAngle: Math.random() * Math.PI * 2,
       patrolTimer: Math.random() * 120 + 60,
       shootCooldown: Math.random() * 70 + 45
-    });
+    };
+    applyPzDefense(ne);   // Промзона: броня, силовое поле, маскировка
+    enemies.push(ne);
     return true;
   }
   return false;
@@ -4142,6 +4426,7 @@ function weaponDmg(key) {
     (window.Basement ? window.Basement.restDamage() : 1);
 }
 function weaponPen(weapon) {
+  if (weapon === 'plasma' && currentLocation === 'promzona') return upg('pl_overdrive') ? PZ_PLASMA_PEN_UPG : PZ_PLASMA_PEN;
   if (UPG_PEN[weapon] && upg(UPG_PEN[weapon][0])) return UPG_PEN[weapon][1];
   return (WEAPONS[weapon] && WEAPONS[weapon].pen !== undefined) ? WEAPONS[weapon].pen : 0.5;
 }
@@ -4164,10 +4449,30 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
   }
   // Снайпер Долбильщика ещё проявляется — не задеть ничем
   if (e.warmT > 0) return { dealt: 0, invuln: true };
+  // Попали в замаскированного снайпера — на миг проступает
+  if (e.cloakV !== undefined) e.revealT = Math.max(e.revealT || 0, SN_CLOAK.hitReveal);
   // Рарники (src/elites.js): раздувшегося не добить, под куполом снаружи не прострелить
   if (e.elite && window.Elites) {
     const blocked = window.Elites.beforeDamage(e, weapon, fromX, fromY);
     if (blocked) return blocked;
+  }
+  // Силовое поле Промзоны (applyPzDefense): удар сначала по полю, энергия в нём вязнет; что не впитало —
+  // идёт дальше, на броню и здоровье
+  if (e.field > 0) {
+    const k = PZ_FIELD_WEAK.has(weapon) ? PZ_FIELD_ENERGY : 1;
+    const raw = dmg * k;
+    const absorbed = Math.min(e.field, raw);
+    const a = Math.atan2(fromY - e.y, fromX - e.x);
+    e.field -= absorbed;
+    e.fieldHitT = 0;
+    e.fieldFlash = 8;
+    e.fieldHitA = a;
+    e.isAggroed = true;
+    noteAttacker(e, absorbed, weapon);
+    if (e.field <= 0.5) breakPzField(e, a);
+    else if (k < 1 && Math.random() < 0.3) spawnDirectionalSparks(e.x + Math.cos(a) * 36, e.y - 34 + Math.sin(a) * 30, a, 1.2, 4, '#67e8f9', 3, 8, 8);
+    if (absorbed >= raw - 0.01) return { dealt: absorbed, shield: true };
+    dmg = (raw - absorbed) / k;
   }
   const armor = e.armor || 0;
   let fromBehind = false;
@@ -6169,8 +6474,8 @@ const RK_GAP = 14;                 // кадров между ракетами �
 const RK_RELOAD = 1500;            // 25 с
 const RK_FIRST = 90;               // + до 90 случайно: первый залп после того, как заметил
 const RK_BLAST_R = 85;
-// Урон в центре взрыва; к краю — RK_EDGE от него. × PZ_DMG_SCALE в Промзоне: в центре 120 / 150, с краю 60 / 75 —
-// Василия без прокачки (100) прямое попадание убивает, прокачанному (до 200 и шламовая броня) — больше половины
+// Урон в центре взрыва; к краю — RK_EDGE от него. × PZ_DMG_SCALE в Промзоне: в центре 184 / 230, с краю 92 / 115 —
+// прямое попадание убивает почти любого Василия: от кругов уходить, ракеты вдогонку — перекатом
 const RK_DAMAGE = { 3: 80, 4: 100 };
 const RK_EDGE = 0.5;
 const RK_LEAD = 1.0;               // ракета вдогонку упреждает: доля пути Василия за время её полёта
@@ -10632,6 +10937,7 @@ function update() {
     }
     // Рарники (src/elites.js): стая держится вместе, икринки, гипноз; раздувшийся только раздувается
     if (e.elite && window.Elites && window.Elites.update(e)) continue;
+    if (e.fieldMax) updatePzField(e);   // силовое поле Промзоны встаёт после передышки
     const dxP = player.x - e.x;
     const dyP = player.y - e.y;
 
@@ -10730,10 +11036,26 @@ function update() {
         updateRocketeer(e, distToPlayer, angle, eSpeed);
       } else if (e.type === 'sniper') {
         e.angle = angle;
+        // Маскировка снайпера Промзоны (SN_CLOAK): виден, только пока целится, сразу после выстрела
+        // и когда по нему попали; скрытый — перебегает боком, держась 260–420 px от Василия
+        const cloaky = isPzSniperCloaky(e);
+        const shown = cloaky && (e.shootCooldown < SN_AIM || e.fireKick > 0 || e.revealT > 0 || e.empT > 0); // ЭМИ гасит и маскировку
+        if (cloaky) updateSniperCloak(e, shown);
         // Держит дистанцию 200–320 px: подходит или отступает, но, как и все, не сквозь стены
         // Призванные Долбильщиком стоят кольцом вокруг него (stationary)
-        const step = e.stationary ? 0 : (distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0));
+        const step = e.stationary || (cloaky && !shown) ? 0 : (distToPlayer > 320 ? eSpeed : (distToPlayer < 200 ? -eSpeed : 0));
         if (step !== 0) slideMove(e, Math.cos(angle) * step, Math.sin(angle) * step, e.radius, true);
+        if (cloaky && !shown) {
+          const radial = distToPlayer > 420 ? 1 : (distToPlayer < 260 ? -1 : 0);
+          const side = angle + Math.PI / 2;
+          const mx = Math.cos(angle) * radial * 0.7 + Math.cos(side) * e.cloakDir;
+          const my = Math.sin(angle) * radial * 0.7 + Math.sin(side) * e.cloakDir;
+          const n = Math.hypot(mx, my) || 1, sp = eSpeed * SN_CLOAK.strafe;
+          const ox = e.x, oy = e.y;
+          slideMove(e, mx / n * sp, my / n * sp, e.radius, true);
+          // Упёрся — бежит в другую сторону; изредка и сам передумывает
+          if (Math.hypot(e.x - ox, e.y - oy) < sp * 0.3 || Math.random() < 0.006) e.cloakDir = -e.cloakDir;
+        }
         if (distToPlayer > 320) {
           e.angle = angle;
         } else if (distToPlayer < 200) {
@@ -10757,7 +11079,8 @@ function update() {
           e.gunPose = e.shootCooldown < SN_AIM || (e.warmT > 0 && !(e.empT > 0)) ? 'aim' : null;
         }
         if (e.shootCooldown <= 0) {
-          e.shootCooldown = e.tier >= 3 ? 92 : 105;
+          e.shootCooldown = cloaky ? SN_CLOAK.cooldown : (e.tier >= 3 ? 92 : 105);
+          if (cloaky) e.revealT = SN_CLOAK.reveal;
           e.angle = angle;
           e.gunPose = 'aim';
           // Пуля — из дула винтовки (кость Muzzle модели) в Василия
@@ -10797,6 +11120,7 @@ function update() {
       e.slam = null;
       if (e.type === 'stormtrooper' || e.type === 'rocketeer') updateGunnerIdle(e);
       if (e.type === 'sniper') e.gunPose = null; // не видит Василия — винтовка как при ходьбе
+      if (isPzSniperCloaky(e)) updateSniperCloak(e, false); // и прячется
       e.patrolTimer--;
       if (e.patrolTimer <= 0) {
         e.patrolTimer = Math.random() * 140 + 70;
@@ -11098,6 +11422,7 @@ function collectActorShadows(minX, maxX, minY, maxY) {
   for (let i = 0; i < enemies.length; i++) {
     const e = enemies[i];
     if (e.x < minX || e.x > maxX || e.y < minY || e.y > maxY) continue;
+    if (e.cloakV !== undefined && e.cloakV < 0.5) continue;   // замаскированный снайпер тени не даёт
     const sp = e.type === 'boss' ? window.threeBoss && window.threeBoss.shadowSprite(e)
       : e.type === 'pounder' ? window.threePounder && window.threePounder.shadowSprite(e)
         : window.threeEnemies && window.threeEnemies.shadowSprite(e);
@@ -11357,6 +11682,11 @@ function render() {
       const k = 1 - e.warmT / POUNDER_SNIPERS_WARM;
       ctx.globalAlpha = Math.min(1, 0.22 + 0.5 * k + 0.12 * Math.sin(performance.now() / 45 + e.y));
     }
+    // Снайпер Промзоны в маскировке: едва заметное марево, проступает, когда целится
+    if (e.cloakV !== undefined && e.cloakV < 1) {
+      const shimmer = (1 - e.cloakV) * 0.05 * Math.sin(performance.now() / 60 + e.x * 0.1);
+      ctx.globalAlpha = Math.max(0.02, SN_CLOAK.alpha + (1 - SN_CLOAK.alpha) * e.cloakV + shimmer);
+    }
     if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
       if (e.type === 'grunt') {
         SpriteRenderer.drawToadGrunt(ctx, e);
@@ -11368,6 +11698,7 @@ function render() {
       }
     }
     ctx.restore();
+    if (e.fieldMax && (e.field > 0 || e.fieldBreakT > 0)) drawPzField(ctx, e);
     drawBurningFront(ctx, e);
     if (e.lunge && !tongueBehind) drawGruntTongue(ctx, e);
     if (e.overheat > 0 && !glowBehind) drawOverheatGlow(ctx, e);
