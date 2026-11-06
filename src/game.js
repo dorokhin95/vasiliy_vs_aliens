@@ -8439,6 +8439,9 @@ const POUNDER_SNIPERS = 10;
 // время достать ЭМИ-гранату (src/workshop.js); она летит ~0,5 с, так что бросать — в первые ~2,5 с.
 // Без неё всё так же не выстоять: 10 стволов по 57 урона, первые выстрелы — в полсекунды после проявления
 const POUNDER_SNIPERS_WARM = 180;
+// Проявившись, бьют часто (раз в ~0,8 с — обычный снайпер раз в 1,5 с), метко — с упреждением, куда бежит Василий,
+// быстрой пулей — и больно (60 × урон Промзоны ≈ 138). Тестер прошёл их без ЭМИ, уходя от пуль шагом в сторону
+const POUNDER_SNIPER = { cooldown: 46, spread: 12, dmg: 60, speed: 14, lead: 0.85 };
 const POUNDER_STORM_AT = 0.5;
 const POUNDER_STORM_CD = 1200;         // 20 с между электробурями
 const POUNDER_CLONES_AT = 0.2;
@@ -11142,6 +11145,16 @@ function update() {
 
         if (!(e.empT > 0)) e.shootCooldown--; // ЭМИ (src/workshop.js): лазерный прицел молчит
         if (e.warmT > 0) e.warmT--;           // призванный Долбильщиком ещё проявляется
+        // Снайпер Долбильщика замеряет, куда и как быстро бежит Василий, — для упреждения
+        const pounderSn = e.summon && e.stationary;
+        if (pounderSn) {
+          if (e.ppx !== undefined) {
+            e.pvx = (e.pvx || 0) * 0.8 + (player.x - e.ppx) * 0.2;
+            e.pvy = (e.pvy || 0) * 0.8 + (player.y - e.ppy) * 0.2;
+          }
+          e.ppx = player.x;
+          e.ppy = player.y;
+        }
         // Винтовку вскидывает за SN_AIM кадров до выстрела (тогда же — лазерный прицел), после — отдача
         if (e.fireKick > 0) {
           e.fireKick--;
@@ -11150,15 +11163,22 @@ function update() {
           e.gunPose = e.shootCooldown < SN_AIM || (e.warmT > 0 && !(e.empT > 0)) ? 'aim' : null;
         }
         if (e.shootCooldown <= 0) {
-          e.shootCooldown = cloaky ? SN_CLOAK.cooldown : (e.tier >= 3 ? 92 : 105);
+          e.shootCooldown = cloaky ? SN_CLOAK.cooldown
+            : (pounderSn ? POUNDER_SNIPER.cooldown + Math.random() * POUNDER_SNIPER.spread : (e.tier >= 3 ? 92 : 105));
           if (cloaky) e.revealT = SN_CLOAK.reveal;
           e.angle = angle;
           e.gunPose = 'aim';
-          // Пуля — из дула винтовки (кость Muzzle модели) в Василия
+          // Пуля — из дула винтовки (кость Muzzle модели) в Василия; снайпер Долбильщика — с упреждением
           const m = gunMuzzle(e);
-          const shotA = Math.atan2(player.y - 12 - m.y, player.x - m.x);
-          const ebSpeed = e.tier >= 3 ? 10.8 : 9.6;
-          const shotDmg = Math.round((e.tier >= 4 ? 38 : (e.tier === 3 ? 30 : 22)) * enemyDmgK(e));
+          const ebSpeed = pounderSn ? POUNDER_SNIPER.speed : (e.tier >= 3 ? 10.8 : 9.6);
+          let aimX = player.x, aimY = player.y - 12;
+          if (pounderSn) {
+            const T = Math.hypot(aimX - m.x, aimY - m.y) / ebSpeed;
+            aimX += (e.pvx || 0) * T * POUNDER_SNIPER.lead;
+            aimY += (e.pvy || 0) * T * POUNDER_SNIPER.lead;
+          }
+          const shotA = Math.atan2(aimY - m.y, aimX - m.x);
+          const shotDmg = Math.round((pounderSn ? POUNDER_SNIPER.dmg : (e.tier >= 4 ? 38 : (e.tier === 3 ? 30 : 22))) * enemyDmgK(e));
           enemyBullets.push({
             x: m.x,
             y: m.y,
