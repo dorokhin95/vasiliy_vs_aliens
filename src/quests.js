@@ -359,7 +359,8 @@ window.Quests = (function () {
     addFloatingText(5480, 260, L('Степаныч: «Бери, заслужил{|а}»', 'Stepanych: "Take it, you earned it"'), '#fde68a');
   }
 
-  // Громила-«Бригадир» у ЗИЛа с аппаратом: элитный, в броне. Не сохраняется — встаёт при каждом входе
+  // Громила-«Бригадир» у ЗИЛа с аппаратом: крепче обычного, в броне. Не сохраняется — встаёт при каждом входе.
+  // Поля elite у него нет: e.elite — это рарник (src/elites.js), с ним Бригадир ломал отрисовку
   function spawnGuard(q) {
     const c = targets(q)[0];
     if (!c || enemies.some(e => e.questGuard === q.id)) return;
@@ -370,7 +371,7 @@ window.Quests = (function () {
       x, y, startX: x, startY: y, bounds: { x1: c.x - 500, y1: c.y - 400, x2: c.x + 500, y2: c.y + 400 },
       districtId: c.districtId, tier: 4, radius: 38, hp, maxHp: hp, speed: 1.9, type: 'brute', color: '#a855f7',
       armor: 0.6, throwCooldown: 200, aggroRadius: 520, isAggroed: false, hitFlash: 0,
-      patrolAngle: 0, patrolTimer: 90, shootCooldown: 120, summon: true, questGuard: q.id, elite: true
+      patrolAngle: 0, patrolTimer: 90, shootCooldown: 120, summon: true, questGuard: q.id
     });
   }
 
