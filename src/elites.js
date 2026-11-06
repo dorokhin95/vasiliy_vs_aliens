@@ -24,6 +24,7 @@ let eliteHazards = [];   // лужи, облака, икринки в полёт
     leader: { hp: 2.5, hpBrute: 1.8, dmg: 1.4, scale: 1.3, radius: 1.15 },
     minion: { hp: 1.5, hpBrute: 1.5, dmg: 1.15, scale: 1.08, radius: 1.04 }
   };
+  const LEADER_TROPHY = { grunt: 'toad_leg', sniper: 'toad_eye', brute: 'toad_liver' };
   const LEASH = 140;           // свита не отходит от вожака дальше, пока стая не в бою
   const ALERT_R = 700;         // заметил один — бежит вся стая
 
@@ -203,8 +204,10 @@ let eliteHazards = [];   // лужи, облака, икринки в полёт
     e.elite = { role, pack, affixes: affixes.slice(), name, dmg: S.dmg, scale: S.scale };
     e.elEggCd = role === 'leader' ? 90 + rnd(120) : 200 + rnd(400);
     e.elHypCd = HYPNO.first;
-    if (role === 'leader') e.bonusLoot = { nonferrous: 2 + (e.tier || 2), tech_spirit: 1, alien_core: 1 };
-    else if (Math.random() < 0.5) e.bonusLoot = { nonferrous: 1 };
+    // Лут вожака сверх обычного: немного цветмета, детали и пара трофеев своего вида. Цветмета — в меру:
+    // это главный выбор Промзоны (docs/BALANCE.md), раньше стаи добавляли ~38 к ~78 — открывалось почти всё.
+    // Свита роняет как обычные жабы
+    if (role === 'leader') e.bonusLoot = { nonferrous: 2, mil_parts: 2, [LEADER_TROPHY[e.type] || 'toad_leg']: 2 };
   }
 
   // Сохранение (src/menu.js): что записать о рарнике — и как поднять его из записи (данные — с проверкой)
