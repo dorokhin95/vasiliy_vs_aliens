@@ -810,7 +810,29 @@ class ThreeCharacterManager {
     // Отрисовка 3D Василия из WebGL холста
     const renderW = 110;
     const renderH = 110;
-    ctx.drawImage(this.canvas, -renderW / 2, -renderH / 2 - 14, renderW, renderH);
+    // Удар (src/fx.js): фигура вздрагивает и вспыхивает цветом удара; под гипнозом рарника — мерцает фиолетовым
+    const flash = (player.hurtFlash || 0) / 12;
+    const hypno = player.hypnoT > 0 ? 0.28 + 0.14 * Math.sin(Date.now() * 0.012) : 0;
+    let jx = 0, jy = 0;
+    if (flash > 0.6) {
+      jx = (Math.random() - 0.5) * 4 * flash;
+      jy = (Math.random() - 0.5) * 3 * flash;
+    }
+    ctx.drawImage(this.canvas, -renderW / 2 + jx, -renderH / 2 - 14 + jy, renderW, renderH);
+    if (flash > 0 || hypno > 0) {
+      const tint = this.tintCanvas || (this.tintCanvas = document.createElement('canvas'));
+      if (tint.width !== renderW) { tint.width = renderW; tint.height = renderH; }
+      const g = tint.getContext('2d');
+      g.globalCompositeOperation = 'source-over';
+      g.clearRect(0, 0, renderW, renderH);
+      g.drawImage(this.canvas, 0, 0, renderW, renderH);
+      g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = flash > 0 ? (player.hurtTint || '#ff2020') : '#a855f7';
+      g.fillRect(0, 0, renderW, renderH);
+      ctx.globalAlpha = flash > 0 ? 0.08 + flash * 0.42 : hypno;
+      ctx.drawImage(tint, -renderW / 2 + jx, -renderH / 2 - 14 + jy, renderW, renderH);
+      ctx.globalAlpha = 1;
+    }
 
     ctx.restore();
     return true;

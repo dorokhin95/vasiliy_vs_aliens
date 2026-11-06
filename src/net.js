@@ -129,6 +129,7 @@ window.Net = (() => {
     splashFires: [() => splashFires, v => { splashFires = v; }],
     fireFx: [() => fireFx, v => { fireFx = v; }],
     scorches: [() => scorches, v => { scorches = v; }],
+    eliteHazards: [() => eliteHazards, v => { eliteHazards = v; }],
     scalars: [() => ({
       boss: bossRef ? bossRef.nid : 0, pounder: pounderRef ? pounderRef.nid : 0,
       cleared: levelCleared, total: levelEnemyTotal, fence: { state: fenceBreach.state, cracks: fenceBreach.cracks }
@@ -150,7 +151,8 @@ window.Net = (() => {
   // Эффекты: клиенту — только новые (дальше они живут у него сами, updateCosmetics)
   const FX = {
     particles: () => particles, floatingTexts: () => floatingTexts,
-    muzzleFlashes: () => muzzleFlashes, shellCasings: () => shellCasings
+    muzzleFlashes: () => muzzleFlashes, shellCasings: () => shellCasings,
+    fxBits: () => fxBits   // кровь, брызги, ошмётки (src/fx.js)
   };
   // Тайники и урны: что меняется у них в игре
   const CONT_KEYS = ['searched', 'x', 'y', 'dirIdx', 'airborne', 'moved', 'z', 'tilt', 'held', 'safe'];

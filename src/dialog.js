@@ -41,7 +41,8 @@ window.Dialog = (function () {
       rumors: [
         ['Штурмовики эти, с плазменными автоматами: дай им очередь подлиннее — перегреются, пар пойдёт. Вот тогда и бей.', 'Those stormtroopers with plasma rifles: let them fire a long burst — they overheat and start steaming. That\'s when you hit them.'],
         ['В литейном теперь жаб полно. Печи остывали долго, тепло — им нравится.', 'The foundry is full of toads now. The furnaces took ages to cool down, it\'s warm — they love it.'],
-        ['Ракетчик после залпа пустой, прячется. Секунд двадцать пять у тебя есть, пока он перезарядится. И под ракетами не стой — кувыркайся, он вдогонку бьёт.', 'A rocketeer is empty after a volley and hides. You\'ve got about twenty-five seconds before he reloads. And don\'t stand under the rockets — roll, he aims where you\'re running.']
+        ['Ракетчик после залпа пустой, прячется. Секунд двадцать пять у тебя есть, пока он перезарядится. И под ракетами не стой — кувыркайся, он вдогонку бьёт.', 'A rocketeer is empty after a volley and hides. You\'ve got about twenty-five seconds before he reloads. And don\'t stand under the rockets — roll, he aims where you\'re running.'],
+        ['Есть там жабы здоровенные, при каждой — своя кодла, и все с кругом под ногами. Вожак ихний. У кого что: один языком клеит, другой глаза отводит — сам к нему пойдёшь. Пузатый, как сдохнет, раздувается — беги, лопнет. А который под колпаком — того снаружи не прострелишь, лезь внутрь.', 'There are huge toads out there, each with its own gang, all with a ring under their feet. That\'s the pack boss. Each has its trick: one glues you with its tongue, another stares you down so you walk right up to it. The potbellied one swells up when it dies — run, it pops. And the one under the dome — you can\'t shoot it from outside, get in there.']
       ],
       work: true
     },

@@ -358,7 +358,8 @@ window.Menu = (() => {
         armor: e.armor || 0,
         radius: e.radius, speed: e.speed, aggroRadius: e.aggroRadius, color: e.color,
         tier: e.tier, districtId: e.districtId, bounds: e.bounds,
-        bl: e.bonusLoot || undefined   // громила прорыва: его доля нехватки на Плазмаган (game.js)
+        bl: e.bonusLoot || undefined,  // громила прорыва: его доля нехватки на Плазмаган (game.js)
+        el: window.Elites ? window.Elites.saveOf(e) : undefined   // рарник: стая, свойства, имя (src/elites.js)
       }))
     };
   }
@@ -582,7 +583,7 @@ window.Menu = (() => {
         const maxHp = num(d.maxHp, 100, 1, 100000);
         const x = num(d.x, 0, 60, WORLD_WIDTH - 60), y = num(d.y, 0, 60, WORLD_HEIGHT - 60);
         const b = d.bounds || {};
-        enemies.push({
+        const ne = {
           x, y, startX: x, startY: y,
           bounds: { x1: num(b.x1, x - 300), y1: num(b.y1, y - 300), x2: num(b.x2, x + 300), y2: num(b.y2, y + 300) },
           districtId: typeof d.districtId === 'string' ? d.districtId : 'courtyards',
@@ -604,7 +605,9 @@ window.Menu = (() => {
           patrolAngle: Math.random() * Math.PI * 2,
           patrolTimer: Math.random() * 120 + 60,
           shootCooldown: Math.random() * 70 + 45
-        });
+        };
+        if (d.el && window.Elites) window.Elites.restore(ne, d.el);
+        enemies.push(ne);
       });
       levelEnemyTotal = Math.round(num(w.enemyTotal, enemies.length, 0, 1000));
     }

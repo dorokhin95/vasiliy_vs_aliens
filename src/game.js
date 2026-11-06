@@ -1937,6 +1937,7 @@ function generateWorld() {
   pendingSpawns.forEach(args => spawnEnemyInRect(...args));
   if (currentLocation === 'city') spawnBoss();
   else if (currentLocation === 'promzona') spawnPounder();
+  if (window.Elites) window.Elites.onLevel(); // стаи рарников Промзоны (src/elites.js)
   levelEnemyTotal = enemies.filter(e => e.type !== 'boss').length;
   levelCleared = false;
 }
@@ -2161,11 +2162,12 @@ const ENEMY_HP_SCALE = 1.3;
 const PZ_HP_SCALE = 2.5;
 const PZ_DMG_SCALE = 1.5;
 
-// Множитель урона жабы e по Василию: рядовые жабы Промзоны бьют на PZ_DMG_SCALE, остальные — как есть
+// Множитель урона жабы e по Василию: рядовые жабы Промзоны бьют на PZ_DMG_SCALE, остальные — как есть.
+// Стаи рарников (src/elites.js) — ещё сильнее: e.elite.dmg
 function enemyDmgK(e) {
   if (currentLocation !== 'promzona' || !e) return 1;
   if (e.type === 'boss' || e.type === 'pounder' || e.defense) return 1;
-  return PZ_DMG_SCALE;
+  return PZ_DMG_SCALE * (e.elite ? e.elite.dmg : 1);
 }
 
 function spawnEnemyInRect(x1, y1, x2, y2, distOverride = null) {
@@ -3922,6 +3924,7 @@ function performRoll() {
   const stamMult = (player.hasPerk('third_frog_eye') ? 0.75 : 1.0) * agility;
   const rollCost = Math.round(25 * stamMult);
   if (player.isRolling || player.rollCooldown > 0 || player.stamina < rollCost || player.stunTimer > 0) return;
+  if (player.hypnoT > 0 || player.rootT > 0) return; // загипнотизирован или прилип (src/elites.js)
   
   let dx = 0, dy = 0;
   if (keys['KeyW']) dy -= 1;
@@ -4158,6 +4161,11 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
     spawnDirectionalSparks(e.x + Math.cos(ha) * 36, e.y - 60 + Math.sin(ha) * 30, ha, 1.4, 4, '#d8b4fe', 3, 9, 8);
     sayLine('say_boss_invuln');
     return { dealt: 0, invuln: true };
+  }
+  // Рарники (src/elites.js): раздувшегося не добить, под куполом снаружи не прострелить
+  if (e.elite && window.Elites) {
+    const blocked = window.Elites.beforeDamage(e, weapon, fromX, fromY);
+    if (blocked) return blocked;
   }
   const armor = e.armor || 0;
   let fromBehind = false;
@@ -5998,7 +6006,6 @@ function hideOrCharge(e, distToPlayer, angle, eSpeed) {
       const dmg = Math.round(BUTT_DAMAGE * enemyDmgK(e));
       player.hp -= armorAbsorb(dmg, 'melee');
       addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
-      createParticles(player.x, player.y - 14, '#f472b6', 6);
       slideMove(player, Math.cos(angle) * BUTT_KNOCK, Math.sin(angle) * BUTT_KNOCK, player.radius);
       SoundFX.batSwing('flesh');
       if (player.hp <= 0) gameOver();
@@ -6366,11 +6373,11 @@ function rocketExplode(r) {
     if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5)
         && !playerDodged()) {
       const dmg = Math.round(r.dmg * rocketFalloff(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5));
+      if (window.Fx) window.Fx.from(x, y);
       const taken = armorAbsorb(dmg, 'ranged');
       player.hp -= taken;
       const a = Math.atan2(player.y - y, player.x - x);
       slideMove(player, Math.cos(a) * RK_KNOCK, Math.sin(a) * RK_KNOCK, player.radius);
-      createParticles(player.x, player.y, '#ef4444', 14);
       addFloatingText(player.x, player.y - 30, `-${Math.round(taken)}`, '#ef4444');
       if (player.hp <= 0) { gameOver(); return; }
       dazePlayer(RK_STUN, RK_DAZE, RK_DAZE_SPEED);
@@ -6508,7 +6515,7 @@ function cardAbility() {
 
 function useCardAbility() {
   const ab = cardAbility();
-  if (!ab || player.stunTimer > 0) return;
+  if (!ab || player.stunTimer > 0 || player.hypnoT > 0) return;
   if (player.abilityCd > 0) {
     addFloatingText(player.x, player.y - 30, currentLang === 'ru' ? `⏳ ${Math.ceil(player.abilityCd / 60)} С` : `⏳ ${Math.ceil(player.abilityCd / 60)}s`, '#94a3b8');
     return;
@@ -7108,7 +7115,7 @@ function updateGruntTongue(e, distToPlayer, angle, slowed) {
       L.tx = tg.x;
       L.ty = tg.y;
     }
-    if (L.t >= TONGUE_HOLD) {
+    if (L.t >= TONGUE_HOLD + (L.holdExtra || 0)) {
       L.phase = 'back';
       L.t = 0;
     }
@@ -7138,9 +7145,9 @@ function updateGruntTongue(e, distToPlayer, angle, slowed) {
       L.hit = true;
       if (playerDodged()) return true;
       const dmg = Math.round((TONGUE_DAMAGE + (e.tier || 1) * 1.6) * enemyDmgK(e));
-      player.hp -= armorAbsorb(dmg, 'melee');
+      player.hp -= armorAbsorb(dmg, 'melee', 'tongue');
+      if (e.elite && window.Elites) window.Elites.onTongue(e, L, dmg); // липкий язык рарника держит
       addFloatingText(player.x, player.y - 34, `-${dmg}`, '#fb7185');
-      createParticles(player.x, player.y - 14, '#f472b6', 8);
       const a = Math.atan2(e.y - player.y, e.x - player.x);
       slideMove(player, Math.cos(a) * TONGUE_PULL, Math.sin(a) * TONGUE_PULL, player.radius);
       if (player.hp <= 0) gameOver();
@@ -7460,10 +7467,11 @@ function landThrowable(f) {
   const dmg = Math.round(def.dmg * enemyDmgK(f.thrower));
   forEachPlayer(() => {
     if (!player.isRolling && Math.hypot(player.x - x, player.y + footDY(player) - y) < hitR && !playerDodged()) {
+      if (window.Fx) window.Fx.from(x, y);
       player.hp -= armorAbsorb(dmg, 'melee');
+      if (f.thrower && f.thrower.elite && window.Elites) window.Elites.onHit(f.thrower, dmg);
       const a = Math.atan2(player.y - y, player.x - x);
       slideMove(player, Math.cos(a) * 30, Math.sin(a) * 30, player.radius);
-      createParticles(player.x, player.y, '#ef4444', 12);
       addFloatingText(player.x, player.y - 30, `-${dmg}`, '#ef4444');
       if (player.hp <= 0) gameOver();
     }
@@ -8002,6 +8010,7 @@ function handleEnemyKilled(index) {
     onPounderDefeated(dead);
     return;
   }
+  if (dead.elite && window.Elites && window.Elites.onKilled(dead)) return; // раздутый рарник ещё лопнет
   if (dead.throwState) cancelThrow(dead);
   createParticles(dead.x, dead.y, dead.type === 'brute' ? '#a855f7' : '#16a34a', 22);
   spawnLootDrop(dead);
@@ -9169,7 +9178,6 @@ function bossHitPlayer(e, damage, kind = 'melee') {
   }
   cameraKickX += Math.cos(a) * 9;
   cameraKickY += Math.sin(a) * 9;
-  createParticles(player.x, player.y, '#ef4444', 10);
   addFloatingText(player.x, player.y - 30, `-${damage}`, '#ef4444');
   if (player.hp <= 0) gameOver();
 }
@@ -9272,7 +9280,6 @@ function bossStrikeOn(e, a, def, p) {
       player.knockVy = Math.sin(ang) * 14;
       cameraKickX += Math.cos(ang) * 16;
       cameraKickY += Math.sin(ang) * 16;
-      createParticles(player.x, player.y, '#ef4444', 16);
       addFloatingText(player.x - 30, player.y - 40, `${currentLang === 'ru' ? 'ЗАХВАТ!' : 'GRABBED!'} -${def.damage}`, '#f97316');
       if (player.hp <= 0) gameOver();
     }
@@ -10086,6 +10093,7 @@ function updatePlayerSelf() {
     if (player.hp <= 0) gameOver();
   }
   spawnBioPuddleBubbles();
+  if (window.Elites) window.Elites.updatePlayer(); // лужи и облака рарников, липучка, гипноз (src/elites.js)
   if (player.itemCooldown > 0) player.itemCooldown--;
   if (player.unarmedHintCd > 0) player.unarmedHintCd--;
   if (player.healLeft > 0) {
@@ -10162,6 +10170,7 @@ function updatePlayerSelf() {
   let currentSpeed = player.speed;
   if (player.hasPerk('slime_skin')) currentSpeed *= 1.22;
   if (player.inSlime && !(window.Canteen && window.Canteen.sludgeProof())) currentSpeed *= BIO_PUDDLE_SLOW;
+  if (player.eliteSlow < 1) currentSpeed *= player.eliteSlow; // жижа икринок, кислота раздутого
   if (player.dazeTimer > 0) {
     player.dazeTimer--;
     currentSpeed *= player.dazeMult;
@@ -10204,6 +10213,15 @@ function updatePlayerSelf() {
       player.isRolling = false;
       player.isDashing = false;
     }
+  } else if (player.hypnoT > 0) {
+    // Гипноз рарника: бредёт к жабе сам, медленно (src/elites.js)
+    const ha = Math.atan2(player.hypnoY - player.y, player.hypnoX - player.x);
+    const hd = Math.hypot(player.hypnoX - player.x, player.hypnoY - player.y);
+    player.isMoving = hd > window.Elites.HYPNO.stop;
+    if (player.isMoving) {
+      player.animTimer++;
+      slideMove(player, Math.cos(ha) * currentSpeed * window.Elites.HYPNO.walk, Math.sin(ha) * currentSpeed * window.Elites.HYPNO.walk, player.radius);
+    }
   } else {
     let dx = 0, dy = 0;
     if (keys['KeyW']) dy -= 1;
@@ -10222,6 +10240,8 @@ function updatePlayerSelf() {
     }
 
     if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
+    // Прилип к языку рарника: ни шагу (стрелять можно)
+    if (player.rootT > 0) { dx = 0; dy = 0; player.isMoving = false; }
     
     if (playerStuck) {
       player.x += dx * currentSpeed;
@@ -10235,6 +10255,7 @@ function updatePlayerSelf() {
   player.y = Math.max(player.radius, Math.min(WORLD_HEIGHT - player.radius, player.y));
 
   player.angle = Math.atan2(mouseWorld.y - player.y, mouseWorld.x - player.x);
+  if (player.hypnoT > 0) player.angle = Math.atan2(player.hypnoY - player.y, player.hypnoX - player.x);
 
   const angleDeg = (player.angle * 180 / Math.PI + 360) % 360;
   if (angleDeg > 230 && angleDeg < 310) {
@@ -10249,7 +10270,7 @@ function updatePlayerSelf() {
   const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius || currentLocation === 'basement';
   player.inSafe = inSafe;
   if (shootCooldown > 0) shootCooldown--;
-  if (mouseDown && !player.isRolling && !inSafe && !(player.stunTimer > 0)) {
+  if (mouseDown && !player.isRolling && !inSafe && !(player.stunTimer > 0) && !(player.hypnoT > 0)) {
     shootPlayerWeapon();
   }
 
@@ -10339,6 +10360,7 @@ function worldLive() {
 
 // Вспышки, гильзы, частицы, всплывающие цифры — живут сами по себе (у сетевого клиента — тоже, src/net.js)
 function updateCosmetics() {
+  if (window.Fx) window.Fx.update(); // кровь, брызги, ошмётки (src/fx.js)
   for (let i = muzzleFlashes.length - 1; i >= 0; i--) {
     muzzleFlashes[i].life--;
     if (muzzleFlashes[i].life <= 0) muzzleFlashes.splice(i, 1);
@@ -10494,10 +10516,16 @@ function update() {
 
     if (b.weaponType === 'wad') continue;
     if (b.owner && b.owner !== player) usePlayer(b.owner);
+    // Купол рарника: снаружи пуля гаснет на нём (src/elites.js)
+    if (window.Elites && window.Elites.stopBullet(b)) {
+      bullets.splice(i, 1);
+      continue;
+    }
 
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
       if (Math.abs(b.x - e.x) > b.radius + e.radius + 10 || Math.abs(b.y - e.y) > b.radius + e.radius + 10) continue;
+      if (e.dying > 0) continue; // раздувшийся рарник: пули пролетают
       if (b.hits && b.hits.includes(e)) continue;
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
@@ -10564,6 +10592,7 @@ function update() {
   updatePounderRings();
   updateShockwaves();
   updateShieldShards();
+  if (window.Elites) window.Elites.updateWorld(); // икринки, лужи и облака рарников
   updateSpeech();
   if (cardOfferTimer > 0 && --cardOfferTimer === 0 && player.pendingCards) offerBossCards();
   checkBreachTransit();
@@ -10595,6 +10624,8 @@ function update() {
       updatePounder(e, inSafe, hasFumeAura);
       continue;
     }
+    // Рарники (src/elites.js): стая держится вместе, икринки, гипноз; раздувшийся только раздувается
+    if (e.elite && window.Elites && window.Elites.update(e)) continue;
     const dxP = player.x - e.x;
     const dyP = player.y - e.y;
 
@@ -10670,7 +10701,7 @@ function update() {
         if (facing && !e.throwState && distToPlayer < player.radius + e.radius && !player.isRolling) {
           const tierMult = 1 + (e.tier || 1) * 0.22;
           player.hp -= armorAbsorb(1.65 * tierMult * enemyDmgK(e), 'melee');
-          createParticles(player.x, player.y, '#ef4444', 3);
+          if (e.elite && window.Elites) window.Elites.onHit(e, 1.65 * tierMult * enemyDmgK(e));
           if (player.hp <= 0) gameOver();
         }
       } else if (e.type === 'grunt') {
@@ -10684,7 +10715,7 @@ function update() {
           const tierMult = 1 + (e.tier || 1) * 0.22;
           const dmg = 0.78 * tierMult * enemyDmgK(e);
           player.hp -= armorAbsorb(dmg, 'melee');
-          createParticles(player.x, player.y, '#ef4444', 3);
+          if (e.elite && window.Elites) window.Elites.onHit(e, dmg);
           if (player.hp <= 0) gameOver();
         }
       } else if (e.type === 'stormtrooper') {
@@ -10734,7 +10765,8 @@ function update() {
             vy: Math.sin(shotA) * ebSpeed,
             angle: shotA,
             radius: 5,
-            damage: shotDmg
+            damage: shotDmg,
+            src: e.elite ? e : undefined   // рарник: попадание — его свойства (src/elites.js)
           });
           muzzleFlashes.push({
             x: m.x,
@@ -10795,8 +10827,10 @@ function update() {
       usePlayer(hitP);
       if (!player.isRolling && !playerDodged()) {
         // Плазма штурмовиков броню почти не замечает, кислота снайперов — наполовину
+        if (window.Fx) window.Fx.from(eb.x - eb.vx * 4, eb.y - eb.vy * 4);
         player.hp -= armorAbsorb(eb.damage, eb.kind === 'plasma' ? 'energy' : 'ranged');
-        createParticles(player.x, player.y, '#10b981', 8);
+        if (eb.src && window.Elites) window.Elites.onHit(eb.src, eb.damage);
+        createParticles(player.x, player.y - 20, '#10b981', 4);
         addFloatingText(player.x, player.y - 20, `-${eb.damage}`, '#ef4444');
         if (player.hp <= 0) gameOver();
       }
@@ -11242,6 +11276,8 @@ function render() {
   if (window.Quests) window.Quests.drawWorld(ctx); // предметы квестов на земле и «!» над тайниками
   drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // куда упадут ракеты
   drawFirePools(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // горючая жижа Василия
+  if (window.Fx) window.Fx.drawGround(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // пятна крови и слизи, ударные волны
+  if (window.Elites) window.Elites.drawGround(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // лужи и круги рарников
   drawSlamTelegraphs(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   drawShockwaves(ctx);
   if (bossRef) drawBossTelegraph(ctx, bossRef);
@@ -11299,6 +11335,13 @@ function render() {
     drawBurningBack(ctx, e);
     ctx.save();
     burnTransform(ctx, e);
+    // Рарник крупнее, раздувшийся — ещё и пухнет (src/elites.js)
+    const ek = e.elite && window.Elites ? window.Elites.scaleOf(e) : 1;
+    if (ek !== 1) {
+      ctx.translate(e.x, e.y + 10);
+      ctx.scale(ek, ek);
+      ctx.translate(-e.x, -e.y - 10);
+    }
     if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
       if (e.type === 'grunt') {
         SpriteRenderer.drawToadGrunt(ctx, e);
@@ -11317,6 +11360,8 @@ function render() {
     else if (tipsy) drawFumeTipsy(ctx, e);
   }
   drawShieldShards(ctx);
+  if (window.Elites) window.Elites.drawOver(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // купола, икринки, имена
+  if (window.Fx) window.Fx.drawOver(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY); // капли, росчерки, вспышки
   drawRockets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY);
   if (window.Defense) window.Defense.drawShots(ctx);
   if (window.Workshop) window.Workshop.drawEffects(ctx); // дуги разрядника, кольцо ЭМИ
@@ -11517,8 +11562,19 @@ function render() {
     for (let i = 0; i < floatingTexts.length; i++) {
       const ft = floatingTexts[i];
       if (ft.x < viewMinX || ft.x > viewMaxX || ft.y < viewMinY || ft.y > viewMaxY) continue;
+      const age = 45 - ft.life;
+      const pop = age < 6 ? 1.45 - age * 0.075 : 1;
+      ctx.save();
+      ctx.globalAlpha = ft.life < 12 ? ft.life / 12 : 1;
+      ctx.translate(ft.x, ft.y);
+      if (pop !== 1) ctx.scale(pop, pop);
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(10, 6, 4, 0.85)';
+      ctx.strokeText(ft.text, 0, 0);
       ctx.fillStyle = ft.color;
-      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.fillText(ft.text, 0, 0);
+      ctx.restore();
     }
   }
   drawSpeech(ctx);
@@ -11526,6 +11582,7 @@ function render() {
   ctx.restore();
   ctx.restore();
 
+  if (window.Fx) window.Fx.drawScreen(ctx, viewW, viewH); // края экрана краснеют от удара, пульс на последних 30 %
   drawLastEnemyMarkers();
   drawBreachMarker();
   if (window.Minimap) window.Minimap.frame(ctx); // миникарта, зов на помощь (src/minimap.js)

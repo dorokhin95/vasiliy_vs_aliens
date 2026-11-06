@@ -20,19 +20,24 @@ function slimeArmorMax() {
 }
 
 // Урон по Василию с учётом брони: возвращает, сколько дошло до здоровья (здоровье здесь не меняется).
-// kind: 'melee' | 'ranged' | 'energy'
-function armorAbsorb(dmg, kind) {
+// kind: 'melee' | 'ranged' | 'energy'. fx — как это выглядит, если не так, как kind (src/fx.js):
+// 'tongue' — язык, 'acid' | 'poison' | 'goo' — лужи и облака: шипит, без крови
+function armorAbsorb(dmg, kind, fx) {
   // Кооп: лежащего не добивают; жабы и боссы бьют сильнее, чем больше игроков (coopScale в game.js)
   if (player.downT > 0 || player.dead) return 0;
   if (players.length > 1) dmg *= enemyActing && (enemyActing.type === 'boss' || enemyActing.type === 'pounder') ? coopScale().bossDmg : coopScale().dmg;
   player.hurtFrame = 0;
   const max = slimeArmorMax();
-  if (max <= 0 || !(player.slimeArmor > 0) || dmg <= 0) return dmg;
-  const share = SLIME_ARMOR.absorb[kind] ?? SLIME_ARMOR.absorb.melee;
-  const taken = Math.min(player.slimeArmor, dmg * share);
-  player.slimeArmor -= taken;
-  if (taken >= 1) createParticles(player.x, player.y - 18, '#84cc16', 4);
-  return dmg - taken;
+  let out = dmg;
+  if (max > 0 && player.slimeArmor > 0 && dmg > 0) {
+    const share = SLIME_ARMOR.absorb[kind] ?? SLIME_ARMOR.absorb.melee;
+    const taken = Math.min(player.slimeArmor, dmg * share);
+    player.slimeArmor -= taken;
+    if (taken >= 1) createParticles(player.x, player.y - 18, '#84cc16', 4);
+    out = dmg - taken;
+  }
+  if (window.Fx) window.Fx.hurt(player, out, fx || kind); // кровь, росчерк, вспышка, края экрана
+  return out;
 }
 
 function updateSlimeArmor() {
