@@ -2185,7 +2185,7 @@ const PZ_FIELD_REGEN = 120;
 const PZ_PLASMA_PEN = 0.3, PZ_PLASMA_PEN_UPG = 0.55;
 // Снайперы Промзоны маскируются: не в бою их почти не видно, в бою проявляются, только когда целятся
 // (лазер) и сразу после выстрела, потом снова исчезают и перебегают. Стреляют реже, но больнее
-const SN_CLOAK = { cooldown: 150, reveal: 24, hitReveal: 40, alpha: 0.08, fade: 0.12, strafe: 1.25 };
+const SN_CLOAK = { cooldown: 150, reveal: 24, hitReveal: 40, fade: 0.12, strafe: 1.25 };
 
 function isPzSniperCloaky(e) {
   return currentLocation === 'promzona' && e.type === 'sniper' && !e.summon && !e.defense && !e.elite;
@@ -2418,6 +2418,75 @@ function drawPzField(ctx, e) {
     ctx.stroke();
   }
   ctx.restore();
+}
+
+// Маскировка снайпера Промзоны, как горячий воздух: тела почти не видно, по контуру фигуры дрожит светлое
+// марево, раз в пару секунд по силуэту пробегает блик. Кадр модели рисуется один раз во вспомогательный холст:
+// из него и тело (почти прозрачное), и силуэт для марева. vis — насколько виден (cloakV, 0..1)
+const cloakBufs = {};
+function cloakBuf(key) {
+  let c = cloakBufs[key];
+  if (!c) {
+    c = cloakBufs[key] = document.createElement('canvas');
+    c.width = 170;
+    c.height = 180;
+  }
+  return c;
+}
+
+function drawCloakedSniper(ctx, e, vis) {
+  const W = 170, H = 180, ox = 85, oy = 132;
+  const A = cloakBuf('a'), ga = A.getContext('2d');
+  ga.setTransform(1, 0, 0, 1, 0, 0);
+  ga.globalCompositeOperation = 'source-over';
+  ga.globalAlpha = 1;
+  ga.clearRect(0, 0, W, H);
+  ga.setTransform(1, 0, 0, 1, ox - e.x, oy - e.y);
+  if (!window.threeEnemies.draw(ga, e)) return false;
+  ga.setTransform(1, 0, 0, 1, 0, 0);
+  const t = performance.now() / 1000;
+  const hidden = 1 - vis;
+  // Тело: в полной маскировке — едва-едва, к проявлению густеет
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, 0.04 + 0.96 * Math.pow(vis, 1.5));
+  ctx.drawImage(A, e.x - ox, e.y - oy);
+  ctx.restore();
+  if (hidden <= 0.02) return true;
+  // Силуэт — светлый
+  ga.globalCompositeOperation = 'source-atop';
+  ga.fillStyle = '#e0f7ff';
+  ga.fillRect(0, 0, W, H);
+  ga.globalCompositeOperation = 'source-over';
+  // Контур: сдвинутые копии силуэта минус сам силуэт; сдвиг дрожит — воздух течёт
+  const B = cloakBuf('b'), gb = B.getContext('2d');
+  gb.setTransform(1, 0, 0, 1, 0, 0);
+  gb.globalCompositeOperation = 'source-over';
+  gb.globalAlpha = 1;
+  gb.clearRect(0, 0, W, H);
+  const w1 = 1.6 + Math.sin(t * 9 + e.x * 0.05) * 0.9;
+  const w2 = 1.4 + Math.sin(t * 7.3 + e.y * 0.05) * 0.8;
+  gb.drawImage(A, -w1, Math.sin(t * 6) * 0.6);
+  gb.drawImage(A, w2, Math.cos(t * 5) * 0.6);
+  gb.drawImage(A, 0, -w1 * 0.8);
+  gb.globalCompositeOperation = 'destination-out';
+  gb.drawImage(A, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalAlpha = hidden * (0.13 + 0.05 * Math.sin(t * 4.2 + e.x * 0.02));   // еле-еле, но заметно
+  ctx.drawImage(B, e.x - ox + Math.sin(t * 11 + e.y) * 0.7, e.y - oy);
+  // Блик: раз в ~2,2 с полоса света сбегает по силуэту сверху вниз
+  const ph = (t / 2.2 + (Math.abs(e.x * 0.013) % 1)) % 1;
+  if (ph < 0.22) {
+    const p = ph / 0.22;
+    const by = e.y - oy + 30 + p * (oy - 20);
+    ctx.globalAlpha = hidden * 0.22 * Math.sin(p * Math.PI);
+    ctx.beginPath();
+    ctx.rect(e.x - ox, by, W, 7);
+    ctx.clip();
+    ctx.drawImage(A, e.x - ox, e.y - oy);
+  }
+  ctx.restore();
+  return true;
 }
 
 // Снайпер Промзоны проявляется или прячется: cloakV — насколько виден (0..1); на переходе — искры маскировки
@@ -11682,12 +11751,11 @@ function render() {
       const k = 1 - e.warmT / POUNDER_SNIPERS_WARM;
       ctx.globalAlpha = Math.min(1, 0.22 + 0.5 * k + 0.12 * Math.sin(performance.now() / 45 + e.y));
     }
-    // Снайпер Промзоны в маскировке: едва заметное марево, проступает, когда целится
-    if (e.cloakV !== undefined && e.cloakV < 1) {
-      const shimmer = (1 - e.cloakV) * 0.05 * Math.sin(performance.now() / 60 + e.x * 0.1);
-      ctx.globalAlpha = Math.max(0.02, SN_CLOAK.alpha + (1 - SN_CLOAK.alpha) * e.cloakV + shimmer);
-    }
-    if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
+    // Снайпер Промзоны в маскировке: тела почти нет, по контуру дрожит марево (drawCloakedSniper)
+    const cloaking = e.cloakV !== undefined && e.cloakV < 1 && window.threeEnemies;
+    if (cloaking && drawCloakedSniper(ctx, e, e.cloakV)) {
+      // нарисован маревом
+    } else if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
       if (e.type === 'grunt') {
         SpriteRenderer.drawToadGrunt(ctx, e);
       } else if (e.type === 'brute') {
