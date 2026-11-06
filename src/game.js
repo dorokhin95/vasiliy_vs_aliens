@@ -3199,10 +3199,12 @@ window.addEventListener('mouseup', (e) => { if (e.button === 0) mouseDown = fals
 // save — сохранённый забег (RunSave): мир строится заново, поверх него восстанавливается прогресс
 // Василий с нуля: здоровье, припасы, оружие, карты, перки (новый забег; сохранение потом накладывается сверху)
 function resetPlayerState() {
-  // Кооп: встают полукругом под куполом, свой — в середине
+  // Кооп: встают полукругом под куполом, свой — в середине. Купол — городской (SAFE_ZONE_HOME), а не safeZone:
+  // после Промзоны или подвала safeZone ещё унесён за карту (applyLocationSafeZone), мир строится позже —
+  // и Василия «Начать заново» забрасывало в угол карты
   const slot = players.indexOf(player);
-  player.x = safeZone.x + [0, -70, 70, 0][slot % 4];
-  player.y = safeZone.y + 70 + [0, 30, 30, 70][slot % 4];
+  player.x = SAFE_ZONE_HOME.x + [0, -70, 70, 0][slot % 4];
+  player.y = SAFE_ZONE_HOME.y + 70 + [0, 30, 30, 70][slot % 4];
   player.maxHp = 100;
   player.hp = player.maxHp;
   player.maxStamina = 100;
