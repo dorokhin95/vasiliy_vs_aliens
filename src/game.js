@@ -4162,6 +4162,8 @@ function damageEnemy(e, dmg, weapon, fromX, fromY) {
     sayLine('say_boss_invuln');
     return { dealt: 0, invuln: true };
   }
+  // Снайпер Долбильщика ещё проявляется — не задеть ничем
+  if (e.warmT > 0) return { dealt: 0, invuln: true };
   // Рарники (src/elites.js): раздувшегося не добить, под куполом снаружи не прострелить
   if (e.elite && window.Elites) {
     const blocked = window.Elites.beforeDamage(e, weapon, fromX, fromY);
@@ -8057,6 +8059,10 @@ const POUNDER_MINI = { first: 1200, every: 5400, hp: 1000, speed: 3.0, scale: 0.
 // На 40% здоровья призывает кольцом вокруг себя снайперов гнезда: стоят на месте и стреляют
 const POUNDER_SNIPERS_AT = 0.4;
 const POUNDER_SNIPERS = 10;
+// Первые 3 с снайперы «проявляются» (warmT): полупрозрачные, неуязвимые, целятся лазером, но не стреляют —
+// время достать ЭМИ-гранату (src/workshop.js); она летит ~0,5 с, так что бросать — в первые ~2,5 с.
+// Без неё всё так же не выстоять: 10 стволов по 57 урона, первые выстрелы — в полсекунды после проявления
+const POUNDER_SNIPERS_WARM = 180;
 const POUNDER_STORM_AT = 0.5;
 const POUNDER_STORM_CD = 1200;         // 20 с между электробурями
 const POUNDER_CLONES_AT = 0.2;
@@ -8633,7 +8639,7 @@ function summonPounderSnipers(e) {
       x, y, startX: x, startY: y, bounds: { x1: x - 50, y1: y - 50, x2: x + 50, y2: y + 50 },
       districtId: 'pz_cooling', tier: 4, radius: 17, hp, maxHp: hp, speed: 2.25, type: 'sniper', color: '#84cc16',
       armor: 0, throwCooldown: 0, aggroRadius: 3000, isAggroed: true, hitFlash: 0, patrolAngle: 0, patrolTimer: 90,
-      shootCooldown: 40 + Math.random() * 80, stationary: true, summon: true
+      shootCooldown: POUNDER_SNIPERS_WARM + Math.random() * 30, warmT: POUNDER_SNIPERS_WARM, stationary: true, summon: true
     });
     spawnDirectionalSparks(x, y - 30, -Math.PI / 2, Math.PI * 2, 12, '#c084fc', 3, 10, 12);
     createParticles(x, y - 20, '#84cc16', 8);
@@ -10525,7 +10531,7 @@ function update() {
     for (let j = enemies.length - 1; j >= 0; j--) {
       const e = enemies[j];
       if (Math.abs(b.x - e.x) > b.radius + e.radius + 10 || Math.abs(b.y - e.y) > b.radius + e.radius + 10) continue;
-      if (e.dying > 0) continue; // раздувшийся рарник: пули пролетают
+      if (e.dying > 0 || e.warmT > 0) continue; // раздувшийся рарник, проявляющийся снайпер: пули пролетают
       if (b.hits && b.hits.includes(e)) continue;
       const dist = Math.hypot(b.x - e.x, b.y - e.y);
       if (dist < b.radius + e.radius) {
@@ -10742,12 +10748,13 @@ function update() {
         }
 
         if (!(e.empT > 0)) e.shootCooldown--; // ЭМИ (src/workshop.js): лазерный прицел молчит
+        if (e.warmT > 0) e.warmT--;           // призванный Долбильщиком ещё проявляется
         // Винтовку вскидывает за SN_AIM кадров до выстрела (тогда же — лазерный прицел), после — отдача
         if (e.fireKick > 0) {
           e.fireKick--;
           e.gunPose = 'fire';
         } else {
-          e.gunPose = e.shootCooldown < SN_AIM ? 'aim' : null;
+          e.gunPose = e.shootCooldown < SN_AIM || (e.warmT > 0 && !(e.empT > 0)) ? 'aim' : null;
         }
         if (e.shootCooldown <= 0) {
           e.shootCooldown = e.tier >= 3 ? 92 : 105;
@@ -11311,12 +11318,15 @@ function render() {
       continue;
     }
 
-    // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела — из дула вскинутой винтовки
-    if (e.type === 'sniper' && e.isAggroed && !(e.empT > 0) && e.shootCooldown > 0 && e.shootCooldown < 32) {
+    // Лазерный луч прицеливания Жабы-Снайпера за 32 кадра до выстрела — из дула вскинутой винтовки.
+    // Снайпер Долбильщика, пока проявляется, держит Василия на тусклом мерцающем луче
+    const warmAim = e.warmT > 0 && e.shootCooldown >= 32;
+    if (e.type === 'sniper' && e.isAggroed && !(e.empT > 0) && e.shootCooldown > 0 && (e.shootCooldown < 32 || warmAim)) {
       const m = gunMuzzle(e);
       const sx = m.x, sy = m.y;
       ctx.save();
-      ctx.strokeStyle = e.shootCooldown < 12 ? 'rgba(239, 68, 68, 0.75)' : 'rgba(239, 68, 68, 0.35)';
+      ctx.strokeStyle = warmAim ? `rgba(239, 68, 68, ${0.16 + 0.1 * Math.sin(performance.now() / 70 + e.x)})`
+        : e.shootCooldown < 12 ? 'rgba(239, 68, 68, 0.75)' : 'rgba(239, 68, 68, 0.35)';
       ctx.lineWidth = e.shootCooldown < 12 ? 1.8 : 1.0;
       ctx.beginPath();
       ctx.moveTo(sx, sy);
@@ -11341,6 +11351,11 @@ function render() {
       ctx.translate(e.x, e.y + 10);
       ctx.scale(ek, ek);
       ctx.translate(-e.x, -e.y - 10);
+    }
+    // Снайпер Долбильщика проявляется: сквозь него видно, мерцает и густеет к первому выстрелу
+    if (e.warmT > 0) {
+      const k = 1 - e.warmT / POUNDER_SNIPERS_WARM;
+      ctx.globalAlpha = Math.min(1, 0.22 + 0.5 * k + 0.12 * Math.sin(performance.now() / 45 + e.y));
     }
     if (!(window.threeEnemies && window.threeEnemies.draw(ctx, e))) {
       if (e.type === 'grunt') {
