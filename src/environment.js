@@ -1275,6 +1275,66 @@ class EnvironmentRenderer {
     }
   }
 
+  // Пятно мазута i (их пять на район): неровный размытый край, к середине гуще, капли вокруг, радужная плёнка
+  // и блик — чтобы читалось как лужа масла, а не как тень. Рисуется один раз, дальше — готовая картинка
+  oilStainSprite(i) {
+    const cache = this.oilStains || (this.oilStains = []);
+    if (cache[i]) return cache[i];
+    const rx = 36 + (i % 3) * 10, ry = 18 + (i % 2) * 8, pad = 14;
+    const c = document.createElement('canvas');
+    c.width = Math.ceil((rx + pad) * 2);
+    c.height = Math.ceil((ry + pad) * 2);
+    const g = c.getContext('2d');
+    const Fx = window.Fx;
+    const R = Fx ? Fx.rng(7777 + i * 131) : Math.random;
+    g.translate(c.width / 2, c.height / 2);
+    // Само пятно
+    g.save();
+    g.filter = 'blur(1.6px)';
+    g.scale(1, ry / rx);
+    const body = g.createRadialGradient(rx * 0.1, 0, rx * 0.05, 0, 0, rx);
+    body.addColorStop(0, 'rgba(5, 5, 6, 0.74)');
+    body.addColorStop(0.65, 'rgba(9, 8, 8, 0.58)');
+    body.addColorStop(1, 'rgba(14, 12, 10, 0.28)');
+    g.fillStyle = body;
+    if (Fx) Fx.blobPath(g, Fx.blobPoints(rx, 11, 0.3, R));
+    else { g.beginPath(); g.arc(0, 0, rx, 0, Math.PI * 2); }
+    g.fill();
+    // Капли и брызги у края
+    g.fillStyle = 'rgba(8, 7, 7, 0.55)';
+    const drops = 2 + Math.floor(R() * 3);
+    for (let k = 0; k < drops; k++) {
+      const a = R() * Math.PI * 2, d = rx * (0.98 + R() * 0.3), r = 2.5 + R() * 4.5;
+      g.beginPath();
+      g.arc(Math.cos(a) * d, Math.sin(a) * d, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
+    // Радужная плёнка на поверхности
+    g.save();
+    g.scale(1, ry / rx);
+    g.globalCompositeOperation = 'lighter';
+    const film = g.createLinearGradient(-rx * 0.6, -rx * 0.4, rx * 0.6, rx * 0.4);
+    film.addColorStop(0, 'rgba(168, 85, 247, 0)');
+    film.addColorStop(0.3, 'rgba(168, 85, 247, 0.11)');
+    film.addColorStop(0.5, 'rgba(45, 212, 191, 0.13)');
+    film.addColorStop(0.72, 'rgba(250, 204, 21, 0.1)');
+    film.addColorStop(1, 'rgba(250, 204, 21, 0)');
+    g.strokeStyle = film;
+    g.lineWidth = 3;
+    g.beginPath();
+    g.ellipse(-rx * 0.08, -rx * 0.04, rx * 0.56, rx * 0.4, 0.4 + R() * 0.6, 0, Math.PI * 2);
+    g.stroke();
+    // Блик
+    g.fillStyle = 'rgba(255, 255, 255, 0.09)';
+    g.beginPath();
+    g.ellipse(-rx * 0.32, -rx * 0.3, rx * 0.22, rx * 0.07, -0.4, 0, Math.PI * 2);
+    g.fill();
+    g.restore();
+    cache[i] = c;
+    return c;
+  }
+
   drawDistrictAtmosphere(ctx, camera, screenW, screenH) {
 
     // A. Текстурное и цветовое тонирование кварталов по специализации
@@ -1319,13 +1379,16 @@ class EnvironmentRenderer {
 
       // Детали поверхности по типу района (без аллокаций градиентов каждый кадр)
       if (z.type === 'garages') {
-        ctx.fillStyle = 'rgba(8, 10, 14, 0.55)';
+        // Пятна мазута (oilStainSprite): раньше — ровные тёмные овалы, тестеры принимали их за тени без хозяина
         for (let i = 0; i < 5; i++) {
           const ox = z.x + 160 + ((i * 137) % (z.w - 280));
           const oy = z.y + 180 + ((i * 193) % (z.h - 320));
-          ctx.beginPath();
-          ctx.ellipse(ox, oy, 36 + (i % 3) * 10, 18 + (i % 2) * 8, 0.3 * i, 0, Math.PI * 2);
-          ctx.fill();
+          const spr = this.oilStainSprite(i);
+          ctx.save();
+          ctx.translate(ox, oy);
+          ctx.rotate(0.3 * i);
+          ctx.drawImage(spr, -spr.width / 2, -spr.height / 2);
+          ctx.restore();
         }
       } else if (z.type === 'cordon') {
         for (let i = 0; i < 4; i++) {
