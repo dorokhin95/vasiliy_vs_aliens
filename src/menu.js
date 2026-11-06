@@ -348,6 +348,8 @@ window.Menu = (() => {
       fence: { state: fenceBreach.state, cracks: fenceBreach.cracks },
       loot: lootItems.slice(0, LOOT_LIMIT).map(it => [it.x, it.y, it.type, it.val]),
       enemyTotal: levelEnemyTotal,
+      // Стаи рарников в Промзоне уже расставлены (src/elites.js): перебитые заново не появятся
+      elites: currentLocation === 'promzona' ? 1 : undefined,
       // Долбильщик есть только в Промзоне, как Мясник — только в городе
       pounderDefeated: currentLocation === 'promzona' && !pounderRef,
       pounder: pounderRef ? { hp: Math.ceil(pounderRef.hp / (pounderRef.coopK || 1)), phase: pounderRef.phase, snipers: !!pounderRef.snipersCalled } : null,
@@ -610,6 +612,10 @@ window.Menu = (() => {
         enemies.push(ne);
       });
       levelEnemyTotal = Math.round(num(w.enemyTotal, enemies.length, 0, 1000));
+      // Промзона из сохранения до рарников: стаи — из оставшихся жаб, свита прибавляется к счёту
+      if (currentLocation === 'promzona' && !w.elites && window.Elites && !enemies.some(e => e.elite)) {
+        levelEnemyTotal += window.Elites.addPacks();
+      }
     }
     levelCleared = enemies.length === 0 && levelEnemyTotal > 0;
   }

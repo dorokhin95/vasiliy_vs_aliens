@@ -118,6 +118,14 @@ let eliteHazards = [];   // лужи, облака, икринки в полёт
     if (currentLocation === 'promzona') makePacks();
   }
 
+  // Сохранение до рарников (src/menu.js applyWorld): стаи — из уже восстановленных жаб. Сколько жаб добавилось
+  function addPacks() {
+    if (currentLocation !== 'promzona') return 0;
+    const n0 = enemies.length;
+    makePacks();
+    return enemies.length - n0;
+  }
+
   function makePacks() {
     const byTier = {};
     enemies.forEach(e => {
@@ -1519,7 +1527,7 @@ let eliteHazards = [];   // лужи, облака, икринки в полёт
   }
 
   window.Elites = {
-    onLevel, update, updateWorld, updatePlayer, beforeDamage, stopBullet, onHit, onTongue, onKilled, saveOf, restore,
+    onLevel, update, updateWorld, updatePlayer, beforeDamage, stopBullet, onHit, onTongue, onKilled, saveOf, restore, addPacks,
     scaleOf, drawGround, drawOver,
     HYPNO
   };
