@@ -41,7 +41,7 @@ window.Dialog = (function () {
       rumors: [
         ['Штурмовики эти, с плазменными автоматами: дай им очередь подлиннее — перегреются, пар пойдёт. Вот тогда и бей.', 'Those stormtroopers with plasma rifles: let them fire a long burst — they overheat and start steaming. That\'s when you hit them.'],
         ['В литейном теперь жаб полно. Печи остывали долго, тепло — им нравится.', 'The foundry is full of toads now. The furnaces took ages to cool down, it\'s warm — they love it.'],
-        ['Ракетчик после залпа пустой ходит. Секунд сорок у тебя есть, пока он перезарядится.', 'A rocketeer is empty after a volley. You\'ve got about forty seconds before he reloads.']
+        ['Ракетчик после залпа пустой, прячется. Секунд двадцать пять у тебя есть, пока он перезарядится. И под ракетами не стой — кувыркайся, он вдогонку бьёт.', 'A rocketeer is empty after a volley and hides. You\'ve got about twenty-five seconds before he reloads. And don\'t stand under the rockets — roll, he aims where you\'re running.']
       ],
       work: true
     },

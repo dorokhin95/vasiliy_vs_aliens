@@ -6143,39 +6143,72 @@ function drawOverheatGlow(ctx, e) {
   ctx.restore();
 }
 
-// Ракетчик держится далеко, 350–700 px. Залп — RK_SALVO ракет подряд; перед залпом на земле загораются
-// круги мест попадания. Взрывы задевают и жаб. После залпа пусковая пуста RK_RELOAD кадров: ракетчик
-// с опущенной пусковой отходит подальше — это окно, чтобы его догнать
+// Ракетчик держится далеко, 350–700 px. Залп — RK_SALVO ракет подряд: первые RK_MARKED — в круги, которые
+// загораются на земле перед залпом, остальные — вдогонку: туда, где Василий стоит или куда бежит
+// (rocketChaseTarget), их круг загорается, когда ракета вылетела. Попадание отбрасывает и на миг оглушает.
+// Взрывы задевают и жаб. После залпа пусковая пуста RK_RELOAD кадров: ракетчик прячется (hideOrCharge) —
+// это окно, чтобы его догнать. Тестеры просили, чтобы от ракет было страшно (2026-11-05): раньше 4 ракеты
+// по 30–36 в заранее видные круги раз в 40 с обходились шагом в сторону
 const RK_RANGE_MIN = 350;
 const RK_RANGE_MAX = 700;
 const RK_FIRE_MAX = 780;           // дальше не стреляет
 const RK_FIRE_MIN = 120;           // в упор тоже: накроет себя
-const RK_SALVO = 4;
+const RK_SALVO = 6;
+const RK_MARKED = 3;               // ракет залпа в заранее подсвеченные круги, остальные — вдогонку
 const RK_WINDUP = 54;              // круги уже горят, ракетчик целится
-const RK_GAP = 18;                 // кадров между ракетами залпа: 4 ракеты ~1,2 с вместе с прицелом
-const RK_RELOAD = 2400;            // 40 с
+const RK_GAP = 14;                 // кадров между ракетами залпа: 6 ракет ~2 с вместе с прицелом
+const RK_RELOAD = 1500;            // 25 с
 const RK_FIRST = 90;               // + до 90 случайно: первый залп после того, как заметил
-const RK_BLAST_R = 70;
-const RK_DAMAGE = { 3: 30, 4: 36 };
+const RK_BLAST_R = 85;
+// Урон в центре взрыва; к краю — RK_EDGE от него. × PZ_DMG_SCALE в Промзоне: в центре 120 / 150, с краю 60 / 75 —
+// Василия без прокачки (100) прямое попадание убивает, прокачанному (до 200 и шламовая броня) — больше половины
+const RK_DAMAGE = { 3: 80, 4: 100 };
+const RK_EDGE = 0.5;
+const RK_LEAD = 1.0;               // ракета вдогонку упреждает: доля пути Василия за время её полёта
+const RK_LEAD_MAX = 420;
+const RK_KNOCK = 40;               // отброс взрывом, px
+const RK_STUN = 12;                // оглушение при попадании, кадров (перекат недоступен)
+const RK_DAZE = 60;                // и замедление после
+const RK_DAZE_SPEED = 0.65;
 let rockets = [];
 let rocketBlasts = [];             // вспышки взрывов
 
-// Места попадания: первая ракета — туда, где Василий стоит, остальные — вокруг, не в стены
+// Места попадания: первая ракета — туда, где Василий стоит, ещё RK_MARKED - 1 — вокруг, не в стены;
+// остальные места — null: их выберет rocketChaseTarget в момент выстрела
 function pickRocketTargets() {
   const px = player.x, py = player.y + footDY(player);
   const list = [{ x: px, y: py }];
   const base = Math.random() * Math.PI * 2;
-  for (let i = 1; i < RK_SALVO; i++) {
+  for (let i = 1; i < RK_MARKED; i++) {
     let t = null;
     for (let k = 0; k < 6 && !t; k++) {
-      const a = base + (i - 1) * (Math.PI * 2 / (RK_SALVO - 1)) + (Math.random() - 0.5) * 0.9;
+      const a = base + (i - 1) * (Math.PI * 2 / (RK_MARKED - 1)) + (Math.random() - 0.5) * 0.9;
       const d = 75 + Math.random() * 60;
       const x = px + Math.cos(a) * d, y = py + Math.sin(a) * d * GROUND_SQUASH;
       if (!checkBuildingCollision(x, y, 10)) t = { x, y };
     }
     list.push(t || { x: px + (Math.random() - 0.5) * 40, y: py + (Math.random() - 0.5) * 24 });
   }
+  while (list.length < RK_SALVO) list.push(null);
   return list;
+}
+
+// Ракета вдогонку: через одну — туда, где Василий сейчас, и туда, куда он бежит (упреждение по скорости,
+// которую ракетчик замеряет, пока целится). Стоишь — накроет, бежишь по прямой — тоже: спасает перекат
+function rocketChaseTarget(e, R) {
+  const px = player.x, py = player.y + footDY(player);
+  if (R.shots % 2 === 0) return { x: px, y: py };
+  // Время полёта зависит от того, куда летит (launchRocket: T = 26 + d / 12), а точка — от времени: пару раз уточняем
+  let tx = px, ty = py;
+  for (let k = 0; k < 3; k++) {
+    const T = 26 + Math.hypot(tx - e.x, ty - (e.y + footDY(e))) / 12;
+    let lx = (R.vx || 0) * T * RK_LEAD, ly = (R.vy || 0) * T * RK_LEAD;
+    const l = Math.hypot(lx, ly);
+    if (l > RK_LEAD_MAX) { lx *= RK_LEAD_MAX / l; ly *= RK_LEAD_MAX / l; }
+    tx = px + lx; ty = py + ly;
+  }
+  if (checkBuildingCollision(tx, ty, 10)) return { x: px, y: py };
+  return { x: tx, y: ty };
 }
 
 function updateRocketeer(e, distToPlayer, angle, eSpeed) {
@@ -6210,16 +6243,20 @@ function updateRocketeer(e, distToPlayer, angle, eSpeed) {
     return;
   }
 
-  // Прицел и залп — стоит на месте
+  // Прицел и залп — стоит на месте. Заодно замеряет, куда и как быстро бежит Василий (rocketChaseTarget)
   e.gunPose = e.fireKick > 0 ? 'fire' : 'aim';
   R.t++;
+  const ppx = player.x, ppy = player.y + footDY(player);
+  if (R.px === undefined || Math.hypot(ppx - R.px, ppy - R.py) > 40) { R.vx = 0; R.vy = 0; }
+  else { R.vx = R.vx * 0.8 + (ppx - R.px) * 0.2; R.vy = R.vy * 0.8 + (ppy - R.py) * 0.2; }
+  R.px = ppx; R.py = ppy;
   if (R.phase === 'windup') {
     if (R.t < RK_WINDUP) return;
     R.phase = 'salvo';
     R.t = 0;
   }
   if (R.shots < RK_SALVO && R.t >= R.shots * RK_GAP) {
-    launchRocket(e, R.targets[R.shots]);
+    launchRocket(e, R.targets[R.shots] || rocketChaseTarget(e, R));
     R.shots++;
   }
   if (R.shots >= RK_SALVO && R.t >= RK_SALVO * RK_GAP) {
@@ -6297,6 +6334,12 @@ function updateRockets() {
   }
 }
 
+// Доля урона ракеты по точке (px, py) на земле: 1 в центре взрыва, RK_EDGE на краю эллипса радиуса rr
+function rocketFalloff(px, py, cx, cy, rr) {
+  const dx = (px - cx) / rr, dy = (py - cy) / (rr * GROUND_SQUASH);
+  return 1 - (1 - RK_EDGE) * Math.min(1, Math.sqrt(dx * dx + dy * dy));
+}
+
 function rocketExplode(r) {
   // Граната и ЭМИ-граната Василия (src/workshop.js)
   if (r.player) {
@@ -6322,19 +6365,23 @@ function rocketExplode(r) {
     const inSafe = Math.hypot(player.x - safeZone.x, player.y - safeZone.y) < safeZone.radius;
     if (!player.isRolling && !inSafe && inGroundEllipse(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5)
         && !playerDodged()) {
-      player.hp -= armorAbsorb(r.dmg, 'ranged');
+      const dmg = Math.round(r.dmg * rocketFalloff(player.x, player.y + footDY(player), x, y, RK_BLAST_R + player.radius * 0.5));
+      const taken = armorAbsorb(dmg, 'ranged');
+      player.hp -= taken;
       const a = Math.atan2(player.y - y, player.x - x);
-      slideMove(player, Math.cos(a) * 18, Math.sin(a) * 18, player.radius);
-      createParticles(player.x, player.y, '#ef4444', 10);
-      addFloatingText(player.x, player.y - 30, `-${r.dmg}`, '#ef4444');
-      if (player.hp <= 0) gameOver();
+      slideMove(player, Math.cos(a) * RK_KNOCK, Math.sin(a) * RK_KNOCK, player.radius);
+      createParticles(player.x, player.y, '#ef4444', 14);
+      addFloatingText(player.x, player.y - 30, `-${Math.round(taken)}`, '#ef4444');
+      if (player.hp <= 0) { gameOver(); return; }
+      dazePlayer(RK_STUN, RK_DAZE, RK_DAZE_SPEED);
+      if (player === localPlayer) shakeScreen(20, 22);
     }
   });
   // Своих не жалеет: взрыв бьёт и жаб
   enemies.forEach(en => {
     if (en.type === 'boss' || en.type === 'pounder') return;
     if (inGroundEllipse(en.x, en.y + footDY(en), x, y, RK_BLAST_R + en.radius * 0.5)) {
-      const hit = damageEnemy(en, r.dmg, 'rocket', x, y);
+      const hit = damageEnemy(en, r.dmg * rocketFalloff(en.x, en.y + footDY(en), x, y, RK_BLAST_R + en.radius * 0.5), 'rocket', x, y);
       en.hitFlash = 6;
       addFloatingText(en.x, en.y - 22, `-${Math.round(hit.dealt)}`, '#fbbf24');
     }
@@ -6367,7 +6414,7 @@ function drawRocketTargets(ctx, viewMinX, viewMaxX, viewMinY, viewMaxY) {
   for (let i = 0; i < enemies.length; i++) {
     const R = enemies[i].rk;
     if (!R || !R.targets) continue;
-    for (let j = R.shots; j < R.targets.length; j++) mark(R.targets[j].x, R.targets[j].y, 0);
+    for (let j = R.shots; j < R.targets.length; j++) if (R.targets[j]) mark(R.targets[j].x, R.targets[j].y, 0);
   }
   for (let i = 0; i < rockets.length; i++) {
     if (!rockets[i].player) mark(rockets[i].tx, rockets[i].ty, Math.min(1, rockets[i].t / rockets[i].T));
